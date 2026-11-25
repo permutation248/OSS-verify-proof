@@ -1,0 +1,586 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-10: ported to the binaries of release 2026.10.0 and LPS 2afba80c; the theorem statements are restated in the form this release states them. *)
+(* Modified by Theorem Labs, 2026-11: ported to LPS 727298f3 (the start-up invariant over the run's whole input with its mmap base; the argument lemmas restated for the revised entry block, with the strings at its top and the argument bytes read through the image at some launch base, and re-proved as text). *)
+From OSSVerify.Proofs.boost_beast.http_request.lib.Common Require KReplay.
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+From Stdlib Require Import ZArith NArith List Lia Bool.
+From LinuxProcessSemantics.LinuxProcessSem Require Import BvBase RiscvSemantics MemImageType StackLayout Fs State Run.
+From OSSVerify.boost_beast.http_request.images Require Import AsanUbsan.
+From OSSVerify.Proofs.boost_beast.http_request.lib.Lib Require Import Mem Cells Step Frame Arr CellsX TacX.
+From OSSVerify.Proofs.boost_beast.http_request.lib Require Import HeapCeil.
+From OSSVerify.Proofs.boost_beast.http_request.lib.Bo Require Import BSegs AsShadow AsConst AsIface AsStack0 AsPrintfFirst AsDrvDefs AsMainPre.
+From OSSVerify.Proofs.boost_beast.http_request.lib Require Import CatExec RefLayout ArgvEnv FileSim MuslStrlen.
+From OSSVerify.Proofs.boost_beast.http_request.lib Require Import
+  PropExec AxSymExec3 AxSymExec3Sound AxSymExec3B AsanAcct AsanPlanCore AsanPlan AsanPlanSound AsanPlanSoundSums AsanInit AsanHexScan BothImages BothPlanImages AsHSTab BoStartupHSF AsMainVM BoMainState BoMainFacts BoMainLazyChk BoMainLazy BoMainCells BoMainIface BoMainIfacePre LazyRestrict LazySR.
+From OSSVerify.boost_beast.http_request.images Require AsanUbsan.
+From OSSVerify.Proofs.boost_beast.http_request.lib Require Import AsanInitL.
+From OSSVerify.Proofs.boost_beast.http_request.lib.Bo Require Import AsMainSyms.
+Import ListNotations. Import AX2. Import AX2S. Import AX2B. Import APC. Import AP. Import APS. Import APSX.
+Open Scope Z_scope.
+Ltac Zify.zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
+Unset Lia Cache. Unset Nia Cache. Unset Nra Cache.
+
+Section AT_MAIN.
+  Variables (sp0 brk0 : word) (rdraw : EntryDraw) (inp : ProcInput).
+  Variables (h : nat) (ch : acs) (E : env) (R : bvmap 5 word) (FULL : word -> option byte) (model : Model).
+  Hypothesis Vsp : valid_sp sp0.
+  Hypothesis Vbrk : valid_brk BSEGS2 brk0.
+  Hypothesis Vav : valid_argv (in_argv inp).
+  Hypothesis Vev : valid_envp (in_envp inp).
+  Hypothesis Vfit : entry_stack_fits sp0 (in_argv inp) (in_envp inp).
+  Hypothesis Hh : HSF_both h = Some ch.
+  Hypothesis HC : cs_ok BSEGS2 BOTH_H AsanInit.LIMIT
+                        (SINV0L BPH2 OSSVerify.boost_beast.http_request.images.AsanUbsan.M.init_pc sp0 rdraw brk0 inp)
+                        (argH0 sp0 rdraw inp) (in_fs inp) E ch R FULL model.
+  #[local] Notation g := (hole_granted h).
+  #[local] Notation cls := (hole_class h).
+  #[local] Notation X := (Xof g E).
+  #[local] Notation brk0z := (bv_unsigned brk0).
+  #[local] Notation sp0z := (bv_unsigned sp0).
+  #[local] Notation argc := (Z.of_nat (length (in_argv inp))).
+  (* [comment removed for export] *)
+  #[local] Notation VM := (pm_vmem (bv_unsigned sp0) (bv_unsigned brk0) (Xof g E) FULL).
+  (* [comment removed for export] *)
+  Let MC : PMC sp0 rdraw inp brk0z X FULL := PMC_open sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC.
+  Let SOK : pm_syms_ok sp0z brk0z 0 X := pm_syms_ok_open sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC.
+
+  (* [comment removed for export] *)
+  Ltac prepI :=
+    pose proof (facts sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) as (Hcls & VR06 & REL & VB06 & V0 & VTID & V6 & V10 & SP & SPM & BRK & V1 & V2 & STK & TOPm & PGD & V6' & V10' & VSP);
+    let B := fresh "B" in let Bg := fresh "Bg" in let B13 := fresh "B13" in
+    pose proof (KB sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) as B; cbv zeta in B; destruct B as [B B13];
+    unfold pm_kernel_placed in B; rewrite Forall_app in B; destruct B as [B Bg];
+    unfold Xof in B, Bg, B13;
+    cbn [ps_tid ps_b04 ps_b05 ps_b06 ps_b08 ps_b09 ps_b10 ps_b11 ps_b12 ps_b13 ps_b16 ps_b19r ps_b20 ps_b21 ps_b22 ps_b23 ps_granted] in B, Bg, B13;
+    repeat (apply Forall_cons_iff in B as [? B]); cbn [fst snd] in *;
+    pose proof (u64_range brk0) as ?Hb0; pose proof (u64_range sp0) as ?Hs0;
+    pose proof (RI_lin (Xof g E) (4096 * vE E K_B06) (vE E K_R06) eq_refl REL) as ?HRIv.
+  Ltac zlistsI :=
+    unfold pm_vmem in *;
+    unfold PM_LAZY, PM_S, PM_ZR, PM_NOACC, PM_MAPS, PM_REM, VISZ, VISZ0, SW;
+    rewrite ?(RI_lin (Xof g E) (4096 * vE E K_B06) (vE E K_R06) eq_refl) by assumption;
+    unfold Xof in *; cbn [ps_tid ps_b04 ps_b05 ps_b06 ps_b08 ps_b09 ps_b10 ps_b11 ps_b12 ps_b13 ps_b16 ps_b19r ps_b20 ps_b21 ps_b22 ps_b23 ps_granted map app fst snd] in *.
+
+  (* [comment removed for export] *)
+  #[local] Notation kp_apart := (BoMainIface.kp_apart sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation kp_apart_ne := (BoMainIface.kp_apart_ne sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation kp_facts := (BoMainIface.kp_facts sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation kp_align := (BoMainIface.kp_align sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation pd_facts := (BoMainIface.pd_facts sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation kp_b06 := (BoMainIface.kp_b06 h E) (only parsing).
+  #[local] Notation kp_b08 := (BoMainIface.kp_b08 h E) (only parsing).
+  #[local] Notation kp_b22 := (BoMainIface.kp_b22 h E) (only parsing).
+  #[local] Notation vm_full := (BoMainIface.vm_full sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vm_img := (BoMainIface.vm_img sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vm_S := (BoMainIface.vm_S sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vm_obj := (BoMainIface.vm_obj sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vm_ri := (BoMainIface.vm_ri sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vm_stack := (BoMainIface.vm_stack sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vm_brk := (BoMainIface.vm_brk sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation seg_rom_above := (BoMainIface.seg_rom_above sp0 brk0 inp) (only parsing).
+  #[local] Notation seg_rom_below := (BoMainIface.seg_rom_below sp0 brk0 inp) (only parsing).
+  #[local] Notation mrd_above := (BoMainIface.mrd_above sp0 brk0 inp) (only parsing).
+  #[local] Notation mrd_outside := (BoMainIface.mrd_outside sp0 brk0 inp) (only parsing).
+  #[local] Notation vrange := (BoMainIface.vrange sp0 brk0 inp h E FULL) (only parsing).
+  #[local] Notation vr_sub := (BoMainIface.vr_sub sp0 brk0 inp h E FULL) (only parsing).
+  #[local] Notation vr_img := (BoMainIface.vr_img sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vr_stack := (BoMainIface.vr_stack sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation G_cases := (BoMainIface.G_cases sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation zinP_of_In := BoMainIface.zinP_of_In (only parsing).
+  #[local] Notation vr_kobj_gen := (BoMainIface.vr_kobj_gen sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation kp_b04 := (BoMainIface.kp_b04 h E) (only parsing).
+  #[local] Notation kp_b05 := (BoMainIface.kp_b05 h E) (only parsing).
+  #[local] Notation kp_b09 := (BoMainIface.kp_b09 h E) (only parsing).
+  #[local] Notation kp_b10 := (BoMainIface.kp_b10 h E) (only parsing).
+  #[local] Notation kp_b11 := (BoMainIface.kp_b11 h E) (only parsing).
+  #[local] Notation kp_b12 := (BoMainIface.kp_b12 h E) (only parsing).
+  #[local] Notation kp_b16 := (BoMainIface.kp_b16 h E) (only parsing).
+  #[local] Notation kp_b20 := (BoMainIface.kp_b20 h E) (only parsing).
+  #[local] Notation kp_b21 := (BoMainIface.kp_b21 h E) (only parsing).
+  #[local] Notation kp_b23 := (BoMainIface.kp_b23 h E) (only parsing).
+  #[local] Notation vr_b04 := (BoMainIface.vr_b04 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vr_b05 := (BoMainIface.vr_b05 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vr_b09 := (BoMainIface.vr_b09 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vr_b10 := (BoMainIface.vr_b10 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vr_b11 := (BoMainIface.vr_b11 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vr_b12 := (BoMainIface.vr_b12 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vr_b16 := (BoMainIface.vr_b16 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vr_b20 := (BoMainIface.vr_b20 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vr_b21 := (BoMainIface.vr_b21 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vr_b23 := (BoMainIface.vr_b23 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vm_sw := (BoMainIface.vm_sw sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation vm_b22 := (BoMainIface.vm_b22 sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation world_ok_X := (BoMainIface.world_ok_X sp0 h E) (only parsing).
+  #[local] Notation bytes_main := (BoMainIface.bytes_main sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC) (only parsing).
+  #[local] Notation word_main := (BoMainIface.word_main sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC) (only parsing).
+  #[local] Notation zero_main := (BoMainIface.zero_main sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC) (only parsing).
+  #[local] Notation fill_main := (BoMainIface.fill_main sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC) (only parsing).
+  #[local] Notation bytes_at_const := (BoMainIface.bytes_at_const sp0 brk0 inp) (only parsing).
+  #[local] Notation u8arr_const := (BoMainIface.u8arr_const sp0 brk0 inp) (only parsing).
+  #[local] Notation bytes_at_constZ := (BoMainIface.bytes_at_constZ sp0 brk0 inp) (only parsing).
+  #[local] Notation rw_cells_img := (BoMainIface.rw_cells_img sp0 brk0 inp) (only parsing).
+  #[local] Notation rw_cells_above := (BoMainIface.rw_cells_above sp0 brk0 inp) (only parsing).
+  #[local] Notation cellsZ := BoMainIface.cellsZ (only parsing).
+  #[local] Notation cells_wfb := BoMainIface.cells_wfb (only parsing).
+  #[local] Notation cells_wfb_sound := BoMainIface.cells_wfb_sound (only parsing).
+  #[local] Notation map_b8_unsigned := BoMainIface.map_b8_unsigned (only parsing).
+  #[local] Notation map_b8_cellsZ := BoMainIface.map_b8_cellsZ (only parsing).
+  #[local] Notation length_cellsZ := BoMainIface.length_cellsZ (only parsing).
+  #[local] Notation img_cells_check := BoMainIface.img_cells_check (only parsing).
+  #[local] Notation img_cells_main := (BoMainIface.img_cells_main sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC) (only parsing).
+  #[local] Notation lowsh_vm := (BoMainIface.lowsh_vm sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation lowsh_vis := (BoMainIface.lowsh_vis sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation u8arr_constZ := (BoMainIface.u8arr_constZ sp0 brk0 inp) (only parsing).
+  #[local] Notation fact_ivl := BoMainIface.fact_ivl (only parsing).
+  #[local] Notation ivls_of := BoMainIface.ivls_of (only parsing).
+  #[local] Notation cover_sweep := BoMainIface.cover_sweep (only parsing).
+  #[local] Notation cover_check := BoMainIface.cover_check (only parsing).
+  #[local] Notation cover_sweep_sound := (BoMainIface.cover_sweep_sound sp0 brk0 inp) (only parsing).
+  #[local] Notation ivls_of_In := BoMainIface.ivls_of_In (only parsing).
+  #[local] Notation Mr_some' := (BoMainIface.Mr_some' sp0 rdraw inp ch E FULL model) (only parsing).
+  #[local] Notation Mr_nonnull := (BoMainIface.Mr_nonnull sp0 rdraw inp ch E FULL model) (only parsing).
+  #[local] Notation uE_lit' := (BoMainIface.uE_lit' E) (only parsing).
+  #[local] Notation estart_lit := (BoMainIface.estart_lit sp0 brk0 inp E) (only parsing).
+  #[local] Notation fact_ivl_sound := (BoMainIface.fact_ivl_sound sp0 brk0 rdraw inp ch E R FULL model HC) (only parsing).
+  #[local] Notation cover_main := (BoMainIface.cover_main sp0 brk0 rdraw inp h ch E R FULL model Hh HC) (only parsing).
+  #[local] Notation lowsh_stk := (BoMainIface.lowsh_stk sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation img_word_main := (BoMainIface.img_word_main sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC) (only parsing).
+  #[local] Notation zscanN := BoMainIface.zscanN (only parsing).
+  #[local] Notation zscanN_sound := (BoMainIface.zscanN_sound sp0 brk0 inp) (only parsing).
+  #[local] Notation segment_byte_at_zero1 := (BoMainIface.segment_byte_at_zero1 sp0 brk0 inp) (only parsing).
+  #[local] Notation obj_word_main := (BoMainIface.obj_word_main sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC) (only parsing).
+  #[local] Notation obj_bytes_main := (BoMainIface.obj_bytes_main sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC) (only parsing).
+  #[local] Notation obj_zero_main := (BoMainIface.obj_zero_main sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC) (only parsing).
+  #[local] Notation world_uw := (BoMainIface.world_uw sp0 h) (only parsing).
+  #[local] Notation rw_cells_cons1 := BoMainIface.rw_cells_cons1 (only parsing).
+
+  (* [comment removed for export] *)
+  #[local] Notation all_holes_w_here := (BoMainCells.all_holes_w_here sp0 brk0 h ch Hh) (only parsing).
+  #[local] Notation all_holes_here := (BoMainCells.all_holes_here sp0 brk0 h ch Hh) (only parsing).
+  #[local] Notation hole_sel_here := (BoMainCells.hole_sel_here sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation hole_short_pm := (BoMainCells.hole_short_pm sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation csym_den := (BoMainCells.csym_den sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation uE_lit := (BoMainCells.uE_lit E) (only parsing).
+  #[local] Notation zero_sound := (BoMainCells.zero_sound sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation fill_sound := (BoMainCells.fill_sound sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation bytes_sound := (BoMainCells.bytes_sound sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation word_sound := (BoMainCells.word_sound sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation img_sound := (BoMainCells.img_sound sp0 brk0 rdraw inp h ch E R FULL model Vsp Vav Hh HC) (only parsing).
+  #[local] Notation argH0_low := (BoMainCells.argH0_low sp0 brk0 rdraw inp E Vsp Vav) (only parsing).
+  #[local] Notation hid_img := (BoMainCells.hid_img sp0 brk0 rdraw inp ch E model Vsp Vav) (only parsing).
+  #[local] Notation brk_facts := (BoMainCells.brk_facts sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation VISK_bound := (BoMainCells.VISK_bound sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation VM_Z := (BoMainCells.VM_Z sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation hid_vis := (BoMainCells.hid_vis sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation hid_sh := (BoMainCells.hid_sh sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation hid_stack := (BoMainCells.hid_stack sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation visibleZ_hid := (BoMainCells.visibleZ_hid sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Hh HC) (only parsing).
+  #[local] Notation args_block := (BoMainCells.args_block sp0 brk0 rdraw inp ch E R FULL model Vsp Vav Vev Vfit HC) (only parsing).
+  #[local] Notation Mr_some := (BoMainCells.Mr_some sp0 rdraw inp ch E FULL model) (only parsing).
+  #[local] Notation Mr_vis_none := (BoMainCells.Mr_vis_none sp0 rdraw inp ch E FULL model) (only parsing).
+  #[local] Notation rdn_Mr_full := (BoMainCells.rdn_Mr_full sp0 brk0 rdraw inp ch E FULL model) (only parsing).
+
+  (* [comment removed for export] *)
+  #[local] Notation MR := (Mr BOTH_H (argH0 sp0 rdraw inp) E ch model FULL).
+  #[local] Notation HID := (hid BOTH_H (argH0 sp0 rdraw inp) E ch model).
+  #[local] Notation argv := (in_argv inp).
+  #[local] Notation envp := (in_envp inp).
+  #[local] Notation envc := (Z.of_nat (length (in_envp inp))).
+  (* The entry block is [entry_stack_image inp mb BPH2 entry sp0 rdraw], laid at a launch
+     base [mb] that [SINV0L] binds existentially, so no single block is named here.  Its top [UTOP]
+     (the stack VMA's end), its head [CHD] (sp0 to the top of the AT_RANDOM bytes), the string bytes
+     [LSTR] (argv, envp, the exec name, each with its NUL) and argv[0]'s address [STRB] are
+     functions of the run alone (StackLayout.build_stack_bytes, CatExec.cat_string_off). *)
+  #[local] Notation UTOP := (bv_unsigned (ed_top rdraw)).
+  #[local] Notation CHD := (Z.of_nat (block_head_size (kb_rseq (in_kernel inp)) (in_argv inp) (in_envp inp))).
+  #[local] Notation LSTR := (Z.of_nat (launch_string_bytes (in_argv inp) (in_envp inp) (in_execfn inp))).
+  #[local] Notation STRB := (sp0z + Z.of_nat (cat_string_off (kb_rseq (in_kernel inp)) sp0 (ed_top rdraw) (in_argv inp) (in_envp inp) (in_execfn inp))).
+  #[local] Notation ENTW := (Z_to_bv 64 (Z.of_N OSSVerify.boost_beast.http_request.images.AsanUbsan.M.init_pc)).
+  Let KNF := co_know _ _ _ _ _ _ _ _ _ _ _ HC.
+
+  (* [comment removed for export] *)
+  Definition isSome {T} (o : option T) : bool := match o with Some _ => true | None => false end.
+  (* [comment removed for export] *)
+  Definition args_f (g : bool) (cls : nat) (ch : acs) : bool :=
+      has_fact (kn ch) (KWord (SA e_sp0 8) 8 e_str0) && has_fact (kn ch) (kw_argv1 e_argv1w) && has_fact (kn ch) atr_entry
+      && isSome (lin_ofxB (mkbc (kn ch)) e_sp0) && isSome (lin_ofxB (mkbc (kn ch)) e_str0) && isSome (lin_ofxB (mkbc (kn ch)) e_str1)
+      && isSome (lin_ofxB (mkbc (kn ch)) (fst e_atrb)).
+  Lemma args_check_ok : all_holes args_f = true.
+  Proof. vm_cast_no_check (@eq_refl bool true). Qed.
+Scheme kc__1 := Elimination for Corelib.Init.Logic.and Sort Prop.   (* [comment removed for export] *)
+
+  (* [comment removed for export] *)
+  Lemma cs_v3 : vE E 3 = Z.of_nat (length (nth 0 argv [])).
+  Proof.
+    pose proof (SINV0L_ev _ _ _ _ _ _ _ _ (co_sinv _ _ _ _ _ _ _ _ _ _ _ HC)) as HE. unfold vE. rewrite (HE 3%nat) by (unfold NX0; lia).
+    cbn [ev E0 vals0 nth]. apply u_of_Z.
+    pose proof Vav as (Hl & _ & Hs & _ & _). assert (Hin : In (nth 0 argv []) argv) by (apply nth_In; lia).
+    pose proof (proj1 (Forall_forall _ _) Hs _ Hin) as L. cbv beta in L. lia.
+  Qed.
+
+  (* The block's arithmetic at a launch base [mb].  [Run.valid_launch_sp] puts sp0
+     between [launch_sp_lo] and [launch_sp_hi], so the [arch_align_stack] pad
+     [StackLayout.block_pad_len] does not clamp and is at most 4095 + 15; argv[0] sits [LSTR + 8]
+     below the stack VMA's end ([StackLayout.string_base_addr]); [Run.valid_stack_top_va] keeps
+     that end at or below STACK_TOP ([PropExec.entry_page_top_within_window]).  The steps of
+     [AsanInit.pad_bounds_Z] and [AsanInit.usp_fit], here at the run's own names. *)
+  Lemma launch_lay : forall mb, entry_launch_ok_va Sv48 (mkEntry sp0 brk0 mb rdraw) inp ->
+    0 <= Z.of_nat (block_pad_len (kb_rseq (in_kernel inp)) sp0 (ed_top rdraw) argv envp (in_execfn inp)) <= 4110
+    /\ STRB + LSTR + 8 = UTOP /\ UTOP <= 0x800000000000.
+  Proof.
+    intros mb Hlau.
+    pose proof (entry_page_top_within_window Sv48 inp mb sp0 brk0 rdraw Hlau) as HT.
+    unfold entry_page_top, va_stack_top, sp_window_hi in HT.
+    cbn [entry_launch_ok_va] in Hlau. destruct Hlau as (_ & Hsw & _). destruct Hsw as (_ & Hslo & Hshi).
+    unfold launch_sp_lo, launch_sp_hi, align_down16 in Hslo, Hshi.
+    pose proof (Z.mod_pos_bound (UTOP - 8 - LSTR) 16 ltac:(lia)).
+    pose proof (Z.mod_pos_bound (UTOP - 8 - LSTR - 4095) 16 ltac:(lia)).
+    unfold cat_string_off, block_pad_len. rewrite Nat2Z.inj_add, Z2Nat.id by lia.
+    split; [lia|]. split; lia.
+  Qed.
+
+  (* V_W (vals0 index 4) is the [arch_align_stack] pad, 0..4110, between the AT_RANDOM
+     bytes and argv[0]; it no longer counts words up to the old fixed string offset 184 *)
+  Lemma W_facts : 0 <= vE E 4 <= 4110 /\ STRB = sp0z + CHD + vE E 4.
+  Proof.
+    pose proof (SINV0L_ev _ _ _ _ _ _ _ _ (co_sinv _ _ _ _ _ _ _ _ _ _ _ HC)) as HE.
+    destruct args_block as (mb & (_ & Hlau) & _). pose proof (launch_lay mb Hlau) as (HP & _).
+    unfold vE. rewrite (HE 4%nat) by (unfold NX0; lia).
+    cbn [ev E0 vals0 nth]. rewrite u_of_Z by lia.
+    unfold cat_string_off. rewrite Nat2Z.inj_add. split; lia.
+  Qed.
+
+  (* [comment removed for export] *)
+  Lemma no_wrap : forall e, isSome (lin_ofxB (mkbc (kn ch)) e) = true -> uE E e = lden E (lin_of e).
+  Proof.
+    intros e H. destruct (lin_ofxB (mkbc (kn ch)) e) as [l|] eqn:L; [|discriminate].
+    rewrite lin_ofxB_eqf in L. pose proof (lin_ofx_sound _ _ _ _ KNF _ _ L) as S.
+    unfold lin_ofx in L. destruct (lin_nowrapR (kn ch) e); [|discriminate]. injection L as <-. exact S.
+  Qed.
+
+  (* [comment removed for export] *)
+  Lemma lin_e_sp0 : lin_of e_sp0 = (0, [(32768, EVar 0); (4096, EVar 6); (16, EVar 10)]).
+  Proof. vm_compute. reflexivity. Qed.
+  Lemma lin_e_str0 : lin_of e_str0 = (472, [(32768, EVar 0); (8, EVar 1); (8, EVar 2); (1, EVar 4); (4096, EVar 6); (16, EVar 10); (8, EVar 11); (32, EVar 12)]).
+  Proof. vm_compute. reflexivity. Qed.
+  Lemma lin_e_str1 : lin_of e_str1 = (473, [(32768, EVar 0); (8, EVar 1); (8, EVar 2); (1, EVar 3); (1, EVar 4); (4096, EVar 6); (16, EVar 10); (8, EVar 11); (32, EVar 12)]).
+  Proof. vm_compute. reflexivity. Qed.
+  Lemma lin_e_atrb : lin_of (fst e_atrb) = (0, [(32768, EVar 0); (8, EVar 1); (8, EVar 2); (4096, EVar 6); (16, EVar 10); (8, EVar 11); (32, EVar 12)]) /\ snd e_atrb = 456.
+  Proof. vm_compute. split; reflexivity. Qed.
+
+  Lemma arg_facts :
+    has_fact (kn ch) (KWord (SA e_sp0 8) 8 e_str0) = true /\ has_fact (kn ch) (kw_argv1 e_argv1w) = true /\ has_fact (kn ch) atr_entry = true
+    /\ uE E e_sp0 = sp0z /\ uE E e_str0 = STRB
+    /\ uE E e_str1 = STRB + Z.of_nat (length (nth 0 argv [])) + 1
+    /\ uE E (fst e_atrb) + snd e_atrb = sp0z + CHD - 16.
+  Proof.
+    pose proof (all_holes_here _ args_check_ok) as H. unfold args_f in H.
+    apply andb_prop in H as [H _]. apply andb_prop in H as [H _]. apply andb_prop in H as [H _].
+    apply andb_prop in H as [H _]. apply andb_prop in H as [H F3]. apply andb_prop in H as [F1 F2].
+    (* The plan's stack pointer and argv[0] pointer through [SINV0L] (AsanInitL), not
+       through the old literal offset: e_str0 = e_atrandom + 16 + V_W (AsanPlanCore e_str0) *)
+    pose proof (co_sinv _ _ _ _ _ _ _ _ _ _ _ HC) as SI.
+    assert (USP : uE E e_sp0_early = sp0z) by (eapply SINV0L_sp0; eassumption).
+    rewrite e_sp0_early_eq in USP.
+    (* [uE E e_str0 = STRB] computed from the valuation's own words, not through [AsanInitL.SINV0L_vals]
+       (a Section lemma whose discharged hypotheses this Section does not all hold; supplying the image
+       facts and the entry word was not enough): sp0's digits ([BoMainFacts.cs_v0], [cs_v6], [cs_v10]),
+       argc, envc, the gap and rseq words through [SINV0L_ev] against [vals0], and the pad ([W_facts]);
+       e_str0 = sp0 + 8 argc + 16 + 8 envc + 8 + (432 + 32 R) + 8 G + 16 + V_W (AsanPlanCore) *)
+    assert (US0 : uE E e_str0 = STRB).
+    { pose proof (SINV0L_ev _ _ _ _ _ _ _ _ SI) as HE.
+      pose proof (cs_v0 _ _ _ _ _ _ _ _ _ HC) as C0. pose proof (cs_v6 _ _ _ _ _ _ _ _ _ HC) as C6.
+      pose proof (cs_v10 _ _ _ _ _ _ _ _ _ HC) as C10.
+      pose proof W_facts as (W1 & W2).
+      pose proof Vsp as [VS1 [VS2 VS3]]. unfold sp_window_lo, sp_window_hi in VS1, VS2.
+      pose proof Vav as ([LA1 LA2] & _). pose proof Vev as [LE _].
+      pose proof (rseq_z_range (kb_rseq (in_kernel inp))) as RR.
+      pose proof (auxv_size_rseq (kb_rseq (in_kernel inp))) as HA.
+      pose proof (Nat.mod_upper_bound (block_items argv envp) 2 ltac:(lia)) as GB.
+      assert (V1 : vE E 1 = argc)
+        by (unfold vE; rewrite (HE 1%nat) by (unfold NX0; lia); cbn [ev E0 vals0 nth]; apply u_of_Z; lia).
+      assert (V2 : vE E 2 = envc)
+        by (unfold vE; rewrite (HE 2%nat) by (unfold NX0; lia); cbn [ev E0 vals0 nth]; apply u_of_Z; lia).
+      assert (V11 : vE E 11 = Z.of_nat (block_items argv envp mod 2))
+        by (unfold vE; rewrite (HE 11%nat) by (unfold NX0; lia); cbn [ev E0 vals0 nth]; apply u_of_Z; lia).
+      assert (V12 : vE E 12 = rseq_z (kb_rseq (in_kernel inp)))
+        by (unfold vE; rewrite (HE 12%nat) by (unfold NX0; lia); cbn [ev E0 vals0 nth]; apply u_of_Z; lia).
+      unfold e_str0, e_atrandom, e_auxv, e_auxsz, e_envp, e_sp0, e_pg, eadd, eaddz, escale, uE.
+      rewrite !mkAlu_denot, !mkMd_denot, !edenot_lit, !u_add64, !u_mul64, !u_of_Z by lia.
+      change (bv_unsigned (edenot E (EVar V_S1))) with (vE E 0).
+      change (bv_unsigned (edenot E (EVar V_S2))) with (vE E 6).
+      change (bv_unsigned (edenot E (EVar V_S3))) with (vE E 10).
+      change (bv_unsigned (edenot E (EVar V_ARGC))) with (vE E 1).
+      change (bv_unsigned (edenot E (EVar V_ENVC))) with (vE E 2).
+      change (bv_unsigned (edenot E (EVar V_R))) with (vE E 12).
+      change (bv_unsigned (edenot E (EVar V_G))) with (vE E 11).
+      change (bv_unsigned (edenot E (EVar V_W))) with (vE E 4).
+      rewrite C0, C6, C10, V1, V2, V11, V12, W2.
+      unfold block_head_size, block_items in GB |- *. cbv zeta in GB |- *.
+      lia. }
+    destruct args_block as (mb & (_ & Hlau) & _). pose proof (launch_lay mb Hlau) as (_ & HS & HT).
+    pose proof W_facts as (W1 & W2). pose proof cs_v3 as V3.
+    pose proof Vsp as [VS1 [VS2 _]]. unfold sp_window_lo, sp_window_hi in VS1, VS2.
+    pose proof Vav as ([Hl _] & _ & Hs & _ & _).
+    assert (HL0 : Z.of_nat (length (nth 0 argv [])) <= 131071).
+    { assert (Hin : In (nth 0 argv []) argv) by (apply nth_In; lia).
+      exact (proj1 (Forall_forall _ _) Hs _ Hin). }
+    pose proof (Nat2Z.is_nonneg (launch_string_bytes argv envp (in_execfn inp))).
+    assert (HCH : 16 <= CHD) by (unfold block_head_size; cbv zeta; lia).
+    split; [exact F1|]. split; [exact F2|]. split; [exact F3|].
+    split; [exact USP|]. split; [exact US0|]. split.
+    - (* e_str1 = e_str0 + (V_L0 + 1), V_L0 = |argv[0]| ([cs_v3]) *)
+      unfold e_str1, eadd, eaddz, uE. unfold uE in US0.
+      rewrite !mkAlu_denot, !edenot_lit, !u_add64, US0.
+      change (bv_unsigned (edenot E (EVar V_L0))) with (vE E 3). rewrite V3, (u_of_Z 1) by lia.
+      rewrite (Z.mod_small (Z.of_nat (length (nth 0 argv [])) + 1)) by lia.
+      rewrite Z.mod_small by lia. lia.
+    - (* the AT_RANDOM bytes: e_str0 = e_atrandom + 16 + V_W and STRB = sp0z + CHD + V_W ([W_facts]),
+         so e_atrandom = sp0z + CHD - 16; [e_atrb] splits off its literal (AsanInit.split_u) *)
+      assert (UA : uE E e_atrandom = sp0z + CHD - 16).
+      { pose proof US0 as U. unfold e_str0, eadd, eaddz, uE in U.
+        rewrite !mkAlu_denot, !edenot_lit, !u_add64, (u_of_Z 16) in U by lia.
+        change (bv_unsigned (edenot E (EVar V_W))) with (vE E 4) in U.
+        unfold uE. pose proof (u64_range (edenot E e_atrandom)). lia. }
+      assert (Hab : split_lit e_atrandom = (fst e_atrb, snd e_atrb))
+        by (unfold e_atrb; destruct (split_lit e_atrandom); reflexivity).
+      assert (Hak : 0 <= snd e_atrb <= 456) by (vm_compute; split; discriminate).
+      (* [AsanInit.split_u]'s proof inline: that lemma is discharged over [AsanInit]'s Section variables
+         ([segs] first), which this Section does not have; [APS.split_lit_denot] takes none *)
+      assert (HSU : bv_unsigned (edenot E (fst e_atrb)) + snd e_atrb = uE E e_atrandom).
+      { assert (Hle : snd e_atrb <= uE E e_atrandom) by lia.
+        pose proof (APS.split_lit_denot E e_atrandom (fst e_atrb) (snd e_atrb) Hab) as SD.
+        unfold uE in Hle |- *. rewrite SD in Hle |- *.
+        pose proof (u64_range (edenot E (fst e_atrb))) as Rb.
+        rewrite Z_to_bv_unsigned in Hle |- *. unfold bv_wrap, bv_modulus in *. change (2 ^ Z.of_N 64) with (2 ^ 64) in *.
+        destruct (Z_lt_le_dec (bv_unsigned (edenot E (fst e_atrb)) + snd e_atrb) (2 ^ 64)).
+        - rewrite Z.mod_small by lia. reflexivity.
+        - exfalso.
+          assert ((bv_unsigned (edenot E (fst e_atrb)) + snd e_atrb) mod 2 ^ 64
+                  = bv_unsigned (edenot E (fst e_atrb)) + snd e_atrb - 2 ^ 64).
+          { replace (bv_unsigned (edenot E (fst e_atrb)) + snd e_atrb)
+              with ((bv_unsigned (edenot E (fst e_atrb)) + snd e_atrb - 2 ^ 64) + 1 * 2 ^ 64) at 1 by lia.
+            rewrite Z.mod_add by lia. apply Z.mod_small. lia. }
+          lia. }
+      unfold uE in HSU, UA |- *. lia.
+  Qed.
+
+  (* [comment removed for export] *)
+  (* The block runs from sp0 to the stack VMA's end [UTOP] (its length is
+     [UTOP - sp0z], PropExec.length_entry_stack_image_launch), with the strings at its top *)
+  Lemma lay :
+    8 * argc + 8 * envc + 200 <= UTOP - sp0z /\ UTOP <= 2 ^ 47 /\ 1 <= argc <= 1024 /\ 0 <= envc <= 256
+    /\ 0x7fff80000000 <= sp0z <= 0x800000000000 /\ STRB + LSTR + 8 = UTOP.
+  Proof.
+    destruct args_block as (mb & (_ & Hlau) & _). pose proof (launch_lay mb Hlau) as (HP & HS & HT).
+    pose proof Vav as [[LA1 LA2] _]. pose proof Vev as [LE _]. pose proof Vsp as [V1 [V2 _]].
+    unfold sp_window_lo, sp_window_hi in V1, V2.
+    assert (HCH : 8 * argc + 8 * envc + 472 <= CHD).
+    { pose proof (auxv_size_rseq (kb_rseq (in_kernel inp))) as HA. pose proof (rseq_z_range (kb_rseq (in_kernel inp))).
+      unfold block_head_size, block_items. cbv zeta. lia. }
+    assert (HSO : STRB = sp0z + CHD + Z.of_nat (block_pad_len (kb_rseq (in_kernel inp)) sp0 (ed_top rdraw) argv envp (in_execfn inp)))
+      by (unfold cat_string_off; rewrite Nat2Z.inj_add; lia).
+    pose proof (Nat2Z.is_nonneg (launch_string_bytes argv envp (in_execfn inp))).
+    split; [lia|]. split; [lia|]. split; [lia|]. split; [lia|]. split; lia.
+  Qed.
+
+  (* The k-th argv pointer: argv[k] = argv[0] + the bytes of the strings before it (CatExec.cat_argv_ptr_offset),
+     argv[0] = sp0 + cat_string_off (CatExec.cat_string_base_offset, launch conjunct) *)
+  Lemma u_ptr : forall k, (k < length argv)%nat ->
+    bv_unsigned (cat_argv_ptr (ed_top rdraw) argv envp (in_execfn inp) k) = STRB + Z.of_nat (total_arg_bytes_nat (firstn k argv)).
+  Proof.
+    intros k Hk. pose proof lay as (_ & HT & _ & _ & VS & ST).
+    destruct args_block as (mb & (_ & Hlau) & _).
+    pose proof (total_arg_bytes_firstn_le k argv) as TF. pose proof (length_flatten_strings argv) as LF.
+    unfold launch_string_bytes in ST.
+    rewrite (cat_argv_ptr_offset (ed_top rdraw) argv envp (in_execfn inp) k Hk).
+    rewrite (cat_string_base_offset Sv48 inp mb sp0 brk0 rdraw Hlau).
+    rewrite !word_add_nat_Z2bv.
+    rewrite (u_of_Z (sp0z + _)) by lia.
+    apply u_of_Z. lia.
+  Qed.
+
+  (* Above argv[k]'s NUL lie at least the exec name's NUL and the 8-byte top slot
+     (StackLayout.launch_string_bytes counts [length execfn + 1]; CatExec.total_arg_bytes_firstn_within),
+     so ten bytes from argv[k] + |argv[k]| still lie in the block; the old 17 counted the
+     AT_RANDOM bytes, which are no longer above the strings *)
+  Lemma room : forall k, (k < length argv)%nat ->
+    bv_unsigned (cat_argv_ptr (ed_top rdraw) argv envp (in_execfn inp) k) + Z.of_nat (length (nth k argv [])) + 10 <= UTOP.
+  Proof.
+    intros k Hk. pose proof lay as (_ & _ & _ & _ & _ & ST). rewrite (u_ptr k Hk).
+    pose proof (total_arg_bytes_firstn_within argv k Hk) as TW. pose proof (length_flatten_strings argv) as LF.
+    unfold launch_string_bytes in ST. lia.
+  Qed.
+
+  (* [comment removed for export] *)
+  (* [comment removed for export] *)
+  (* [comment removed for export] *)
+  Lemma stack_to_mem_some : forall mb, entry_launch_ok_va Sv48 (mkEntry sp0 brk0 mb rdraw) inp ->
+    forall (x : Z), sp0z <= x < UTOP ->
+    exists b, stack_to_mem sp0 (entry_stack_image inp mb BPH2 ENTW sp0 rdraw) (wa x) = Some b.
+  Proof.
+    intros mb Hlau x Hx. pose proof lay as (_ & HT & _ & _ & VS & _).
+    pose proof (length_entry_stack_image_launch Sv48 inp mb BPH2 ENTW sp0 brk0 rdraw Hlau) as HL.
+    unfold stack_to_mem. cbv zeta. rewrite !(wa_unsigned x) by lia.
+    replace (sp0z <=? x) with true by (symmetry; apply Z.leb_le; lia).
+    replace (x - sp0z <? Z.of_nat (length (entry_stack_image inp mb BPH2 ENTW sp0 rdraw))) with true
+      by (symmetry; apply Z.ltb_lt; lia).
+    destruct (nth_error (entry_stack_image inp mb BPH2 ENTW sp0 rdraw) (Z.to_nat (x - sp0z))) as [b|] eqn:Hn; [exists b; reflexivity|].
+    apply nth_error_None in Hn. lia.
+  Qed.
+
+  (* [comment removed for export] *)
+  (* The hidden half of the block is the whole string area [STRB, UTOP) (AsanInit.argB0),
+     and the invariant pins it to the image at SOME launch base ([args_block]) *)
+  Lemma block_full : exists mb, launch_base_ok sp0 rdraw brk0 inp mb /\
+    forall x : Z, STRB <= x < UTOP ->
+      FULL (wa x) = stack_to_mem sp0 (entry_stack_image inp mb BPH2 ENTW sp0 rdraw) (wa x).
+  Proof.
+    destruct args_block as (mb & Hb & HA). exists mb. split; [exact Hb|].
+    intros x Hx. pose proof lay as (_ & HT & _ & _ & VS & _).
+    rewrite <- (wrap_above_sp inp mb BPH2 ENTW sp0 rdraw (wa x)) by (rewrite wa_unsigned by lia; lia).
+    apply HA. unfold argB0. cbv beta zeta. rewrite wa_unsigned by lia.
+    unfold cat_string_off in Hx. rewrite Nat2Z.inj_add in Hx.
+    apply orb_true_intro. right. apply andb_true_intro.
+    split; [apply Z.leb_le; lia | apply Z.ltb_lt; lia].
+  Qed.
+Scheme kc__2 := Elimination for Corelib.Init.Logic.ex Sort Prop.
+
+  (* [comment removed for export] *)
+  (* The sixteen AT_RANDOM bytes now sit [CHD - 16] above sp0, below the pad and the strings *)
+  Lemma atr_full : forall x : Z, sp0z + CHD - 16 <= x < sp0z + CHD -> exists b, FULL (wa x) = Some b.
+  Proof.
+    intros x Hx. pose proof arg_facts as (_ & _ & F3 & _ & _ & _ & UA).
+    unfold has_fact in F3. apply existsb_exists in F3 as [K [HK HE]]. apply kentry_eqb_eq in HE. subst K.
+    pose proof (proj1 (Forall_forall _ _) KNF _ HK) as KO. unfold atr_entry in KO. cbn [kentry_ok] in KO. destruct KO as (_ & _ & BL).
+    assert (L16 : elenZ E (ELit 16) = 16) by (unfold elenZ; rewrite edenot_lit; apply u_of_Z; lia).
+    assert (ES : estart E (SA (fst e_atrb) (snd e_atrb)) = sp0z + CHD - 16).
+    { unfold estart. cbn [a_base a_off]. fold (uE E (fst e_atrb)). exact UA. }
+    rewrite L16, ES in BL.
+    specialize (BL (x - (sp0z + CHD - 16)) ltac:(lia)).
+    replace (sp0z + CHD - 16 + (x - (sp0z + CHD - 16))) with x in BL by lia.
+    eexists. apply Mr_some'. exact BL.
+  Qed.
+Scheme kc__3 := Elimination for Corelib.Init.Logic.or Sort Prop.
+
+  (* [comment removed for export] *)
+  (* The string area [STRB, UTOP) is all in the image, so every byte of it is present *)
+  Lemma upper_vm_some : forall x : Z, STRB <= x < UTOP -> exists b, VM (wa x) = Some b.
+  Proof.
+    intros x Hx. pose proof lay as (_ & HT & _ & _ & VS & _). pose proof pd_facts as PD.
+    rewrite (vm_stack x ltac:(lia)).
+    destruct block_full as (mb & (_ & Hlau) & BF).
+    rewrite (BF x Hx). apply (stack_to_mem_some mb Hlau). lia.
+  Qed.
+
+  Lemma rdn_some_of : forall m n (a : Z), 0 <= a -> a + Z.of_nat n <= 2 ^ 64 ->
+    (forall x, a <= x < a + Z.of_nat n -> exists b, m (wa x) = Some b) -> exists bs, rdn BSEGS2 m (Z_to_bv 64 a) n = Some bs.
+  Proof.
+    intros m n. induction n as [|n IH]; intros a Ha Hn H; [exists []; reflexivity|].
+    cbn [rdn]. destruct (H a ltac:(lia)) as [b Hb]. unfold wa in Hb. rewrite Hb.
+    destruct (IH (a + 1) ltac:(lia) ltac:(lia) ltac:(intros x Hx; apply H; lia)) as [bs Hbs].
+    replace (Z_to_bv 64 a + 1)%bv with (Z_to_bv 64 (a + 1)).
+    - rewrite Hbs. exists (b :: bs). reflexivity.
+    - apply bv_eq. rewrite bv_add_unsigned, !Z_to_bv_unsigned. change (bv_unsigned (1%bv : word)) with 1. unfold bv_wrap. rewrite Zplus_mod_idemp_l. reflexivity.
+  Qed.
+
+  (* [comment removed for export] *)
+  (* [comment removed for export] *)
+  (* [comment removed for export] *)
+  Lemma wa_word : forall x : word, wa (bv_unsigned x) = x.
+  Proof. intros x. unfold wa. apply bv_eq. rewrite Z_to_bv_unsigned. apply bv_wrap_small. apply bv_unsigned_in_range. Qed.
+
+  Lemma arg_string : forall k, (k < length argv)%nat -> astr_at VM sp0 (bv_unsigned (cat_argv_ptr (ed_top rdraw) argv envp (in_execfn inp) k)) (nth k argv []).
+  Proof.
+    (* text of the same lemma in openssl/echconfiglist_parser's lib/AsMainIfaceArgs.v, adapted: the
+       read goes through the image at the invariant's launch base ([block_full]), and the bound
+       [p + |s| + 10 <= 2^47] is [room] with [UTOP <= 2^47] ([lay]) *)
+    intros k Hk. pose proof lay as (_ & HT & LA & LE & VS & ST). pose proof pd_facts as PD.
+    pose proof (u_ptr k Hk) as UP. pose proof (room k Hk) as RM.
+    pose proof (total_arg_bytes_firstn_le k argv) as TF.
+    destruct block_full as (mb & (_ & Hlau) & BF).
+    unfold astr_at. change AsanUbsan.M.loaded_segments with BSEGS2.
+    set (p := bv_unsigned (cat_argv_ptr (ed_top rdraw) argv envp (in_execfn inp) k)) in *.
+    split; [lia|]. split; [lia|]. split.
+    { pose proof Vav as (_ & _ & _ & Hn & _). apply (proj1 (Forall_forall _ _) Hn). apply nth_In. exact Hk. }
+    split.
+    - rewrite <- (read_argv_cstr_k Sv48 BSEGS2 inp mb BPH2 ENTW sp0 brk0 rdraw k Hlau Hk).
+      replace (Z_to_bv 64 p) with (cat_argv_ptr (ed_top rdraw) argv envp (in_execfn inp) k) by (subst p; symmetry; apply wa_word).
+      apply rdn_ext; [fold p; lia|]. intros x Hx. fold p in Hx. rewrite <- (wa_word x).
+      rewrite (vm_stack (bv_unsigned x) ltac:(pose proof (u64_range x); lia)). apply BF. lia.
+    - apply (rdn_some_of VM 8 (p + Z.of_nat (length (nth k argv [])))); [lia | lia |]. intros x Hx. apply upper_vm_some. lia.
+  Qed.
+
+  (* [comment removed for export] *)
+  (* [comment removed for export] *)
+  (* [comment removed for export] *)
+  Lemma slot_main : forall (off : Z) (v : expr) (w : word),
+    has_fact (kn ch) (KWord (SA e_sp0 off) 8 v) = true -> 0 <= off -> off + 8 <= 24 -> edenot E v = w ->   (* [comment removed for export] *)
+    rdn BSEGS2 VM (Z_to_bv 64 (sp0z + off)) 8 = Some (word_to_le_bytes 8 w).
+  Proof.
+    (* text of the same lemma in openssl/echconfiglist_parser's lib/AsMainIfaceArgs.v, adapted to this
+       tree's [off + 8 <= 24] *)
+    intros off v w HF Ho1 Ho2 Hv. pose proof lay as (_ & HT & LA & LE & VS & _). pose proof pd_facts as PD.
+    pose proof arg_facts as (_ & _ & _ & USP & _).
+    unfold has_fact in HF. apply existsb_exists in HF as [K [HK HE]]. apply kentry_eqb_eq in HE. subst K.
+    pose proof (proj1 (Forall_forall _ _) KNF _ HK) as KO. cbn [kentry_ok] in KO. destruct KO as (_ & FL & RD).
+    assert (Ha : adenot E (SA e_sp0 off) = Z_to_bv 64 (sp0z + off)).
+    { apply bv_eq. rewrite (flat_u E _ _ FL). unfold estart. cbn [a_base a_off]. fold (uE E e_sp0). rewrite USP, u_of_Z; [reflexivity | lia]. }
+    rewrite Ha, Hv in RD.
+    assert (RF : rdn BSEGS2 FULL (Z_to_bv 64 (sp0z + off)) 8 = Some (word_to_le_bytes 8 w)).
+    { apply (rdn_Mr_full _ _ _ RD). intros i Hi. rewrite u_of_Z by lia. apply hid_stack. lia. }
+    rewrite <- RF. apply rdn_ext; [rewrite u_of_Z by lia; lia|]. intros x Hx. rewrite u_of_Z in Hx by lia.
+    rewrite <- (wa_word x). apply vm_stack. lia.
+  Qed.
+
+  Lemma arg_ptr0 : rdn BSEGS2 VM (Z_to_bv 64 (sp0z + 8)) 8 = Some (word_to_le_bytes 8 (cat_argv_ptr (ed_top rdraw) argv envp (in_execfn inp) 0)).
+  Proof.
+    pose proof lay as (_ & HT & LA & LE & VS & _). pose proof arg_facts as (F1 & _ & _ & _ & US0 & _).
+    apply (slot_main 8 e_str0 _ F1); [lia | lia |].
+    apply bv_eq. change (bv_unsigned (edenot E e_str0)) with (uE E e_str0). rewrite US0, (u_ptr 0 ltac:(lia)).
+    replace (total_arg_bytes_nat (firstn 0 argv)) with 0%nat by reflexivity. lia.
+  Qed.
+Scheme kc__4 := Elimination for Corelib.Init.Datatypes.list Sort Prop.
+
+  Lemma arg_ptr1 : (2 <= length argv)%nat -> rdn BSEGS2 VM (Z_to_bv 64 (sp0z + 16)) 8 = Some (word_to_le_bytes 8 (cat_argv_ptr (ed_top rdraw) argv envp (in_execfn inp) 1)).
+  Proof.
+    intros H2. pose proof lay as (_ & HT & LA & LE & VS & ST). pose proof arg_facts as (_ & F2 & _ & _ & _ & US1 & _).
+    assert (V1 : vE E 1 = argc).
+    { pose proof (SINV0L_ev _ _ _ _ _ _ _ _ (co_sinv _ _ _ _ _ _ _ _ _ _ _ HC)) as HE. unfold vE. rewrite (HE 1%nat) by (unfold NX0; lia).
+      cbn [ev E0 vals0 nth]. apply u_of_Z. lia. }
+    pose proof (Nat2Z.is_nonneg (launch_string_bytes argv envp (in_execfn inp))).
+    unfold kw_argv1 in F2. apply (slot_main 16 e_argv1w _ F2); [lia | lia |].
+    apply bv_eq. rewrite (u_ptr 1 ltac:(lia)).
+    unfold e_argv1w. cbn [edenot]. rewrite u_mul64, u_sltu64, u_lit64a.
+    change (bv_unsigned (ev E V_ARGC)) with (vE E 1). rewrite V1. change (1 mod 2 ^ 64) with 1.
+    replace (1 <? argc) with true by (symmetry; apply Z.ltb_lt; lia).
+    change (bv_unsigned (edenot E e_str1)) with (uE E e_str1). rewrite US1, Z.mul_1_l.
+    assert (T1 : forall l : list (list byte), (2 <= length l)%nat -> total_arg_bytes_nat (firstn 1 l) = (length (nth 0 l []) + 1)%nat).
+    { intros [|x0 l0] Hl; cbn [length] in Hl; [lia|]. cbv [firstn fold_right total_arg_bytes_nat nth]. lia. }
+    rewrite (T1 _ H2).
+    pose proof Vav as (_ & _ & Hs & _ & _). pose proof (proj1 (Forall_forall _ _) Hs _ (@nth_In _ 0 argv [] ltac:(lia))) as L0. cbv beta in L0.
+    rewrite Z.mod_small; lia.
+  Qed.
+
+  Lemma wa_word0 : forall x : word, Z_to_bv 64 (bv_unsigned x) = x.
+  Proof. intros x. exact (wa_word x). Qed.
+Scheme kc__5 := Elimination for Corelib.Init.Datatypes.nat Sort Prop.
+
+  (* [comment removed for export] *)
+  Theorem pre_args : forall (i : nat) (s : list byte), (i < 2)%nat -> nth_error argv i = Some s -> exists p : Z,
+    rdn AsanUbsan.M.loaded_segments VM (Z_to_bv 64 (bv_unsigned sp0 + 8 + 8 * Z.of_nat i)) 8 = Some (word_to_le_bytes 8 (Z_to_bv 64 p))
+    /\ astr_at VM sp0 p s.
+  Proof using sp0 brk0 rdraw inp h ch E R FULL model Vsp Vbrk Vav Vev Vfit Hh HC.
+    intros i s Hi Hs. change AsanUbsan.M.loaded_segments with BSEGS2.
+    assert (Hk : (i < length argv)%nat) by exact (nth_error_lt _ _ _ Hs).
+    assert (Hn : nth i argv [] = s) by exact (nth_error_nth _ _ [] Hs).
+    exists (bv_unsigned (cat_argv_ptr (ed_top rdraw) argv envp (in_execfn inp) i)). split; [| rewrite <- Hn; apply arg_string; exact Hk].
+    rewrite wa_word0.
+    destruct i as [|[|i]]; [ | | lia].
+    - replace (bv_unsigned sp0 + 8 + 8 * Z.of_nat 0) with (sp0z + 8) by lia. apply arg_ptr0.
+    - replace (bv_unsigned sp0 + 8 + 8 * Z.of_nat 1) with (sp0z + 16) by lia. apply arg_ptr1. lia.
+  Qed.
+End AT_MAIN.

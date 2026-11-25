@@ -1,0 +1,362 @@
+# release.yml: a tag v<release> publishes that release, and a tag
+# v<release>-src publishes its source release.
+#
+# A GitHub release holds at most 1,000 files, so a release's files may be split
+# over two GitHub releases: v<release> with the binaries (<project>-bin.tar.zst),
+# and v<release>-src with the source assets (<project>-src.tar.zst and
+# <project>-src.MANIFEST.tsv) and the build recipe that the release adds.  Each
+# record in the facts names the release its file is attached to.  Where nothing
+# is attached to v<release>-src, v<release> holds every file.
+#
+# A draft GitHub release for the tag holds the files the facts attach to it
+# (the rows of `./oft fetch --all --list` whose first field is the tag): the
+# publishing workflow of the internal repository makes it, or a maintainer, or
+# the enrollment workflow's upload (tools/enroll/upload) for a project's
+# archives.  The tag is pushed on a commit of main once that commit passed the
+# publishing check.  This workflow publishes it only if
+#   - the tag is v<release> or v<release>-src, for the release that
+#     release.yaml at the tag describes;
+#   - the tagged commit is on main, and the publishing check passed exactly
+#     that commit (its check run, below) or a code owner approved exactly that
+#     commit in a pull request merged into main (below);
+#   - the draft holds exactly the files the facts attach to this tag, each
+#     with the SHA-256 the facts pin, and still does just before it is
+#     published (a GPL or LGPL binary archive never ships without its source
+#     archive: `oft lint` refuses such facts);
+# then writes the CHANGELOG section as the release notes and publishes.  Each
+# of the two tags is checked and published on its own; v<release> becomes the
+# repository's Latest release unless a newer full release is already published,
+# and v<release>-src or a release candidate never does.  A release that adds
+# proofs or documents and no binaries (docs/versioning.md)
+# attaches no file and needs no draft: this workflow creates its v<release>
+# when there is none, and it has no v<release>-src.
+#
+# The publishing check runs outside this repository, on the whole commit, before
+# the commit is pushed here.  It passes the commit with one check run on it,
+# made by a GitHub App: ossv-publish/checked by the publishing workflow and,
+# until the gate's publish path retires, ossv-gate/publish by the gate, both
+# with the OSS Verify App 5447700.  The newest check run of the two decides.
+#
+# A release can also come through a public pull request that a person
+# approves.  The tagged commit is then the head of a pull request that was
+# merged into main, and a code owner of release.yaml approved that pull request
+# at exactly that commit.  The owners are those that .github/CODEOWNERS on main
+# names for release.yaml: that file names the release that the tag publishes,
+# and every release changes it.
+#
+# Once every release the facts attach a file to is published, it runs the
+# weekly sweep on the fuzz targets of the projects that this release (v<release>
+# or v<release>-src) attaches a file to, against the files as published.  A
+# release that attaches no file starts no sweep: weekly.yml's own Monday run
+# checks every proof again.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: write   # to publish the tag's release, or create it when it attaches no file: nothing else is written
+      checks: read      # to read the publishing check's check run on the tagged commit
+      pull-requests: read  # to read the pull request whose head is the tagged commit, and its reviews
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet --require-hashes -r tools/oft/requirements.txt
+      - name: the tag is the release release.yaml describes, or its source release
+        run: |
+          set -euo pipefail
+          want="v$(python -c 'import yaml; print(yaml.safe_load(open("release.yaml"))["release"])')"
+          [ "$GITHUB_REF_NAME" = "$want" ] || [ "$GITHUB_REF_NAME" = "$want-src" ] || {
+            echo "::error::tag $GITHUB_REF_NAME, but release.yaml says $want (or $want-src, its source release)"; exit 1; }
+      - name: the tagged commit is on main, and the publishing App passed exactly it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # The publishing check, outside this repository, checks the whole commit before it is pushed here, and then
+          # creates one check run of a fixed name on it, with its own GitHub App.  Only a check run of that name made by
+          # that App counts: a check run is bound to the App whose token created it, and any account or workflow with
+          # write access can create one of any name (a workflow's token creates it as the github-actions App), so the
+          # name alone proves nothing.  Two such pairs count: the publishing workflow's, and, until the gate's publish
+          # path retires, the gate's; both are the OSS Verify App's (publish.yml says how it mints its token).
+          PUBLISH_CHECK: ossv-publish/checked
+          PUBLISH_APP_ID: "5447700"
+          GATE_CHECK: ossv-gate/publish
+          GATE_APP_ID: "5447700"
+          # A code owner's approval counts when .github/CODEOWNERS on main names that person as an owner of this file.
+          OWNED_PATH: release.yaml
+        run: |
+          set -euo pipefail
+          # The check run is the evidence, not a run of this repository's workflows: pr.yml's and release-check.yml's
+          # runs of a push check what that push changes, and a run can be cancelled or stopped by a runner limit while
+          # the commit it would have checked is the one the publishing check passed.  The newest check run of the two
+          # pairs on the commit decides, so either can withdraw a pass by creating another.
+          on_main="$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$GITHUB_SHA" --jq .status)"
+          case "$on_main" in
+            identical|behind) ;;
+            *) echo "::error::$GITHUB_SHA is not on main ($on_main): tag a commit of main"; exit 1 ;;
+          esac
+          # The other evidence: the tagged commit is the head of a pull request that was merged into main, and a code
+          # owner of OWNED_PATH approved that pull request at exactly that commit.  An approval at an earlier head
+          # approved another tree, so it does not count.  The owners are those that .github/CODEOWNERS on main gives
+          # the path by GitHub's rule: the last line whose pattern matches the path decides.  Only a user counts: this
+          # job's token cannot read the members of a team.  A failed call fails the step, since no answer is no pass.
+          prs="$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls?per_page=100" \
+                   --jq '.[] | select(.merged_at != null and .base.ref == "main" and .head.sha == env.GITHUB_SHA)
+                         | .number')" || {
+            echo "::error::could not list the pull requests of $GITHUB_SHA: no answer is no pass; re-run this workflow"; exit 1; }
+          : > "$RUNNER_TEMP/approvals.tsv"
+          for pr in $prs; do
+            PR="$pr" gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$pr/reviews?per_page=100" \
+              --jq '.[] | select(.state == "APPROVED" and .commit_id == env.GITHUB_SHA)
+                    | [env.PR, (.id | tostring), .user.login] | @tsv' >> "$RUNNER_TEMP/approvals.tsv" || {
+              echo "::error::could not list the reviews of pull request #$pr: no answer is no pass; re-run this workflow"; exit 1; }
+          done
+          if [ -s "$RUNNER_TEMP/approvals.tsv" ]; then
+            gh api -H "Accept: application/vnd.github.raw" \
+              "repos/$GITHUB_REPOSITORY/contents/.github/CODEOWNERS?ref=main" > "$RUNNER_TEMP/CODEOWNERS" || {
+              echo "::error::could not read .github/CODEOWNERS on main: no answer is no pass; re-run this workflow"; exit 1; }
+            # The owners of OWNED_PATH, a file at the top of the tree, one login per line.  A pattern is a path from the
+            # top of the tree, so a leading / changes nothing here; ** spans folders, and * and ? match within a name;
+            # a pattern that ends in / names a folder.  CODEOWNERS has no [ ] range, no escape and no ! (GitHub's
+            # "About code owners").  A line with no owner leaves the path with none.
+            python - "$RUNNER_TEMP/CODEOWNERS" > "$RUNNER_TEMP/owners.txt" <<'EOF'
+          import os, re, sys
+          path = os.environ["OWNED_PATH"]
+          assert "/" not in path, "OWNED_PATH must be a file at the top of the tree"
+          owners = []
+          with open(sys.argv[1], encoding="utf-8") as f:
+              for line in f:
+                  words = re.sub(r"(^|\s)#.*", "", line).split()
+                  if not words:
+                      continue
+                  pattern = words[0].lstrip("/")
+                  while pattern.startswith("**/"):
+                      pattern = pattern[3:]
+                  rx = "".join("[^/]*" if c == "*" else "[^/]" if c == "?" else re.escape(c) for c in pattern)
+                  if pattern and re.fullmatch(rx, path):
+                      owners = words[1:]
+          print("".join(o[1:] + "\n" for o in owners if o.startswith("@") and "/" not in o), end="")
+          EOF
+            while IFS=$'\t' read -r pr id login; do
+              if grep -qixF -- "$login" "$RUNNER_TEMP/owners.txt"; then
+                echo "pull request #$pr was merged into main with $GITHUB_SHA as its head, and $login, a code owner of $OWNED_PATH on main, approved it at that commit (review $id): the approval is the evidence, and no check run is read"
+                exit 0
+              fi
+              echo "$login approved pull request #$pr at $GITHUB_SHA (review $id), but is no code owner of $OWNED_PATH on main (its owners: $(paste -sd ' ' "$RUNNER_TEMP/owners.txt"))"
+            done < "$RUNNER_TEMP/approvals.tsv"
+          fi
+          echo "no code owner of $OWNED_PATH approved a pull request merged into main at $GITHUB_SHA, its head: a check run must pass $GITHUB_SHA"
+          # An empty PUBLISH_APP_ID trusts no publishing App, and one that is no App id is refused: either fails closed.
+          unset_note=
+          if [ -z "$PUBLISH_APP_ID" ]; then
+            unset_note="; PUBLISH_APP_ID is not set, so only $GATE_CHECK (App $GATE_APP_ID) counts"
+            echo "::warning::PUBLISH_APP_ID is not set: only the gate's $GATE_CHECK check run (App $GATE_APP_ID) counts"
+          elif ! [[ "$PUBLISH_APP_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::PUBLISH_APP_ID is '$PUBLISH_APP_ID', not an App id"; exit 1
+          fi
+          # every check run of one name and App on exactly this commit: "<id> <name> <App> <status> <conclusion>
+          # <title>", tab-separated
+          runs() {
+            NAME="$1" APP="$2" gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=$1&app_id=$2&filter=all&per_page=100" \
+              --jq '.check_runs[] | select(.name == env.NAME and (.app.id | tostring) == env.APP
+                                         and .head_sha == env.GITHUB_SHA)
+                    | [.id, .name, (.app.id | tostring), .status, .conclusion // "none", .output.title // ""] | @tsv'
+          }
+          # Both pairs into one list, each call a command of its own: a failed call fails the step, since no answer is no
+          # pass (one pair's older pass must not decide while the other's newer run is unread).  Then the newest (the
+          # highest id) decides.
+          : > "$RUNNER_TEMP/check-runs.tsv"
+          if [ -n "$PUBLISH_APP_ID" ]; then
+            runs "$PUBLISH_CHECK" "$PUBLISH_APP_ID" >> "$RUNNER_TEMP/check-runs.tsv" || {
+              echo "::error::could not list the $PUBLISH_CHECK check runs (App $PUBLISH_APP_ID) on $GITHUB_SHA: no answer is no pass; re-run this workflow"; exit 1; }
+          fi
+          runs "$GATE_CHECK" "$GATE_APP_ID" >> "$RUNNER_TEMP/check-runs.tsv" || {
+            echo "::error::could not list the $GATE_CHECK check runs (App $GATE_APP_ID) on $GITHUB_SHA: no answer is no pass; re-run this workflow"; exit 1; }
+          newest="$(LC_ALL=C sort -t $'\t' -k1,1nr "$RUNNER_TEMP/check-runs.tsv" | awk 'NR == 1')"
+          IFS=$'\t' read -r id name app status conclusion title <<< "$newest"
+          if [ "${status:-}" != completed ] || [ "${conclusion:-}" != success ]; then
+            echo "::error::no check run passed $GITHUB_SHA: the newest $PUBLISH_CHECK (App ${PUBLISH_APP_ID:-unset}) or $GATE_CHECK (App $GATE_APP_ID) check run on it is ${id:+$name $id, }${status:-missing}${conclusion:+ $conclusion}${title:+ ($title)}$unset_note; publish this commit again, then re-run this workflow"
+            exit 1
+          fi
+          echo "the publishing check passed $GITHUB_SHA: $name check run $id (App $app): $title"
+      - name: the facts are well formed and their rendering is current
+        run: |
+          set -euo pipefail
+          ./oft lint --release
+          ./oft generate --check
+      - name: the draft holds exactly the pinned archives
+        id: draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # every file the facts pin, in any release; this tag's are those whose release is the tag, with their SHA-256
+          ./oft fetch --all --list | awk -v t="$GITHUB_REF_NAME" '$1 == t {print $2, "sha256:" $3}' | LC_ALL=C sort \
+            > "$RUNNER_TEMP/want.txt"
+          # drafts are listed only to a token that can push, which this job's is
+          state="$(gh release list --limit 1000 --json tagName,isDraft --jq '.[] | "\(.tagName)\t\(.isDraft)"' \
+                   | awk -F '\t' -v t="$GITHUB_REF_NAME" '$1 == t {print ($2 == "true" ? "draft" : "published")}')"
+          case "$state" in
+            published) echo "::error::release $GITHUB_REF_NAME is published: published assets are never replaced"; exit 1 ;;
+            draft) ;;
+            "")
+              [ ! -s "$RUNNER_TEMP/want.txt" ] || {
+                echo "::error::no draft release $GITHUB_REF_NAME: attach the files the facts pin to a draft first"; exit 1; } ;;
+            *) echo "::error::more than one release for $GITHUB_REF_NAME: $state"; exit 1 ;;
+          esac
+          if [ -n "$state" ]; then
+            # each asset's name and the SHA-256 GitHub recorded when it was uploaded
+            gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+              | jq -r --arg t "$GITHUB_REF_NAME" '.[] | select(.tag_name == $t) | .assets[] | "\(.name) \(.digest)"' \
+              | LC_ALL=C sort > "$RUNNER_TEMP/have.txt"
+            diff "$RUNNER_TEMP/want.txt" "$RUNNER_TEMP/have.txt" || {
+              echo "::error::the draft's assets differ from the archives the facts pin (< pinned, > attached)"; exit 1; }
+          fi
+          echo "exists=$([ -n "$state" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          if [ ! -s "$RUNNER_TEMP/want.txt" ]; then
+            case "$GITHUB_REF_NAME" in
+              *-src) echo "::error::the facts attach no file to $GITHUB_REF_NAME: a source release with no files is never published"; exit 1 ;;
+            esac
+            echo "the facts attach no file to $GITHUB_REF_NAME: it publishes proofs and documents only"
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/assets"
+          gh release download "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/assets"
+          ./oft fetch --release "$GITHUB_REF_NAME" --assets-only --source "$RUNNER_TEMP/assets"
+      - name: release notes from CHANGELOG.md, and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release="${GITHUB_REF_NAME#v}"
+          release="${release%-src}"
+          awk -v r="## $release " 'index($0, r) == 1 {p = 1; print; next} /^## / {p = 0} p' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          [ -s "$RUNNER_TEMP/notes.md" ] || { echo "::error::CHANGELOG.md has no section for $release"; exit 1; }
+          if [ "$GITHUB_REF_NAME" = "v$release-src" ]; then
+            { printf 'The upstream source trees, their MANIFESTs and the build recipe that release %s adds. Its new binaries are in release v%s, and each project page links the release of every file.\n\n' \
+                "$release" "$release"; cat "$RUNNER_TEMP/notes.md"; } > "$RUNNER_TEMP/notes-src.md"
+            mv "$RUNNER_TEMP/notes-src.md" "$RUNNER_TEMP/notes.md"
+          fi
+          # GitHub makes a release "Latest" when it is published unless told otherwise (make_latest "Defaults to true
+          # for newly published releases", on create and on update: docs.github.com/en/rest/releases/releases).  So
+          # each tag says it: v<release>-src, the source files, which may be published second, is never Latest; nor is
+          # a release candidate, a pre-release (GitHub cannot make a pre-release Latest); and v<release> is, unless a
+          # published full release has a higher version.  That happens when a heal tags v<rel> just before the same
+          # publication tags v<rel+1> and the runs race, or when a failed run is re-run after a newer release.  The
+          # releases are listed newest first, most recent 1,000 (gh's default is 30); a failed list fails the step,
+          # since without it nothing says whether a newer release is out.
+          case "$GITHUB_REF_NAME" in
+            *-src | *-rc.*) latest=--latest=false ;;
+            *)
+              gh release list --exclude-drafts --exclude-pre-releases --limit 1000 --json tagName --jq '.[].tagName' \
+                > "$RUNNER_TEMP/published-tags.txt" || {
+                echo "::error::could not list the published releases, which decide whether $GITHUB_REF_NAME becomes Latest; re-run this workflow"; exit 1; }
+              # the full releases only: v<version>, not v<version>-src, not a release candidate
+              newest="$({ grep -E '^v[0-9]' "$RUNNER_TEMP/published-tags.txt" | grep -v -E -- '-src$|-rc\.' || true
+                          echo "$GITHUB_REF_NAME"; } | sort -V | tail -n 1)"
+              if [ "$newest" = "$GITHUB_REF_NAME" ]; then
+                latest=--latest=true
+              else
+                latest=--latest=false
+                echo "$newest is published and newer than $GITHUB_REF_NAME: $GITHUB_REF_NAME does not become Latest"
+              fi ;;
+          esac
+          if [ "${{ steps.draft.outputs.exists }}" = true ]; then
+            # the files and their SHA-256 once more, just before publishing: nothing attached or replaced since the check
+            gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+              | jq -r --arg t "$GITHUB_REF_NAME" '.[] | select(.tag_name == $t) | .assets[] | "\(.name) \(.digest)"' \
+              | LC_ALL=C sort | diff "$RUNNER_TEMP/want.txt" - || {
+                echo "::error::the draft's assets changed after they were checked (< pinned, > attached)"; exit 1; }
+            gh release edit "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" --draft=false "$latest"
+          else
+            # a release candidate is a pre-release, as its draft would have been marked
+            case "$release" in
+              *-rc.*) kind=(--prerelease) ;;
+              *) kind=() ;;
+            esac
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "$release" "${kind[@]}" "$latest" \
+              --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+
+  # The sweep checks the fuzz targets of the projects this release attaches a file to, against the files as published.
+  # weekly.yml's assets job downloads every file the facts pin, in every release they name, so it runs once all of
+  # those are published.
+  ready:
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      all: ${{ steps.published.outputs.all }}
+      units: ${{ steps.units.outputs.units }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet --require-hashes -r tools/oft/requirements.txt
+      - id: published
+        name: is every release the facts attach a file to published?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ./oft fetch --all --list > "$RUNNER_TEMP/pinned.txt"
+          awk '{print $1}' "$RUNNER_TEMP/pinned.txt" | LC_ALL=C sort -u > "$RUNNER_TEMP/releases.txt"
+          [ -s "$RUNNER_TEMP/releases.txt" ] || { echo "::error::the facts attach no file to any release"; exit 1; }
+          all=true
+          while read -r rel; do
+            draft="$(gh release view "$rel" --json isDraft --jq .isDraft || echo missing)"
+            echo "$rel: isDraft=$draft"
+            [ "$draft" = false ] || all=false
+          done < "$RUNNER_TEMP/releases.txt"
+          echo "all=$all" >> "$GITHUB_OUTPUT"
+      # Both tags of the release, whichever this run is for: the -src tag may be the second one published, and a
+      # project's new binary archive is in v<release> while its source assets are in v<release>-src.  The rows are the
+      # `published` step's list of `./oft fetch --all --list`; a row is matched to the project whose assets (bin, src,
+      # src_manifest, port) pin that file in that release, and a build recipe is no project's file.  Empty: the release
+      # attaches no file, and no sweep runs.
+      - id: units
+        name: the fuzz targets of the projects this release attaches a file to
+        run: |
+          set -euo pipefail
+          RELEASE="${GITHUB_REF_NAME%-src}" PYTHONPATH=tools python - "$RUNNER_TEMP/pinned.txt" \
+            > "$RUNNER_TEMP/units.txt" <<'EOF'
+          import os, sys
+          from oft import facts
+          release = os.environ["RELEASE"]
+          with open(sys.argv[1]) as f:
+              rows = {(rel, name) for rel, name, _sha in (line.split() for line in f)
+                      if rel in (release, release + "-src")}
+          tree = facts.load(".")
+          print(" ".join(sorted("%s/%s" % (p.name, h.name) for p in tree.projects.values()
+                                if any(isinstance(a, dict) and (a.get("release"), a.get("file")) in rows
+                                       for a in (p.data.get("assets") or {}).values())
+                                for h in p.harnesses.values())))
+          EOF
+          units="$(cat "$RUNNER_TEMP/units.txt")"
+          echo "units=$units" >> "$GITHUB_OUTPUT"
+          echo "fuzz targets of the projects with a file in ${GITHUB_REF_NAME%-src} or ${GITHUB_REF_NAME%-src}-src: ${units:-none, so no sweep}"
+
+  sweep:
+    needs: ready
+    if: needs.ready.outputs.all == 'true' && needs.ready.outputs.units != ''
+    permissions:
+      contents: read
+      packages: read   # weekly.yml pulls the pinned images from ghcr.io; a called workflow gets no more than this
+    uses: ./.github/workflows/weekly.yml
+    with:
+      release: ${{ github.ref_name }}
+      units: ${{ needs.ready.outputs.units }}

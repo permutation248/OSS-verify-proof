@@ -1,0 +1,1504 @@
+# release-check.yml: what a commit changes, checked on that commit alone; the README's badge.
+#
+#   plan           the base (this commit's parent), the paths the commit changes, and the parts to
+#                  check of every harness with a committed proof (the proof.yaml of a
+#                  proofs/<p>/<h>/<s>/ or projects/<p>/<h>/proofs/<s>/) or finding (the finding.yaml of a
+#                  findings/<p>/<h>/<slug>/ or projects/<p>/<h>/findings/<slug>/, also on a harness that
+#                  withholds every build), through `oft plan`, which keeps a part whose content key
+#                  (tools/oft/keys.py) differs from its key at the base.  A dispatched run plans every part
+#                  instead (a full plan).  A push checks here only the harnesses whose own files it changes,
+#                  and a push that changes shared tooling alone checks none here (below).  A push whose every
+#                  commit pr.yml's merge queue already checked plans no part (below), and so does the push of
+#                  the tree main before it pins for a deferred check (tools/oft/migration-pin.yaml), whose
+#                  check of record it names.  The plan also
+#                  names the planned binaries in a release that a read-only token cannot see (a draft),
+#                  and which group needs each
+#   fetch-drafts   each of those binaries once, checked against its pin, as an artifact
+#                  of its own (skipped when there is none)
+#   check          each group of harnesses: fetch (a draft from its artifact), build the
+#                  images and statements, every proof and its assumptions against the
+#                  allowlist, every counterexample and every finding
+#                  (tools/oft/ci/check-units.sh)
+#   release-check  the one required check: it always runs, and fails if any job failed, if a planned
+#                  harness was not checked, if a full plan named no harness at all, or if the plan gave an
+#                  answer it cannot read
+#
+# What each commit's own diff decides.  A commit that changes only CHANGELOG.md, docs/, release.yaml's
+# version and date, .github/workflows/, tools/enroll/, tools/publish/ or dev/stream/ (the OSS Verify stream's
+# operational tools, which are under no path a key holds: keys.checker reads tools/ alone) changes no key, so it
+# plans no proof job and the badge is green in minutes; a commit that changes one unit's proofs, counterexamples,
+# findings or facts re-checks that unit, and never more than the full plan.  A change to the checker image pin
+# (release.yaml images.checker), theories/ or toolchain/allowed-axioms.txt changes every build key, and so
+# re-checks every build; so does a form of dune-project that every build reads, while a project's own package
+# stanza re-checks that project's builds alone (keys.dune_project).  A dune file of a unit's build path (its
+# statement folder and every folder above it, its proofs folder and every folder above it, and the
+# counterexamples and findings folders the statement theory would take, keys._dune_path) changes that unit's
+# build key, both generated barriers included.  A counterexamples or findings run reads no dune file, so no
+# key of one holds a path; a dune file inside such a folder is in that folder's id, as any other file of it
+# is.  What no key holds takes the full plan (FULL): the checker the check job copies and runs (every file of
+# tools/ but those keys.NOT_THE_CHECKER names), toolchain/ (the files that build
+# the images), a .gitattributes, and .github/actions/ (whose place-drafts the check job runs).  A
+# hand-written dune file that could change a build is refused by the plan (keys.check_hand_dune).  A path git
+# quotes ('"', '\' or a control character in its name) is read by no rule here, and is FULL too.
+# pr.yml runs the stream tools' own check for a commit that touches dev/stream/; this workflow deploys nothing.
+#
+# A push checks on GitHub-hosted runners only what it changes of its own harnesses: a harness is checked here
+# when its key moved and the push changes a file under
+# projects/<p>/<h>/, proofs/<p>/<h>/, counterexamples/<p>/<h>/ or findings/<p>/<h>/, or a file of its project
+# (projects/<p>/project.yaml and its siblings, findings/<p>/unpatched.yaml).  A harness whose key moved only
+# through a shared file (theories/, the checker image pin in release.yaml, dune-project) is not checked here.
+# A push that would take the full plan (a change to toolchain/, to .github/actions/ (whose place-drafts the
+# check job runs), to the checker the check job runs -- every file of tools/ but those
+# keys.NOT_THE_CHECKER names -- to tools/oft/keys.py, to a .gitattributes or a path git quotes, or a
+# push with no usable base) checks
+# here every part of each harness whose own files it changes, with this commit's checker, and no other harness:
+# none at all for a push that changes tooling alone.  For what is not checked here, the corpus-wide check of
+# that commit is the publishing gate's run on the release commit that contains it; the plan answers `deferred`,
+# with the reason, and the harnesses it left when it planned by key.  So a push costs at most the check jobs of
+# the harnesses whose own files it changes, and a tools or toolchain change alone costs none.
+#
+# A change under .github/workflows/ plans no proof.  What such a change can break is the workflows
+# themselves, and pr.yml's run of the change runs the tools' own tests (which read these workflow
+# files) and the controls in full for any change under .github/: its merge queue run, or, for a push
+# the queue did not check, its push run; re-compiling every proof would say nothing more about it.
+# This is also the rule the publishing gate's own router follows.
+#
+# No earlier push is credited.  The plan judges this commit against its parent and reads no record of
+# passes (`oft plan --store`), and each commit's run has a concurrency group of its own, so a new push
+# never cancels the run that is checking the push before it: every commit of main is decided and
+# checked on its own.
+#
+# The one exception is pr.yml's own: a main that merges through a merge queue becomes the very commits
+# the queue's runs of pr.yml checked, each on its own parent (pr.yml's queue_run).  When every commit a
+# push brings has such a run that passed main-gate, the push takes no full plan, and tools/ and the
+# root .gitattributes of every commit those runs planned with (their parents) are this commit's, the
+# plan names no part, and release-check names those runs.  Those runs planned every part this plan
+# would, and may have planned more: each judged its own commit against its own parent by the same
+# content keys (`--pr-kind release`, the same tools on both sides), so each part whose key this push
+# changes from main before it was planned by the run of the last commit of the push that changed that
+# key, and checked on that commit's own tree (pr.yml's check job takes a release's own tree), where it
+# has the key it has here; a part a later commit changed back was checked although this plan would
+# leave it out.  Any other push is planned here whatever ran in the queue: the queue
+# planned with the parents' tools (pr.yml keys both sides with them, so it cannot tell a checker
+# change), and the planner itself (plan.py, pack.py) is no part of the checker id.  A dispatch and
+# any other push are planned by their own change, as above.
+#
+# The parts are planned with THIS commit's statements and tools (`--pr-kind release`, `--tools HEAD`),
+# which are what the check job runs (it copies work/tools out of the tree it checks).  pr.yml instead
+# judges a pull request with the base's tools, which a reviewer has read.
+#
+# It runs on every push to main and on request, and on no schedule: a scheduled run would check a
+# commit nothing changed, a run no change decides.  pr.yml checks what a pull request touches;
+# this workflow is the status of main.  The proof checks
+# run on ubuntu-24.04-16core, a 16-core/64 GB GitHub-hosted larger runner (a proof
+# check peaks at 14.5-19.4 GiB on 16 cores).
+#
+# A token with contents: read cannot see a draft release, and a release's new
+# binaries stay drafts until release.yml publishes them.  So fetch-drafts alone
+# has contents: write; it checks out nothing and runs no script from the tree,
+# only `gh release download` of the pins the plan listed and a SHA-256 check of
+# each.  Its YAML is the checked commit's fetch-drafts.yml: this workflow runs
+# on a push to main and on a request by someone with write
+# access (of main or another branch), never for a pull request.  Every other
+# job has read access only.
+#
+# One cache, which makes a run cheaper, never more trusting: the release assets, keyed by their
+# pinned SHA-256; `oft fetch` checks every archive and file against the facts before using it.
+# Nothing compiled is cached: check-units.sh checks each unit in a container of its own, with
+# dune's cache off, so every image, statement and proof is compiled afresh every run.
+# A job that read a draft does not save the assets: a pull request can restore a cache saved on
+# main, and the assets hold the binaries' bytes, which would then outlive the draft's one-day artifact.
+# The artifact widens who can read a draft binary, for one day: a draft release
+# is visible only with write access, an artifact to anyone who can read the
+# repository, which for a public repository is anyone signed in to GitHub.
+# That is accepted: the facts already publish each archive's SHA-256, a project
+# held by its status pins no asset and a findings-<project> release holds only
+# the project a finding holds back (tools/oft/rules.py), the publishing gate
+# outside this repository refuses any asset of a project it holds back, and the
+# files are the ones the release is to publish; if publishing is refused, they
+# were still readable for that day.
+name: release-check
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      units:
+        description: "PROJECT/HARNESS ... to check instead of every harness with a proof or a finding (not on main: the badge says every one)"
+        default: ""
+permissions:
+  contents: read
+  packages: read   # to pull the pinned checker and runner images from ghcr.io
+concurrency:
+  # Each push has a run of its own that nothing cancels, keyed by the branch as well as
+  # the commit: a second push to main never cancels the run of the commit a release
+  # tags.  A workflow_dispatch run of the same commit waits for that run (a later one of
+  # the same commit replaces it in the queue).  A dispatch for named units is its own group,
+  # so it never replaces or waits for the run behind the badge.
+  group: release-check-${{ format('{0}-{1}-{2}', github.ref, github.sha, inputs.units) }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  # The commit this one is judged against: main before the push (all zeros when the push made the
+  # branch).  A dispatch has none, and plans every part of every harness with a committed proof or
+  # finding.
+  EVENT_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    permissions:
+      contents: read  # the checkout, and the pushed commits' parents
+      actions: read   # pr.yml's merge queue runs of those commits
+    outputs:
+      plan: ${{ steps.drafts.outputs.plan }}
+      units: ${{ steps.plan.outputs.units }}
+      full: ${{ steps.plan.outputs.full }}
+      # whether this commit touches release.yaml, toolchain/ or theories/: the lps_pin job runs, and holds it to the
+      # model and the checker and runner images release.yaml and toolchain/ pin (the lps_pin step); whether it
+      # touches theories/, which that job then compiles; whether images.checker, and whether images.runner, differs
+      # from main's before this run (the push's `before`; this commit's parent where there is none), when that job
+      # holds the image to this commit's build definition; and the commit whose tools' requirements.txt that job
+      # installs to read release.yaml, `base` (pr.yml's plan job gives its own base the same name, and the two jobs
+      # are one text)
+      lps_pin: ${{ steps.lps_pin.outputs.lps_pin }}
+      theories: ${{ steps.lps_pin.outputs.theories }}
+      checker_repin: ${{ steps.lps_pin.outputs.checker_repin }}
+      runner_repin: ${{ steps.lps_pin.outputs.runner_repin }}
+      base: ${{ steps.lps_pin.outputs.base }}
+      draft_legs: ${{ steps.drafts.outputs.draft_legs }}
+      # true when this push left parts to the publishing gate's run (the plan step says which and why), or, for the
+      # tree main before the push pins with a deferred check, to the check of record that pin names (check_of_record)
+      deferred: ${{ steps.plan.outputs.deferred }}
+      check_of_record: ${{ steps.plan.outputs.check_of_record }}
+      queue_runs: ${{ steps.plan.outputs.queue_runs }}
+    steps:
+      # pr.yml's queue_run step, for a push: whether every commit this push brings passed pr.yml's merge queue run on
+      # its own parent (the header says what the plan does with that).  The text between `# queue chain` and `# end of
+      # queue chain` is pr.yml's queue_run step's (tools/oft/tests/test_lint.py checks it).
+      - name: a merge queue run of pr.yml passed main-gate on each commit this push brings
+        id: queue
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          # queue chain
+          # The commits this push brings, oldest first, each as <commit>:<its one parent>: walked back from the pushed
+          # commit until main before the push.  Empty when the walk does not reach it.
+          chain=()
+          case "$BEFORE" in ''|0000000000000000000000000000000000000000)
+            echo "this push made the branch: no main before it to walk back to, so it is checked by its own change" ;;
+          *)
+            commit="$GITHUB_SHA"
+            while :; do
+              if [ "${#chain[@]}" -ge 20 ]; then
+                echo "20 commits back from $GITHUB_SHA the walk has not reached main before the push, $BEFORE: this push brings more than a merge queue merges at once, or $BEFORE is no ancestor of it (a rewind or a force push), so it is checked by its own change"
+                chain=(); break
+              fi
+              parents="$(gh api "repos/$GITHUB_REPOSITORY/commits/$commit" --jq '[.parents[].sha] | join(" ")')" || parents=
+              if ! [[ "$parents" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "$commit has the parents '${parents:-unknown}', not one: this push is not a line of merge queue commits from $BEFORE, so it is checked by its own change"
+                chain=(); break
+              fi
+              chain=("$commit:$parents" "${chain[@]}")
+              [ "$parents" != "$BEFORE" ] || break
+              commit="$parents"
+            done ;;
+          esac
+          # For each, a merge queue run of pr.yml on that commit, made on that parent, that passed main-gate.
+          runs=()
+          for link in "${chain[@]}"; do
+            commit="${link%%:*}"
+            parent="${link##*:}"
+            found=
+            ids="$(COMMIT="$commit" PARENT="$parent" gh api \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/pr.yml/runs?event=merge_group&head_sha=$commit&status=success&per_page=20" \
+              --jq '.workflow_runs[] | select(.head_sha == env.COMMIT and (.head_branch | startswith("gh-readonly-queue/main/pr-") and endswith("-" + env.PARENT))) | .id')" || ids=
+            for id in $ids; do
+              # every page of the run's jobs: with up to 256 fetch-drafts legs and 20 checks, main-gate can be past
+              # the first 100
+              verdict="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" \
+                --jq '.jobs[] | select(.name == "main-gate") | .conclusion // empty')" || continue
+              verdict="${verdict%%$'\n'*}"
+              if [ "$verdict" = success ]; then found="$id"; break; fi
+            done
+            if [ -z "$found" ]; then
+              echo "no merge queue run of pr.yml passed main-gate on $commit made on its parent $parent: this push is checked by its own change"
+              runs=(); break
+            fi
+            echo "merge queue run $found passed main-gate on $commit, made on its parent $parent"
+            runs+=("$found")
+          done
+          checked=false
+          if [ "${#chain[@]}" -gt 0 ] && [ "${#runs[@]}" -eq "${#chain[@]}" ]; then
+            checked=true
+            echo "every commit of this push from $BEFORE to $GITHUB_SHA passed its own merge queue run: ${runs[*]}"
+            for id in "${runs[@]}"; do echo "run $id (merge queue) checked a commit of this push" >> "$GITHUB_STEP_SUMMARY"; done
+          fi
+          { echo "checked=$checked"; echo "runs=$([ "$checked" = true ] && echo "${runs[*]}" || true)"; } >> "$GITHUB_OUTPUT"
+          # end of queue chain
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          # Every file but the proof libraries, as pr.yml's plan job takes them: proofs/<p>/<h>/lib/ (in the
+          # per-project layout projects/<p>/<h>/proofs/lib/) is most of the tree and nothing this job reads is
+          # under it.  The diff below reads the two trees, not the worktree, so it still lists every changed
+          # path, one under lib/ included.
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/proofs/*/*/lib/
+            !/projects/*/*/proofs/lib/
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet --require-hashes -r tools/oft/requirements.txt
+      - name: plan
+        id: plan
+        env:
+          UNITS: ${{ inputs.units }}
+          QUEUE_CHECKED: ${{ steps.queue.outputs.checked }}
+          QUEUE_RUNS: ${{ steps.queue.outputs.runs }}
+        run: |
+          set -euo pipefail
+          # Every harness with a committed proof or finding, as PROJECT/HARNESS: the proof.yaml of a
+          # proofs/<p>/<h>/<s>/ or projects/<p>/<h>/proofs/<s>/, the finding.yaml of a findings/<p>/<h>/<slug>/
+          # or projects/<p>/<h>/findings/<slug>/.  A tree may have either without the other.  This is what a
+          # full plan checks.
+          { [ ! -d proofs ] || find proofs -mindepth 4 -maxdepth 4 -name proof.yaml
+            [ ! -d findings ] || find findings -mindepth 4 -maxdepth 4 -name finding.yaml
+            [ ! -d projects ] || find projects -mindepth 5 -maxdepth 5 \
+              \( -path 'projects/*/*/proofs/*/proof.yaml' -o -path 'projects/*/*/findings/*/finding.yaml' \)
+          } | sed -nE -e 's;^(proofs|findings)/([^/]+/[^/]+)/[^/]+/(proof|finding)\.yaml$;\2;p' \
+                      -e 's;^projects/([^/]+/[^/]+)/(proofs|findings)/[^/]+/(proof|finding)\.yaml$;\1;p' \
+            | sort -u > "$RUNNER_TEMP/every.txt"
+          [ -s "$RUNNER_TEMP/every.txt" ] || { echo "::error::no committed proof or finding: nothing to check"; exit 1; }
+          if [ -n "${UNITS:-}" ]; then
+            [ "$GITHUB_REF" != refs/heads/main ] || { echo "::error::on main every harness is checked: the badge says so"; exit 1; }
+            read -r -a units <<< "$UNITS"
+            for u in "${units[@]}"; do
+              grep -qxF -e "$u" "$RUNNER_TEMP/every.txt" || { echo "::error::$u has no committed proof or finding"; exit 1; }
+            done
+            printf '%s\n' "${units[@]}" | grep -xF -f - "$RUNNER_TEMP/every.txt" > "$RUNNER_TEMP/named.txt"
+            mv "$RUNNER_TEMP/named.txt" "$RUNNER_TEMP/every.txt"
+          fi
+          # the harnesses `oft plan --units` reads
+          cp -- "$RUNNER_TEMP/every.txt" "$RUNNER_TEMP/units.txt"
+          # The commit this one is judged against: main's tip before this push, which is the commit's
+          # parent for a fast-forward and the tip it replaced for a force-push (whose own run checked
+          # it).  Without one -- a dispatch, or a push that made the branch -- every part is
+          # planned.
+          base="${EVENT_BASE:-}"
+          case "$base" in 0000000000000000000000000000000000000000) base= ;; esac
+          if [ -n "$base" ]; then
+            # the checkout is one commit deep, so the base is fetched the same way; only the two trees
+            # are read.  A base the repository no longer has (a force-push, a pruned commit) takes the
+            # full plan rather than a wrong one.
+            git cat-file -e "$base^{commit}" 2>/dev/null \
+              || git fetch --no-tags --depth=1 origin "$base" 2>/dev/null \
+              || { echo "::warning::$base is not in the repository: every part is planned"; base=; }
+          fi
+          # The push of the tree the base pins with a deferred check (tools/oft/migration-pin.yaml, pr.yml's plan step):
+          # the pin names a check of record outside this workflow that checks every part of that tree, so this push plans
+          # nothing here.  Only when the base's pin says `check: deferred` and names this very tree (the `tree` of
+          # tools/oft/ci/pin-digests.sh, the whole tree but the pin file); a pin without a deferred check, another tree
+          # and a dispatch are planned as below.
+          if [ -n "$base" ] && [ "$GITHUB_EVENT_NAME" = push ]; then
+            # the pin's blob is read only when the base's tree lists it: no file is no pin, and a git that cannot read
+            # either fails the step rather than plan this push as if nothing were pinned
+            listed=$(git ls-tree "$base" -- tools/oft/migration-pin.yaml) \
+              || { echo "::error::the base's tree cannot be read for its migration pin"; exit 1; }
+            if [ -n "$listed" ]; then
+              git show "$base:tools/oft/migration-pin.yaml" > "$RUNNER_TEMP/base-pin.yaml" \
+                || { echo "::error::the base's migration pin cannot be read"; exit 1; }
+            else
+              : > "$RUNNER_TEMP/base-pin.yaml"
+            fi
+            python - "$RUNNER_TEMP/base-pin.yaml" > "$RUNNER_TEMP/base-pin.txt" <<'PY' \
+              || { echo "::error::the base's migration pin cannot be read"; exit 1; }
+          import sys, yaml
+          pin = yaml.safe_load(open(sys.argv[1])) or {}
+          if not isinstance(pin, dict) or pin.get("schema") != "oss-fuzz-theorems/migration-pin/1":
+              pin = {}
+          for key in ("check", "tree", "check_of_record", "pull_request"):
+              value = pin.get(key)
+              if value is None:
+                  value = ""
+              if not isinstance(value, str) or "\n" in value or "\r" in value:
+                  sys.exit("the base's migration pin: %s is not one line of text" % key)
+              print(value)
+          PY
+            # each value exactly as the pin has it: `deferred ` is another word
+            { IFS= read -r pin_check; IFS= read -r pin_tree; IFS= read -r pin_record; IFS= read -r pin_pr; } \
+              < "$RUNNER_TEMP/base-pin.txt"
+            case "$pin_check" in
+              '') ;;
+              deferred)
+                here=$(bash tools/oft/ci/pin-digests.sh HEAD | sed -n 's/^tree //p') \
+                  || { echo "::error::tools/oft/ci/pin-digests.sh gave no tree for this commit"; exit 1; }
+                echo "the base pins tree ${pin_tree:-(none)} for a deferred check; this commit's tree is ${here:-(none)}"
+                if [ -n "$here" ] && [ "$pin_tree" = "$here" ]; then
+                  [ -n "$pin_record" ] || {
+                    echo "::error::the base pins a deferred check of this tree and names no check of record"; exit 1; }
+                  { echo "plan=[]"; echo "units=0"; echo "full=false"; echo "deferred=true"
+                    echo "check_of_record=$pin_record"; } >> "$GITHUB_OUTPUT"
+                  { echo "### no part checked here: the tree the base pins for a deferred check ($pin_pr)"
+                    echo "The check of record: $pin_record"; } >> "$GITHUB_STEP_SUMMARY"
+                  exit 0
+                fi ;;
+              *)
+                echo "::error::the base's migration pin says check '$pin_check', neither deferred nor empty"; exit 1 ;;
+            esac
+          fi
+          full=true
+          why="no base to compare with (a push that made the branch, or a base the repository no longer has)"
+          if [ -n "$base" ]; then
+            # --no-renames: a renamed file is its old path and its new one; with renames git lists only
+            # the new.  core.quotePath=false: a name with a byte above 0x7f is listed as it is.
+            git -c core.quotePath=false diff --no-renames --name-only "$base" HEAD \
+              > "$RUNNER_TEMP/changed.txt"
+            echo "changed paths: $(wc -l < "$RUNNER_TEMP/changed.txt")"
+            # What no content key holds, so that a change to it takes the full plan: the checker the check
+            # job copies and runs (keys.py holds one checker id, which is the same on both sides of a
+            # comparison, so no key can tell this change), named by keys.checker: every file of tools/ but
+            # the files of tools/ a check never opens (keys.NOT_THE_CHECKER: the lint, the planner, the
+            # README, the tests, ..., and the directories it never opens at all -- the enrollment
+            # pipeline and the publishing tools), with its checkout attributes; a
+            # .gitattributes, since a rule of one
+            # aimed at tools/ changes the bytes the checker is checked out as, and the keys hold the
+            # attributes of the keyed paths only; toolchain/, whose Dockerfiles build
+            # the images a check runs in; .github/actions/, whose place-drafts the check job runs.  A path git still quotes ('"', '\' or a control character in
+            # its name) cannot be read by this pattern, and takes the full plan too.  So a change to
+            # tools/oft/lint.py alone plans by key, like any other change, and one to check-units.sh or
+            # check.py takes the full plan.  A checker id that cannot be computed takes the full plan.
+            # .github/workflows/ is NOT here: a change to a workflow plans no proof, since pr.yml's run of the change
+            # (its merge queue run, or its push run) lints the tree and runs the tools' tests, which are what
+            # such a change can break.  tools/oft/keys.py, which defines the checker (NOT_THE_CHECKER),
+            # takes the full plan: this step computes both checker ids with the pushed
+            # commit's keys.py, so a push that narrowed the checker could otherwise judge its own checker
+            # change unchanged.
+            # LC_ALL=C: grep reads bytes; under a UTF-8 locale it drops a line that is not valid UTF-8.
+            checker() { PYTHONPATH=tools python -c 'import sys; from oft import keys; print(keys.checker(".", sys.argv[1]))' "$1"; }
+            if LC_ALL=C grep -qE '^(toolchain/|tools/oft/keys\.py$|\.github/actions/|")|(^|/)\.gitattributes$' "$RUNNER_TEMP/changed.txt"; then
+              why="a change under toolchain/, to tools/oft/keys.py, under .github/actions/, to a .gitattributes, or to a path git quotes"
+              echo "$why: the full plan"
+            elif LC_ALL=C grep -q '^tools/' "$RUNNER_TEMP/changed.txt" \
+                && ! { b="$(checker "$base")" && h="$(checker HEAD)" && [ "$b" = "$h" ]; }; then
+              why="a change to the checker (keys.checker), or a checker id that cannot be computed"
+              echo "$why: the full plan"
+            else
+              full=false
+            fi
+          fi
+          # A harness's own files: a path under projects/<p>/<h>/ (its proofs, counterexamples and findings in the
+          # per-project layout among them), proofs/<p>/<h>/, counterexamples/<p>/<h>/ or findings/<p>/<h>/, or a file
+          # of its project itself (projects/<p>/project.yaml and its siblings, projects/<p>/unpatched.yaml,
+          # findings/<p>/unpatched.yaml), which is every harness of that project's own.  owns UNIT: whether this push
+          # changes a file of UNIT's own.  A push with no base to compare with owns nothing.
+          : > "$RUNNER_TEMP/own-harnesses.txt"
+          : > "$RUNNER_TEMP/own-projects.txt"
+          if [ -f "$RUNNER_TEMP/changed.txt" ]; then
+            LC_ALL=C sed -nE 's#^(projects|proofs|counterexamples|findings)/([^/]+)/([^/]+)/.*#\2/\3#p' \
+              "$RUNNER_TEMP/changed.txt" | sort -u > "$RUNNER_TEMP/own-harnesses.txt"
+            LC_ALL=C sed -nE 's#^(projects|proofs|counterexamples|findings)/([^/]+)/[^/]+$#\2#p' \
+              "$RUNNER_TEMP/changed.txt" | sort -u > "$RUNNER_TEMP/own-projects.txt"
+          fi
+          owns() { grep -qxF -- "$1" "$RUNNER_TEMP/own-harnesses.txt" || grep -qxF -- "${1%%/*}" "$RUNNER_TEMP/own-projects.txt"; }
+          # A push that would take the full plan changes shared tooling: it checks here only the harnesses whose own
+          # files it changes, every part of each with this commit's checker, and no other (none, for a push that
+          # changes tooling alone); the corpus-wide check of its commit is the publishing gate's run on the release
+          # commit that contains it (the header says why).  Only a dispatch, which someone asked for, checks every
+          # part here.
+          tooling=false
+          if [ "$full" = true ] && [ "$GITHUB_EVENT_NAME" = push ]; then
+            tooling=true
+            echo "$why: only the harnesses whose own files this push changes are checked here, every part of each; the publishing gate's run on the release commit that contains it checks the whole corpus"
+          fi
+          # A push whose every commit pr.yml's merge queue checked on its own parent (the queue step), that takes no
+          # full plan, and whose tools/ as a plan reads them (planned_tools) are, in this commit, the very ones each of
+          # those runs planned with, its parent's: those runs planned and checked every part this plan would (the
+          # header says why), so it plans none.  Any other push is planned here by key with this commit's tools: the
+          # queue planned with the parents' (pr.yml's plan job), and the planner (plan.PLANNER: __main__.py's cmd_plan,
+          # plan.py, pack.py) is no part of the
+          # checker id, so another planner could have planned fewer parts.  Each commit's tools are compared, not only
+          # this push's diff, since a change and its revert within one push leave the diff without tools/.
+          # planned_tools: a digest of the mode, blob and path of each file of tools/ at a commit but the files
+          # keys.NOT_THE_CHECKER names, which neither a check nor a plan opens (the lint and lint-exceptions.yaml, the
+          # tests, the README, ...), with the planner (plan.PLANNER) kept in, and tools/oft/plan.py kept in by name as
+          # well: PLANNER is read from the commit's own plan.py, so a push that drops plan.py from the list would digest
+          # both sides without it and keep the credit for a plan.py change in the same push.  Measured: a push that
+          # changed lint-exceptions.yaml with the licence lines of 28 harnesses (#679) lost the queue's credit under a
+          # comparison of the whole tools/ tree, and re-checked every part of those harnesses for about 3,600
+          # 16-core minutes (run 41545320386).
+          planned_tools() {
+            PYTHONPATH=tools python -c 'import hashlib, sys
+          from oft import keys, plan
+          rows = sorted("%s %s %s" % (mode, oid, path)
+                        for mode, _kind, oid, path in keys.ls_tree(".", "-r", sys.argv[1], "--", "tools/")
+                        if path == "tools/oft/plan.py" or path in plan.PLANNER or not keys.not_the_checker(path))
+          print(hashlib.sha256("".join(r + "\n" for r in rows).encode()).hexdigest())' "$1"
+          }
+          same_tools() {
+            local n k want got digest
+            n=$(wc -w <<< "$QUEUE_RUNS")
+            # the queue step's line of commits, one parent each: HEAD~1 .. HEAD~n are the runs' parents, HEAD~n main
+            # before the push
+            git fetch --no-tags --filter=blob:none --depth=$((n + 1)) origin "$(git rev-parse HEAD)" 2>/dev/null || return 1
+            [ "$(git rev-parse "HEAD~$n")" = "$base" ] || return 1
+            # a digest that cannot be computed is no credit: each is read on its own, so its failure is seen
+            digest="$(planned_tools HEAD)" && [ -n "$digest" ] || return 1
+            want="$digest $(git rev-parse -q --verify HEAD:.gitattributes || echo -)"
+            for k in $(seq 1 "$n"); do
+              digest="$(planned_tools "HEAD~$k")" && [ -n "$digest" ] || return 1
+              got="$digest $(git rev-parse -q --verify "HEAD~$k:.gitattributes" || echo -)"
+              [ "$got" = "$want" ] || return 1
+            done
+          }
+          if [ "$full" = false ] && [ "${QUEUE_CHECKED:-}" = true ]; then
+            [[ "$QUEUE_RUNS" =~ ^[0-9]+( [0-9]+)*$ ]] || { echo "::error::the queue step named no run ('$QUEUE_RUNS')"; exit 1; }
+            if same_tools; then
+              echo "every commit of this push passed pr.yml's merge queue run on its own parent ($QUEUE_RUNS), with these tools: no part is planned"
+              { echo "plan=[]"; echo "units=0"; echo "full=false"; echo "deferred=false"; echo "queue_runs=$QUEUE_RUNS"; } >> "$GITHUB_OUTPUT"
+              { echo "### no part planned: pr.yml's merge queue checked every commit of this push"
+                for run in $QUEUE_RUNS; do echo "- merge queue run $run"; done; } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "pr.yml's merge queue checked every commit of this push, but some of them with other tools than this commit's: it is planned here by key"
+          fi
+          args=(--units "$RUNNER_TEMP/units.txt" --max-jobs 32)
+          if [ "$tooling" = true ]; then
+            # every part of each harness this push owns, with this commit's tools (no base: --tools defaults to HEAD)
+            : > "$RUNNER_TEMP/own.txt"
+            while read -r unit; do
+              if owns "$unit"; then echo "$unit" >> "$RUNNER_TEMP/own.txt"; fi
+            done < "$RUNNER_TEMP/units.txt"
+            if [ ! -s "$RUNNER_TEMP/own.txt" ]; then
+              { echo "plan=[]"; echo "units=0"; echo "full=false"; echo "deferred=true"; } >> "$GITHUB_OUTPUT"
+              { echo "### no part checked here: $why"
+                echo "The corpus-wide check of this commit is the publishing gate's run on the release commit that contains it."; } \
+                >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            args=(--units "$RUNNER_TEMP/own.txt" --max-jobs 32)
+          elif [ "$full" = false ]; then
+            # Content keys (tools/oft/keys.py): a part is checked when the key of what its check reads
+            # differs from its key at the base.  --pr-kind release and --tools HEAD name what the check
+            # job runs: this commit's own statements, and the tools it copies out of the tree it checks
+            # (the base's checker is the same here, since a change to it took the full plan above).
+            # No record of passes is read (--store): a pass of an earlier push credits nothing.
+            args+=(--base "$base" --pr-kind release --tools HEAD)
+          fi
+          PYTHONPATH=tools python -m oft plan "${args[@]}" > "$RUNNER_TEMP/plan.json"
+          n="$(jq '.units | length' "$RUNNER_TEMP/plan.json")"
+          if [ "$full" = true ] && [ "$tooling" = false ] && [ "$n" -eq 0 ]; then
+            echo "::error::the planned proofs and findings name no harness to check"; exit 1
+          fi
+          # A push planned by key checks here only the harnesses it owns (owns, above).  A harness whose key moved
+          # through a shared file only (theories/, release.yaml's images, dune-project, a tool the keys read) is left
+          # to the publishing gate's run, and listed below.  A push that leaves every harness so plans none.
+          : > "$RUNNER_TEMP/deferred.txt"
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$tooling" = false ] && [ "$n" -gt 0 ]; then
+            : > "$RUNNER_TEMP/own.txt"
+            for unit in $(jq -r '.units[]' "$RUNNER_TEMP/plan.json"); do
+              if owns "$unit"; then
+                echo "$unit" >> "$RUNNER_TEMP/own.txt"
+              else
+                echo "$unit" >> "$RUNNER_TEMP/deferred.txt"
+              fi
+            done
+            if [ -s "$RUNNER_TEMP/deferred.txt" ]; then
+              if [ -s "$RUNNER_TEMP/own.txt" ]; then
+                args=(--units "$RUNNER_TEMP/own.txt" --max-jobs 32 --base "$base" --pr-kind release --tools HEAD)
+                PYTHONPATH=tools python -m oft plan "${args[@]}" > "$RUNNER_TEMP/plan.json"
+              else
+                echo '{"units": [], "jobs": [], "parts": []}' > "$RUNNER_TEMP/plan.json"
+              fi
+              n="$(jq '.units | length' "$RUNNER_TEMP/plan.json")"
+              echo "$(wc -l < "$RUNNER_TEMP/deferred.txt") harness(es) changed through shared files only: left to the publishing gate's run"
+            fi
+          fi
+          deferred="$([ "$tooling" = true ] || [ -s "$RUNNER_TEMP/deferred.txt" ] && echo true || echo false)"
+          # a push that changed shared tooling checked only its own harnesses: never the full plan
+          [ "$tooling" = false ] || full=false
+          { echo "plan=$(jq -c .jobs "$RUNNER_TEMP/plan.json")"
+            echo "units=$n"
+            echo "full=$full"
+            echo "deferred=$deferred"; } >> "$GITHUB_OUTPUT"
+          { if [ "$full" = true ]; then echo "### every harness with a committed proof or finding: $n"
+            else echo "### harnesses this commit changes: $n"; fi
+            jq -r '.units[]' "$RUNNER_TEMP/plan.json"
+            echo "### parts checked, and why"
+            jq -r '.parts[] | select(.check) | "- \(.unit) \(.part): \(.why)"' "$RUNNER_TEMP/plan.json"
+            echo "### parts not checked: $(jq '[.parts[] | select(.check | not)] | length' "$RUNNER_TEMP/plan.json")"
+            jq -r '[.parts[] | select(.check | not) | .why] | group_by(.) | .[] | "- \(.[0]): \(length)"' \
+              "$RUNNER_TEMP/plan.json"
+            if [ "$tooling" = true ]; then
+              echo "### every other harness is not checked here: $why"
+              echo "The corpus-wide check of this commit is the publishing gate's run on the release commit that contains it."
+            elif [ "$deferred" = true ]; then
+              echo "### harnesses changed through shared files only, not checked here: $(wc -l < "$RUNNER_TEMP/deferred.txt")"
+              cat "$RUNNER_TEMP/deferred.txt"
+              echo "The corpus-wide check of this commit is the publishing gate's run on the release commit that contains it."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      # The model and the checker and runner images a commit to release.yaml, toolchain/ or theories/ is held to, on
+      # the push path.  pr.yml's lps_pin job holds a pull request's change to them: the two pins of the model are one
+      # hash, each pinned image carries images.yml's attestation from main and, when its pin moved, was built from
+      # this tree's toolchain/, and theories/ compiles in the checker image.  This workflow is the status of main, and
+      # a commit can reach main without a pull request run of this repository (a ruleset bypass, a push, a release
+      # cut), so the same job runs here, and the verdict job fails when it did not pass (Dispatch issue OSSV-440).
+      # Whether the job runs, and whether theories/ is compiled, are pr.yml's reach step's answers over the paths
+      # this push changed.  The plan step above writes those paths when it has a base to compare with; it leaves
+      # that file unwritten where there is nothing to compare (a dispatch, a push that made the branch, a base the
+      # repository no longer has) and where it stops early, and then every path of the tree counts as changed, as
+      # the plan itself reads it.  Unwritten therefore means run the job, never skip it.
+      # Whether images.checker moved, and whether images.runner did, is read against the commit main stood at before
+      # this run's commits: on a push, the tip before it (EVENT_BASE, the push's `before`, above), since every commit
+      # the push brings reaches main by this run alone, and a repin in any of them is a repin of the image HEAD
+      # names; a push of a repin and a later commit, or a force push, must not compare HEAD with a parent the push
+      # itself brought.  Where there is no tip before (a run by hand, a push that made the branch), the commit's
+      # first parent stands for it.  A repin is HEAD's image differing from that commit's, or that commit's
+      # release.yaml not read, or no such commit at all.  A dispatched run of main and the push of the same lone
+      # commit then agree: after a toolchain/ change merged and before its repin, both find the image main pinned
+      # before it and verify its attestation alone, where a dispatch read as a repin would hold that image to a
+      # Dockerfile it cannot yet have been built from.  The checkout is one commit deep, so that commit is fetched as
+      # the plan step fetches its base, one commit deep, and its release.yaml read from it.
+      # `^"?theories/`: git quotes a path holding a '"', a '\' or a control character whatever core.quotePath
+      # says, and a quoted line that did not match would skip the job.  LC_ALL=C, as every other grep of this
+      # file: grep reads bytes, and under a UTF-8 locale it drops a line that is not valid UTF-8, which here
+      # would read as no theories/ change at all.
+      - name: whether this commit touches release.yaml, toolchain/ or theories/, and moves images.checker or images.runner, for the lps_pin job
+        id: lps_pin
+        run: |
+          set -euo pipefail
+          changed="$RUNNER_TEMP/changed.txt"
+          theories=false lps_pin=false checker_repin=false runner_repin=false base=
+          if [ ! -f "$changed" ]; then
+            theories=true lps_pin=true
+            echo "no list of changed paths (nothing to compare with, or the plan stopped early): every path is read as changed"
+          else
+            if LC_ALL=C grep -qE '^"?theories/' "$changed"; then
+              theories=true
+            fi
+            if [ "$theories" = true ] || LC_ALL=C grep -qE '^"?toolchain/|^release\.yaml$' "$changed"; then
+              lps_pin=true
+            fi
+          fi
+          if [ "$lps_pin" = true ]; then
+            checker_repin=true runner_repin=true
+            before="${EVENT_BASE:-}"
+            case "$before" in 0000000000000000000000000000000000000000) before= ;; esac
+            if [ -n "$before" ]; then
+              against="main before this push, $before"
+            else
+              # the first parent, from the commit itself: a commit names its parents even in a clone one commit deep
+              before=$(git cat-file -p HEAD | sed -n '1,/^$/s/^parent //p' | sed -n 1p)
+              against="this commit's parent, $before (no tip before this run)"
+            fi
+            if [ -z "$before" ]; then
+              against="nothing: no tip before this run, and this commit has no parent"
+            elif { git cat-file -e "$before^{commit}" 2> /dev/null || git fetch -q --no-tags --depth=1 origin "$before"; } &&
+                 git show "$before:release.yaml" > "$RUNNER_TEMP/before-release.yaml"; then
+              # whether this commit's images.<$1> is that commit's
+              same_image() {
+                python -c 'import sys, yaml
+          c = [str(yaml.safe_load(open(p, encoding="utf-8"))["images"][sys.argv[1]]) for p in sys.argv[2:]]
+          sys.exit(int(c[0] != c[1]))' "$1" release.yaml "$RUNNER_TEMP/before-release.yaml"
+              }
+              if same_image checker; then checker_repin=false; fi
+              if same_image runner; then runner_repin=false; fi
+            fi
+            echo "images.checker compared with $against: moved: $checker_repin"
+            echo "images.runner compared with $against: moved: $runner_repin"
+            # The commit whose tools' requirements.txt the lps_pin job installs: the one this commit is compared with
+            # above, fetched one commit deep where the repository does not hold it, and never this commit itself.  A
+            # commit with no parent and no tip before this run, or one that cannot be fetched, leaves `base` empty, and
+            # the lps_pin job then fails rather than read this commit's own requirements (its step says why).
+            if [ -n "$before" ] &&
+               { git cat-file -e "$before^{commit}" 2> /dev/null ||
+                 git fetch -q --no-tags --depth=1 origin "$before"; } &&
+               git cat-file -e "$before^{commit}" 2> /dev/null; then
+              base=$before
+              echo "the lps_pin job reads release.yaml with the requirements of $base"
+            else
+              echo "::warning::no commit before this one to take the lps_pin job's requirements from (compared with $against): that job fails"
+            fi
+          fi
+          { echo "lps_pin=$lps_pin"; echo "theories=$theories"; echo "checker_repin=$checker_repin"
+            echo "runner_repin=$runner_repin"; echo "base=$base"; } >> "$GITHUB_OUTPUT"
+          echo "release.yaml, toolchain/ or theories/ changed: $lps_pin; theories/ changed: $theories; images.checker moved: $checker_repin; images.runner moved: $runner_repin"
+      - name: for each group of the plan, its binaries in a release this read-only token cannot see (a draft)
+        id: drafts
+        # a local action resolves in the workspace (`./`): the checkout of this workflow's own commit
+        uses: ./.github/actions/plan-drafts
+        with:
+          plan-file: ${{ runner.temp }}/plan.json
+          tools: ${{ github.workspace }}/tools
+          root: ${{ github.workspace }}
+
+  # Each leg a call of fetch-drafts.yml, which GitHub runs from this workflow's own commit; a called workflow runs with
+  # the token the calling job grants, here contents: write and nothing else.
+  fetch-drafts:
+    needs: plan
+    if: needs.plan.outputs.draft_legs != '[]'
+    name: fetch-drafts ${{ matrix.leg.index }}
+    permissions:
+      contents: write   # the only permission with which the workflow's token sees a draft release; nothing is written
+    strategy:
+      matrix:
+        leg: ${{ fromJSON(needs.plan.outputs.draft_legs) }}
+    uses: ./.github/workflows/fetch-drafts.yml
+    with:
+      pins: ${{ toJSON(matrix.leg.pins) }}
+
+  check:
+    needs: [plan, fetch-drafts]
+    # fetch-drafts is skipped when no planned binary is a draft, and a job whose need was skipped is skipped too unless
+    # its condition says otherwise: run when fetch-drafts passed or had nothing to do, never when it failed or was
+    # cancelled.  A plan that names no harness (a commit that changes nothing a check reads) runs no check job at all,
+    # and release-check says so.
+    if: >-
+      !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.units != '0'
+      && (needs.fetch-drafts.result == 'success' || needs.fetch-drafts.result == 'skipped')
+    name: check ${{ matrix.job.index }}
+    # the proof runner and its limit: pr.yml's check job says why
+    runs-on: ubuntu-24.04-16core
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 32
+      matrix:
+        job: ${{ fromJSON(needs.plan.outputs.plan) }}
+    steps:
+      # The object store of main (.github/workflows/images.yml, git_objects), restored before the checkout below so
+      # that its fetch asks only for what the store lacks and not for the whole tree (474-575 s cold on this runner,
+      # job 134991036107).  pr.yml's check job does the same, and its lint job's two steps say what the store is and
+      # what a run that finds none does: it checks out as it always did.  The checkout is unchanged, so it still
+      # fetches this run's own commit by name, one commit deep.  The entry's version is a hash of its path, so the
+      # restore names head/.git as images.yml's save does, and the step after it moves the store to work/.git, where
+      # actions/checkout keeps a repository whose origin is this one.  Restore only: images.yml keeps main's one
+      # store, and every run of this workflow (a push to main, or a run by hand) may read main's cache.
+      - id: git_objects
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
+        with:
+          path: head/.git
+          key: git-objects-v1-
+          restore-keys: git-objects-v1-
+      - if: steps.git_objects.outputs.cache-matched-key != ''
+        name: the object store this checkout starts from
+        env:
+          STORE: ${{ steps.git_objects.outputs.cache-matched-key }}
+        run: |
+          set -euo pipefail
+          mkdir work
+          mv head/.git work/.git
+          rmdir head
+          echo "$STORE, $(du -sh work/.git | cut -f1), main at $(git -C work rev-parse refs/ossv-git-cache/base)"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          path: work
+      # The job's token, which actions/checkout persisted in work/.git/config as an http extraheader.  No step of this
+      # job fetches again, and the check below runs the code of the tree this checkout wrote, so the credential goes
+      # first.  pr.yml's check job does the same.
+      - name: the job's token, out of the tree the check runs
+        run: git -C work config --unset-all http.https://github.com/.extraheader 2> /dev/null || true
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: the tools' dependencies (PyYAML, idna), hash-pinned
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --require-hashes -r work/tools/oft/requirements.txt
+          python -m pip install --quiet --require-hashes --target "$RUNNER_TEMP/pydeps" -r work/tools/oft/requirements.txt
+      - name: the tools, copied out of the tree they check
+        run: cp -r -- work/tools "$RUNNER_TEMP/tools"
+      - name: cache keys
+        id: keys
+        env:
+          PROJECTS: ${{ matrix.job.projects }}
+          FINDINGS: ${{ matrix.job.findings }}
+        run: |
+          set -euo pipefail
+          read -r -a projects <<< "$PROJECTS"
+          read -r -a finding_units <<< "$FINDINGS"
+          read -r -a finding_projects <<< "$(printf '%s\n' "${finding_units[@]%%/*}" | sort -u | tr '\n' ' ')"
+          # the assets this job fetches, named by their pinned SHA-256: the binaries and the unpatched binaries the
+          # findings run on, which check-units.sh keeps in the same directory.  `python -m oft.fetch`, the entry point
+          # check-units.sh runs, not `python -m oft`, whose __main__ imports the files keys.NOT_THE_CHECKER names: the
+          # plan step skips the full plan for a change to those alone, so no step of this job may run them.
+          {
+            if [ "${#projects[@]}" -gt 0 ]; then
+              PYTHONPATH="$RUNNER_TEMP/tools" python -m oft.fetch --root work --list "${projects[@]}"
+            fi
+            if [ "${#finding_projects[@]}" -gt 0 ]; then
+              PYTHONPATH="$RUNNER_TEMP/tools" python -m oft.fetch --root work --findings --list "${finding_projects[@]}"
+            fi
+          } | awk '$2 ~ /-bin\.tar\.zst$/ {print $3}' | sort > "$RUNNER_TEMP/asset-shas.txt"
+          [ -s "$RUNNER_TEMP/asset-shas.txt" ] || { echo "::error::no binary asset listed for: $PROJECTS $FINDINGS"; exit 1; }
+          echo "assets=$(sha256sum < "$RUNNER_TEMP/asset-shas.txt" | cut -c1-64)" >> "$GITHUB_OUTPUT"
+      - name: the release assets, by their pinned SHA-256
+        id: assets
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
+        with:
+          path: ${{ runner.temp }}/assets
+          key: release-check-assets-${{ steps.keys.outputs.assets }}
+      # Only the archives this group's projects pin in a draft, from this group's plan entry, each from its own
+      # artifact, laid over what the cache restored (.github/actions/place-drafts, from work: this workflow's own
+      # commit).
+      - name: the draft binaries this group needs, which fetch-drafts checked and this job's read-only token cannot download
+        if: join(matrix.job.drafts, ',') != ''
+        uses: ./work/.github/actions/place-drafts
+        with:
+          drafts: ${{ toJSON(matrix.job.drafts) }}
+          assets: ${{ runner.temp }}/assets
+      - name: sign in to ghcr.io, where the pinned images are (needed while their packages are private)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: check
+        env:
+          WORK: ${{ github.workspace }}/work
+          TOOLS: ${{ runner.temp }}/tools
+          UNITS: ${{ matrix.job.check_units }}
+          PROOF_UNITS: ${{ toJSON(matrix.job.proof_units) }}  # JSON: check-units.sh refuses null, a plan without it
+          PROJECTS: ${{ matrix.job.projects }}
+          CX_UNITS: ${{ matrix.job.counterexamples }}
+          FINDINGS: ${{ matrix.job.findings }}
+          CPUS: ${{ matrix.job.cpus }}
+          ASSETS: ${{ runner.temp }}/assets
+          PYDEPS: ${{ runner.temp }}/pydeps
+          GH_TOKEN: ${{ github.token }}
+          CHECK_LOGS: ${{ runner.temp }}/check-logs
+        run: |
+          set -euo pipefail
+          # oft check keeps each build's dune and rocq logs in its temporary folder (oft-check-*), and a failed build's
+          # message names only that log ("does not compile (see PATH)"), which went with the container.  So the check runs
+          # through a docker of this step's: a `docker run` that mounts a writable /work (a unit's view) gets
+          # CHECK_LOGS/tmp, mounted at /oft-check-logs, as its temporary folder, and when that container exits, every
+          # file there but the logs (*.log) is removed, and every symbolic link with them: the build writes that folder
+          # itself, and this job's artifact step uploads check-logs/**/*.log with actions/upload-artifact, which follows
+          # a link (search.ts: `followSymbolicLinks: true`, and its filter is `fs.stat`, not `lstat`), so a `*.log` link
+          # a failing build leaves would carry the bytes of any file of this runner -- ~/.docker/config.json, which the
+          # ghcr.io login step above writes with this job's token, among them -- to everyone who can read the pull
+          # request's artifacts.  Any other call goes to docker as it is.  check-units.sh is not changed for this: it is
+          # the checker (keys.NOT_THE_CHECKER), whose ids are in every unit's key.
+          : "${CHECK_LOGS:?}"
+          rm -rf -- "$CHECK_LOGS" "$CHECK_LOGS.bin"
+          mkdir -p -- "$CHECK_LOGS/tmp" "$CHECK_LOGS.bin"
+          CHECK_LOGS_DOCKER="$(command -v docker)" || { echo "::error::no docker on PATH"; exit 1; }
+          export CHECK_LOGS_DOCKER
+          cat > "$CHECK_LOGS.bin/docker" <<'EOF'
+          #!/bin/bash
+          : "${CHECK_LOGS:?}" "${CHECK_LOGS_DOCKER:?}"
+          if [ "${1:-}" = run ]; then
+            prev=
+            for a in "$@"; do
+              if [ "$prev" = -v ] && [[ "$a" == *:/work ]]; then
+                shift
+                rc=0
+                "$CHECK_LOGS_DOCKER" run -v "$CHECK_LOGS/tmp:/oft-check-logs" -e TMPDIR=/oft-check-logs "$@" || rc=$?
+                find "$CHECK_LOGS/tmp" \( -type l -o -type f ! -name '*.log' \) -delete
+                find "$CHECK_LOGS/tmp" -mindepth 1 -type d -empty -delete
+                exit "$rc"
+              fi
+              prev=$a
+            done
+          fi
+          exec "$CHECK_LOGS_DOCKER" "$@"
+          EOF
+          chmod +x "$CHECK_LOGS.bin/docker"
+          rc=0
+          PATH="$CHECK_LOGS.bin:$PATH" bash "$TOOLS/oft/ci/check-units.sh" 2>&1 | tee "$CHECK_LOGS/check-units.log" || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            # The Rocq error can sit 140k lines up a 362k-line dune log.  Of each log a failure names (`(see PATH)`), or,
+            # when none it names is here, of each log that holds an `Error` line: the first 40 `File ..., line N` and
+            # `Error` blocks, with 5 lines of context, as the stream's check-pod tool prints them; 8,000 bytes in all.
+            # A Rocq error is a `File "...", line N, characters ...:` line and an `Error: ...` line under it, and a dune
+            # log holds many warnings of the same `File` form: in a proof library's log on the check runner, warnings
+            # filled the 8,000 bytes 32,000 lines before its one error.  So in a log that holds an `Error` line, the
+            # first 40 of those lines are printed, each with the 6 lines above it (its `File` line among them) and the 5
+            # below; a log with none gets the check-pod tool's `File` and `Error` lines.
+            # The path is taken only from a `^FAIL ` line, which oft check itself writes (tools/oft/check.py), never
+            # from free text: a proof controls part of its own error message, so an unanchored read would let it name
+            # any file of this runner to be printed here.  A path that is not under /oft-check-logs/, or that holds a
+            # `..` segment, is refused in one line and not read (OSSV-366).  A build writes its own logs: /oft-check-logs
+            # is the TMPDIR of the container the check runs in, so a `*.log` the build leaves there can be a symbolic
+            # link to any file of this runner, which `[ -f ]` would follow.  So a path is read only when it resolves to
+            # itself: a regular file, under this run's own log folder, reached through no link.
+            # the log paths the failures name
+            logs=()
+            refused=()
+            linked=()
+            root="$(realpath -e -- "$CHECK_LOGS/tmp")"
+            while IFS= read -r p; do
+              case "$p" in
+                /oft-check-logs/*) rel=${p#/oft-check-logs/} ;;
+                *) refused+=("$p"); continue ;;
+              esac
+              case "/$rel" in
+                */../*|*/..) refused+=("$p"); continue ;;
+              esac
+              held="$CHECK_LOGS/tmp/$rel"
+              # a path this run left nothing at is passed over in silence, as a build whose log is not here
+              [ -e "$held" ] || [ -L "$held" ] || continue
+              if [ "$(realpath -e -- "$held" 2> /dev/null || true)" != "$root/$rel" ] || [ ! -f "$held" ]; then
+                linked+=("$p")
+                continue
+              fi
+              logs+=("$held")
+            done < <(grep -E '^FAIL ' -- "$CHECK_LOGS/check-units.log" \
+                       | grep -oE '\(see [^)]+\)' \
+                       | sed -E 's|^\(see ||; s|\)$||' | awk '!seen[$0]++' || true)
+            for p in ${refused[@]+"${refused[@]}"}; do
+              echo "== refused the log path a failure names, it is not a file of this run's log folder: $p"
+            done
+            for p in ${linked[@]+"${linked[@]}"}; do
+              echo "== refused the log path a failure names, it does not resolve to a regular file of this run's own log folder: $p"
+            done
+            # end of the log paths the failures name
+            if [ "${#logs[@]}" -eq 0 ]; then
+              # The build names its own folders, and a folder's name can hold a line break: a list split on lines would
+              # read `<folder>\n/any/runner/file.log` as two paths, the second outside this run's log folder.  So the
+              # list is NUL-separated, and each path is read only when it resolves to itself, as a named path above is.
+              found=()
+              mapfile -d '' -t found < <(grep -rlZE --include='*.log' '^Error' -- "$CHECK_LOGS/tmp" | sort -z || true)
+              for held in ${found[@]+"${found[@]}"}; do
+                rel=${held#"$CHECK_LOGS/tmp/"}
+                if [ "$(realpath -e -- "$held" 2> /dev/null || true)" = "$root/$rel" ] && [ -f "$held" ]; then
+                  logs+=("$held")
+                fi
+              done
+            fi
+            for f in "${logs[@]}"; do
+              echo "== the first errors of ${f#"$CHECK_LOGS/tmp/"} ($(wc -l < "$f") lines):"
+              if grep -qE '^Error' -- "$f"; then
+                grep -nE -m 40 -B 6 -A 5 '^Error' -- "$f" || true
+              else
+                grep -nE -m 40 -C 5 '^File .*, line [0-9]+|^Error' -- "$f" || true
+              fi
+            done > "$CHECK_LOGS/errors.txt"
+            echo "== the first errors of the logs the failures name; the whole logs are this job's artifact check-logs-*"
+            head -c 8000 -- "$CHECK_LOGS/errors.txt"
+            size="$(wc -c < "$CHECK_LOGS/errors.txt")"
+            [ "$size" -le 8000 ] || printf '\n== cut at 8000 of %d bytes\n' "$size"
+          fi
+          exit "$rc"
+      # The build writes its own logs into /oft-check-logs (CHECK_LOGS/tmp, its TMPDIR), and the upload below follows
+      # a symbolic link, so a `*.log` link it leaves would be uploaded with the bytes of what it points at.  The
+      # docker wrapper above drops every link as each container exits, but three paths get past it.  A directory the
+      # build chmods against the runner (the containers run as the runner's uid): the wrapper's `find` cannot unlink
+      # inside it, and the wrapper's status is the container's, so nothing is said.  A cancelled job: the check step
+      # is killed inside the container, so the wrapper never returns and its cleanup never runs, while the upload
+      # still runs on `cancelled()`.  And `docker run` is only a client: a build that ignores the signals the
+      # runner's cancellation forwards keeps running under the daemon, holding the mount, and plants its link again
+      # after any sweep and before the upload globs.  So the writers go first.  `docker kill` is SIGKILL from the
+      # daemon, which a build cannot trap, and `--rm` then takes the container away; killing every container is right
+      # here, because this job has no `container:` and no `services:`, its runner is a GitHub-hosted larger runner of
+      # its own (the job's `runs-on` comment), and the only containers on it are check-units.sh's, which run in the
+      # foreground and are already gone on every path but cancellation.  Then the folder is made the runner's to walk
+      # again and every link left in it goes; a real log is a file and stays.  A job that failed before the check
+      # step has no folder to sweep and ends at once, rather than failing a second step on `find`'s missing path.
+      - name: the build's symbolic links, out of the logs this job uploads
+        if: failure() || cancelled()
+        run: |
+          [ -d "$RUNNER_TEMP/check-logs" ] || exit 0
+          docker ps -q | xargs -r docker kill > /dev/null 2>&1 || true
+          chmod -R u+rwX -- "$RUNNER_TEMP/check-logs" || true
+          find "$RUNNER_TEMP/check-logs" -type l -delete
+      # also when the job is cancelled, as GitHub cancels one that reaches timeout-minutes: the check step is then
+      # stopped inside a container, whose other temporary files are still there, so only the logs are taken
+      - name: oft check's logs, when the check failed or was stopped
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: check-logs-${{ matrix.job.index }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/check-logs/**/*.log
+            ${{ runner.temp }}/check-logs/errors.txt
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: keep the release assets
+        if: >-
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.assets.outputs.cache-hit != 'true'
+          && join(matrix.job.drafts, ',') == ''
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
+        with:
+          path: ${{ runner.temp }}/assets
+          key: release-check-assets-${{ steps.keys.outputs.assets }}
+
+  lps_pin:
+    # A commit that touches release.yaml, toolchain/ or theories/ against the model and the checker and runner images
+    # this repository pins, on the push path: the same job as pr.yml's, step for step, since a commit can reach main
+    # without a pull request run here (a ruleset bypass, a push, the release cut) and the status of main must say
+    # the same thing as the status of a pull request.  pr.yml's job comment says what the pins are, why a repin is
+    # held to this tree's build definition and an unchanged digest is not, and why a theories/ change no
+    # job compiled is a failure (Dispatch issue OSSV-440).  tools/oft/tests/test_workflow_verdicts.py holds these
+    # steps and pr.yml's to one text, so a change to either is a change to both.
+    # It runs on the public repository as every other job of this workflow does: the cut ships theories/,
+    # release.yaml and toolchain/, the model's repository is public, and the pinned checker image is the one the
+    # check jobs already pull there with this workflow's `packages: read`.  The images' attestations are not there:
+    # each attestation step says so and reads none.
+    needs: [plan]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.lps_pin == 'true' }}
+    # the runner pr.yml's lps_pin takes, and for the same reason: the checker image beside a checkout needs the
+    # 4-core larger runner's disk
+    runs-on: ubuntu-24.04-4core
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read       # the pinned checker image from ghcr.io
+      attestations: read   # images.yml's build attestations of the pinned checker and runner images
+    steps:
+      # theories/ with the dune-project that declares its package, and release.yaml and toolchain/ for the two pins.
+      # Not the tree: no other dune file takes part in `dune build @theories/default`, and the proof libraries are
+      # gigabytes.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          path: head
+          persist-credentials: false   # theories/ is the change's own; the attestation step's fetch sends its own header
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /dune-project
+            /release.yaml
+            /theories/
+            /toolchain/
+      # The PyYAML that reads release.yaml, from the tools' requirements.txt of the commit the plan judges this change
+      # against (its `base`), never from the change's own.  This job judges the pins, and what it installs runs on its
+      # runner before it judges anything: the change writes its requirements' hashes itself, a source distribution
+      # among them runs its build hooks as the runner's user, and a wheel can install a .pth file that every later
+      # `python` runs, so the change's requirements could replace what every later step runs (gh, jq, docker, the
+      # Python they import) and the steps would no longer be this workflow's.  --only-binary :all: keeps the base's
+      # named pins to the wheels they list, which run nothing as they install.  The change's own requirements are
+      # installed where its own code runs: the tests and the controls (tools/oft/tests/test_workflow_verdicts.py,
+      # LpsPinVerifierTest).  With no commit before this change to take them from, the job fails (the step below):
+      # actions/checkout given no ref checks out this run's own commit, and there is no other trusted list.
+      - name: the plan named a commit before this change to take the verifier's requirements from (fail closed)
+        env:
+          BASE: ${{ needs.plan.outputs.base }}
+        run: |
+          set -euo pipefail
+          # pr.yml's plan names the merge commit's first parent, the merge queue group's base or main before the
+          # push, and this very commit for a run with no base to compare with (a push that made the branch, or one
+          # whose base cannot be fetched); release-check.yml's names main before the push, or the parent, and nothing
+          # where the repository holds neither.
+          [[ "$BASE" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]] || {
+            echo "::error::the plan named no commit before this change ('$BASE'): there are no requirements but the change's own to read release.yaml with, and this job runs none of the change's code before it judges the pins"
+            exit 1; }
+          head=$(git -C head rev-parse HEAD)
+          [ "$BASE" != "$head" ] || {
+            echo "::error::the plan's base is this run's own commit $head (no base to compare with): its requirements are the change's own, and this job runs none of the change's code before it judges the pins"
+            exit 1; }
+          echo "the verifier's requirements come from $BASE, the commit before this change ($head)"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          path: verifier
+          ref: ${{ needs.plan.outputs.base }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /tools/oft/requirements.txt
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: the base's tools' dependencies (PyYAML, idna), hash-pinned, wheels only
+        run: python -m pip install --quiet --require-hashes --only-binary ':all:' -r verifier/tools/oft/requirements.txt
+      - name: release.yaml's model and toolchain/checker.Dockerfile's LPS_TREE_SHA256 are one pin
+        id: pin
+        working-directory: head
+        run: |
+          set -euo pipefail
+          read -r repo commit < <(python -c 'import yaml; s = yaml.safe_load(open("release.yaml"))["semantics"]; print(s["repository"], s["commit"])')
+          [ "$repo" = https://github.com/theorem-labs/rocq-linux-process-semantics ] ||
+            { echo "::error::release.yaml's semantics.repository is '$repo'"; exit 1; }
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::release.yaml's semantics.commit is '$commit'"; exit 1; }
+          # One ARG LPS_TREE_SHA256 line, and it is a sha256: a second line, empty or continued, would be the
+          # argument the image build actually hashes against, and a check of the first would say nothing of it.
+          declared=$(grep -c '^ARG LPS_TREE_SHA256' toolchain/checker.Dockerfile || true)
+          [ "$declared" = 1 ] ||
+            { echo "::error::toolchain/checker.Dockerfile declares ARG LPS_TREE_SHA256 $declared time(s): the checker image pins one hash of the model's files"; exit 1; }
+          pin=$(sed -n 's/^ARG LPS_TREE_SHA256=\([0-9a-f]\{64\}\)$/\1/p' toolchain/checker.Dockerfile)
+          [ -n "$pin" ] ||
+            { echo "::error::toolchain/checker.Dockerfile's ARG LPS_TREE_SHA256 is not one sha256 of 64 hexadecimal characters"; exit 1; }
+          # The model as the image build takes it: the commit release.yaml names, cut to the pathspecs of
+          # toolchain/lps-core.paths by `git archive` (the `lps` build context, images.yml's step of the same
+          # words), hashed as toolchain/checker.Dockerfile hashes that context before it pins the package.
+          git init -q "$RUNNER_TEMP/lps-repo"
+          git -C "$RUNNER_TEMP/lps-repo" fetch -q --depth=1 "$repo" "$commit"
+          mkdir "$RUNNER_TEMP/lps"
+          grep -v -e '^#' -e '^$' toolchain/lps-core.paths |
+            xargs -d '\n' git -C "$RUNNER_TEMP/lps-repo" archive "$commit" -- | tar -x -C "$RUNNER_TEMP/lps"
+          files=$(find "$RUNNER_TEMP/lps" -type f | wc -l)
+          got=$(cd "$RUNNER_TEMP/lps" && find . -type f -printf '%P\n' | LC_ALL=C sort |
+            xargs -d '\n' -r sha256sum | sha256sum | cut -c1-64)
+          echo "release.yaml's semantics.commit $commit, cut to toolchain/lps-core.paths ($files files), hashes to $got"
+          echo "toolchain/checker.Dockerfile pins LPS_TREE_SHA256 $pin"
+          { echo "### the model this change's theories/ is compiled against"
+            echo "- release.yaml \`semantics.commit\` \`$commit\`, cut to \`toolchain/lps-core.paths\` ($files files), hashes to \`$got\`"
+            echo "- toolchain/checker.Dockerfile \`LPS_TREE_SHA256\`: \`$pin\`"; } >> "$GITHUB_STEP_SUMMARY"
+          [ "$got" = "$pin" ] || {
+            echo "::error::the two pins name different models: release.yaml's semantics.commit $commit hashes to $got, and toolchain/checker.Dockerfile pins LPS_TREE_SHA256 $pin"
+            echo "the two pins name different models: \`$got\` against \`$pin\`" >> "$GITHUB_STEP_SUMMARY"
+            exit 1; }
+          echo "the two pins are one model"
+          echo "pin=$pin" >> "$GITHUB_OUTPUT"
+      - name: the checker image release.yaml pins, by digest (fail closed)
+        id: image
+        working-directory: head
+        run: |
+          set -euo pipefail
+          img=$(python -c 'import yaml; print(yaml.safe_load(open("release.yaml"))["images"]["checker"])')
+          [[ "$img" =~ ^ghcr\.io/theorem-labs/oss-fuzz-theorems-checker@sha256:[0-9a-f]{64}$ ]] || {
+            echo "::error::release.yaml must name the checker image by digest in images.checker, got '$img'"; exit 1; }
+          echo "image=$img" >> "$GITHUB_OUTPUT"
+      # The image release.yaml names is one images.yml built and attested on main, verified with the command at the
+      # top of images.yml, with images.yml's signer and gh check (its image job's verify step says why each is as it
+      # is).  On a repin, the commit that attestation names must hold this change's toolchain/checker.Dockerfile and
+      # toolchain/lps-core.paths: the image was built from the definition this change is reviewed with, and from no
+      # older or other one.  The two files are compared by their git object ids, which are one for two files exactly
+      # when their bytes are one, so the attested commit is fetched one commit deep and without its blobs.  The
+      # fetch goes over git with the job's token in a header, never in a URL or an argument, and spends none of the
+      # token's API budget.  verify-pins in images.yml verifies the same digests daily, after the fact; this step
+      # verifies one before the change that pins it can merge.
+      - name: images.yml built and attested the pinned checker image on main, from this change's toolchain/ on a repin
+        working-directory: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ steps.image.outputs.image }}
+          REPIN: ${{ needs.plan.outputs.checker_repin }}
+        run: |
+          set -euo pipefail
+          case "$REPIN" in true|false) ;; *)
+            echo "::error::the plan answered checker_repin '$REPIN', neither true nor false"; exit 1 ;; esac
+          # images.yml stores each attestation in the repository it ran in and does not push it beside the image,
+          # since it names that private repository; a token of the public repository reads none of them.  The
+          # public repository takes release.yaml from that repository's main, by a release, and this step holds
+          # images.checker there.
+          if [ "$GITHUB_REPOSITORY" = theorem-labs/oss-verify-proofs ]; then
+            echo "theorem-labs/oss-verify-proofs holds no attestation of $IMAGE: the repository whose images.yml built it verifies it"
+            echo "- the checker image's attestation: not read in theorem-labs/oss-verify-proofs, which holds none" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh_version=$(gh --version)
+          echo "$gh_version"
+          gh_version=${gh_version%%$'\n'*}
+          if ! [[ "$gh_version" =~ ^gh\ version\ ([0-9]+)\.([0-9]+)\. ]] ||
+             (( 10#${BASH_REMATCH[1]} < 2 || (10#${BASH_REMATCH[1]} == 2 && 10#${BASH_REMATCH[2]} < 67) )); then
+            echo "::error::gh 2.67 or newer is needed, not '$gh_version': gh 2.49 to 2.66 could exit 0 for a digest" \
+              "with no attestation of the predicate type asked for (CVE-2025-25204)"
+            exit 1
+          fi
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/images.yml@refs/heads/main"
+          # three tries, 10 and 20 s apart, for a passing error of the API or the registry
+          verified=
+          for try in 1 2 3; do
+            if gh attestation verify "oci://$IMAGE" --repo "$GITHUB_REPOSITORY" --cert-identity "$identity" \
+                 --source-ref refs/heads/main --format json > "$RUNNER_TEMP/attestation.json"; then
+              verified=1
+              break
+            fi
+            [ "$try" = 3 ] || sleep $((try * 10))
+          done
+          [ -n "$verified" ] || {
+            echo "::error::gh attestation verify refused $IMAGE in 3 tries: release.yaml's images.checker is no image images.yml built and attested on main"
+            echo "- the checker image's attestation: refused" >> "$GITHUB_STEP_SUMMARY"
+            exit 1; }
+          # An unchanged images.checker: gh's exit status is the verdict, and nothing it printed is read.
+          if [ "$REPIN" = false ]; then
+            echo "attested: gh attestation verify passed $IMAGE, built by images.yml on refs/heads/main"
+            echo "- the checker image's attestation: verified, images.yml on refs/heads/main" >> "$GITHUB_STEP_SUMMARY"
+            echo "images.checker is unchanged by this change, and was held to its build definition when it was pinned: its attestation alone is verified here"
+            exit 0
+          fi
+          # The commit each attestation says images.yml built the image at: its signing certificate's source
+          # repository digest.  With --format json, gh prints a JSON array on stdout, one object per verified
+          # attestation, whose verificationResult is sigstore-go's VerificationResult; its signature.certificate is
+          # the certificate's summary, with the Fulcio extensions inline (cli/cli v2.103.3, the runner image's gh:
+          # pkg/cmd/attestation/verification/sigstore.go:28-31 and verify/verify.go:321, and its log lines go to
+          # stderr, and only to a terminal, io/handler.go:45-50; sigstore-go v1.3.0, which that gh builds with:
+          # pkg/verify/signed_entity.go:256 and 263, pkg/fulcio/certificate/summarize.go:26-30 and extensions.go:111).
+          # A build of the same files gives another digest each time (images.yml's header), so one image has one
+          # such commit; each one named is held to the same rule.
+          commits=$(jq -r '[.[].verificationResult.signature.certificate.sourceRepositoryDigest] | unique | .[]' \
+            "$RUNNER_TEMP/attestation.json") || commits=
+          [ -n "$commits" ] || {
+            echo "::error::gh attestation verify passed $IMAGE and named no commit images.yml built it at"; exit 1; }
+          for c in $commits; do
+            [[ "$c" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::the attestation of $IMAGE names '$c' as the commit images.yml built it at, not a commit"; exit 1; }
+          done
+          echo "attested: images.yml built $IMAGE on refs/heads/main at $commits"
+          echo "- the checker image's attestation: images.yml on refs/heads/main, at \`$commits\`" >> "$GITHUB_STEP_SUMMARY"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          built="$RUNNER_TEMP/built-from"
+          git init -q "$built"
+          git -C "$built" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          refused=0
+          for c in $commits; do
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.$GITHUB_SERVER_URL/.extraheader" GIT_CONFIG_VALUE_0="$auth" \
+              GIT_TERMINAL_PROMPT=0 git -C "$built" fetch -q --no-tags --depth=1 --filter=blob:none origin "$c" || {
+                echo "::error::$c, the commit images.yml built $IMAGE at, cannot be fetched from $GITHUB_REPOSITORY"
+                exit 1; }
+            for f in toolchain/checker.Dockerfile toolchain/lps-core.paths; do
+              there=$(git -C "$built" rev-parse -q --verify "$c:$f") || there="no such file"
+              here=$(git rev-parse -q --verify "HEAD:$f") || here="no such file"
+              if [ "$there" = "$here" ] && [ "$here" != "no such file" ]; then
+                echo "$f: the file images.yml built $IMAGE from at $c ($here)"
+              else
+                echo "::error::$IMAGE was built from another $f than this change's: images.yml built it at $c, whose $f is $there, and this change's is $here"
+                echo "- $f differs from the one the image was built from at \`$c\`" >> "$GITHUB_STEP_SUMMARY"
+                refused=1
+              fi
+            done
+          done
+          [ "$refused" = 0 ] || exit 1
+          echo "the repinned checker image was built from this change's toolchain/checker.Dockerfile and toolchain/lps-core.paths" |
+            tee -a "$GITHUB_STEP_SUMMARY"
+      - name: the runner image release.yaml pins, by digest (fail closed)
+        id: runner_image
+        working-directory: head
+        run: |
+          set -euo pipefail
+          img=$(python -c 'import yaml; print(yaml.safe_load(open("release.yaml"))["images"]["runner"])')
+          [[ "$img" =~ ^ghcr\.io/theorem-labs/oss-fuzz-theorems-runner@sha256:[0-9a-f]{64}$ ]] || {
+            echo "::error::release.yaml must name the runner image by digest in images.runner, got '$img'"; exit 1; }
+          echo "image=$img" >> "$GITHUB_OUTPUT"
+      # The runner image release.yaml names, which every counterexample and finding runs in, held as the checker's
+      # attestation step above holds the checker image: images.yml built and attested it on main, verified with the
+      # same command, signer and gh check, whether or not this change moves it.  On a repin (the plan's
+      # runner_repin), the commit that attestation names must hold this change's toolchain/runner.Dockerfile and
+      # tests/toy/, compared by git object id as there (a tree id for tests/toy/, which neither may lack unless both
+      # do): an image of an older or another runner definition is refused before the change that pins it can merge.
+      # tests/toy/ is the image's self-test, and is an input of the image although it is mounted and not copied in:
+      # the build runs its make_elf.py as root in the stage it ships, so a script there could rewrite qemu or
+      # anything else the image holds.  The build's arguments are the Dockerfile's own: images.yml's step `build and
+      # self-test (toolchain/<image>.Dockerfile)` gives the runner build its two build contexts and its labels and no
+      # --build-arg, so DEBIAN_BASE and DEBIAN_SNAPSHOT take the defaults the Dockerfile compared here sets.  That is
+      # images.yml as this change has it; the run that built the image ran images.yml at the commit it names.  The
+      # runner's last input, the `oft-tools` build context, is not compared here: the step after the sign-in says
+      # why, and what it reads instead.
+      - name: images.yml built and attested the pinned runner image on main, from this change's toolchain/runner.Dockerfile and tests/toy/ on a repin
+        working-directory: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ steps.runner_image.outputs.image }}
+          REPIN: ${{ needs.plan.outputs.runner_repin }}
+        run: |
+          set -euo pipefail
+          case "$REPIN" in true|false) ;; *)
+            echo "::error::the plan answered runner_repin '$REPIN', neither true nor false"; exit 1 ;; esac
+          # As for the checker image: the public repository holds no attestation, and takes release.yaml from this
+          # repository's main, by a release, where this step holds images.runner.
+          if [ "$GITHUB_REPOSITORY" = theorem-labs/oss-verify-proofs ]; then
+            echo "theorem-labs/oss-verify-proofs holds no attestation of $IMAGE: the repository whose images.yml built it verifies it"
+            echo "- the runner image's attestation: not read in theorem-labs/oss-verify-proofs, which holds none" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh_version=$(gh --version)
+          echo "$gh_version"
+          gh_version=${gh_version%%$'\n'*}
+          if ! [[ "$gh_version" =~ ^gh\ version\ ([0-9]+)\.([0-9]+)\. ]] ||
+             (( 10#${BASH_REMATCH[1]} < 2 || (10#${BASH_REMATCH[1]} == 2 && 10#${BASH_REMATCH[2]} < 67) )); then
+            echo "::error::gh 2.67 or newer is needed, not '$gh_version': gh 2.49 to 2.66 could exit 0 for a digest" \
+              "with no attestation of the predicate type asked for (CVE-2025-25204)"
+            exit 1
+          fi
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/images.yml@refs/heads/main"
+          # three tries, 10 and 20 s apart, for a passing error of the API or the registry
+          verified=
+          for try in 1 2 3; do
+            if gh attestation verify "oci://$IMAGE" --repo "$GITHUB_REPOSITORY" --cert-identity "$identity" \
+                 --source-ref refs/heads/main --format json > "$RUNNER_TEMP/runner-attestation.json"; then
+              verified=1
+              break
+            fi
+            [ "$try" = 3 ] || sleep $((try * 10))
+          done
+          [ -n "$verified" ] || {
+            echo "::error::gh attestation verify refused $IMAGE in 3 tries: release.yaml's images.runner is no image images.yml built and attested on main"
+            echo "- the runner image's attestation: refused" >> "$GITHUB_STEP_SUMMARY"
+            exit 1; }
+          # An unchanged images.runner: gh's exit status is the verdict, and nothing it printed is read.
+          if [ "$REPIN" = false ]; then
+            echo "attested: gh attestation verify passed $IMAGE, built by images.yml on refs/heads/main"
+            echo "- the runner image's attestation: verified, images.yml on refs/heads/main" >> "$GITHUB_STEP_SUMMARY"
+            echo "images.runner is unchanged by this change, and was held to its build definition when it was pinned: its attestation alone is verified here"
+            exit 0
+          fi
+          # The commit each attestation names, read as the checker's step reads it.
+          commits=$(jq -r '[.[].verificationResult.signature.certificate.sourceRepositoryDigest] | unique | .[]' \
+            "$RUNNER_TEMP/runner-attestation.json") || commits=
+          [ -n "$commits" ] || {
+            echo "::error::gh attestation verify passed $IMAGE and named no commit images.yml built it at"; exit 1; }
+          for c in $commits; do
+            [[ "$c" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::the attestation of $IMAGE names '$c' as the commit images.yml built it at, not a commit"; exit 1; }
+          done
+          echo "attested: images.yml built $IMAGE on refs/heads/main at $commits"
+          echo "- the runner image's attestation: images.yml on refs/heads/main, at \`$commits\`" >> "$GITHUB_STEP_SUMMARY"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          built="$RUNNER_TEMP/runner-built-from"
+          git init -q "$built"
+          git -C "$built" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          refused=0
+          for c in $commits; do
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.$GITHUB_SERVER_URL/.extraheader" GIT_CONFIG_VALUE_0="$auth" \
+              GIT_TERMINAL_PROMPT=0 git -C "$built" fetch -q --no-tags --depth=1 --filter=blob:none origin "$c" || {
+                echo "::error::$c, the commit images.yml built $IMAGE at, cannot be fetched from $GITHUB_REPOSITORY"
+                exit 1; }
+            # the Dockerfile's blob id, and tests/toy/'s tree id: the fetch above has every tree of the commit
+            for f in toolchain/runner.Dockerfile tests/toy; do
+              there=$(git -C "$built" rev-parse -q --verify "$c:$f") || there=none
+              here=$(git rev-parse -q --verify "HEAD:$f") || here=none
+              if [ "$there" = "$here" ] && { [ "$here" != none ] || [ "$f" = tests/toy ]; }; then
+                echo "$f: the one images.yml built $IMAGE from at $c ($here)"
+              else
+                echo "::error::$IMAGE was built from another $f than this change's: images.yml built it at $c, whose $f is $there, and this change's is $here"
+                echo "- $f differs from the one the image was built from at \`$c\`" >> "$GITHUB_STEP_SUMMARY"
+                refused=1
+              fi
+            done
+          done
+          [ "$refused" = 0 ] || exit 1
+          echo "the repinned runner image was built from this change's toolchain/runner.Dockerfile and tests/toy/" |
+            tee -a "$GITHUB_STEP_SUMMARY"
+      - name: sign in to ghcr.io, where the pinned images are
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      # The runner's `oft-tools` build context: the tools/oft of the public repository's main (images.yml's header),
+      # with the PyYAML its requirements.txt pins installed into /opt/oss-fuzz-theorems/pydeps/.  That input is bound
+      # to the public repository's main, which this repository's release process writes, and not to this change, so
+      # it is not compared here.  CI mounts the checkout's tools over the image's copy, but not over pydeps/, and the
+      # build ran the copy (`oft --help`, the tools' own tests) in the stages it ships.  images.yml labels each runner
+      # with the git tree of that tools/oft (oss-fuzz-theorems.tools.tree) and the public commit it took it from
+      # (oss-fuzz-theorems.tools.commit).  On a repin this step holds the image to naming a git tree there, read as
+      # images.yml's daily plan reads it, so that a later step can compare it with the tools/oft tree of the public
+      # release this change's tree is cut for, or with the one images.yml's plan finds on the public main.
+      - name: on a runner repin, the runner image names the git tree of the tools/oft it carries
+        env:
+          IMAGE: ${{ steps.runner_image.outputs.image }}
+          REPIN: ${{ needs.plan.outputs.runner_repin }}
+        run: |
+          set -euo pipefail
+          case "$REPIN" in
+            false)
+              echo "images.runner is unchanged by this change: its labels are not read here"
+              exit 0 ;;
+            true) ;;
+            *) echo "::error::the plan answered runner_repin '$REPIN', neither true nor false"; exit 1 ;;
+          esac
+          labels=$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Image.Config.Labels}}') || {
+            echo "::error::the labels of the runner image $IMAGE cannot be read"; exit 1; }
+          tree=$(jq -r '."oss-fuzz-theorems.tools.tree" // "none"' <<< "$labels") || tree=none
+          [[ "$tree" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::the runner image $IMAGE names no git tree of the tools/oft it carries: its label oss-fuzz-theorems.tools.tree is '$tree'"
+            exit 1; }
+          echo "the runner image carries the tools/oft of git tree $tree (its label oss-fuzz-theorems.tools.tree)" |
+            tee -a "$GITHUB_STEP_SUMMARY"
+      # On a repin, the image holds the opam packages this change's toolchain/checker.Dockerfile pins, each at its
+      # version: Rocq, its libraries and dune, as OPAM_PACKAGES lists them.  The image's own opam answers, run as the
+      # image's user, whose switch the build installed into, with no network.  The checker's attestation step ties the
+      # image to the Dockerfile by images.yml's attestation; this one reads what the image holds, so a list the build
+      # did not install as written, or an argument given to the build in its place, is named here package by package.
+      - name: on a repin, the checker image holds each opam package toolchain/checker.Dockerfile pins, at its version
+        working-directory: head
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          REPIN: ${{ needs.plan.outputs.checker_repin }}
+        run: |
+          set -euo pipefail
+          case "$REPIN" in
+            false)
+              echo "images.checker is unchanged by this change, and was held to its build definition when it was pinned: its packages are not read here"
+              exit 0 ;;
+            true) ;;
+            *) echo "::error::the plan answered checker_repin '$REPIN', neither true nor false"; exit 1 ;;
+          esac
+          # One ARG OPAM_PACKAGES with a value: a second would be the list a stage of the image build installs, and
+          # a check of the first would say nothing of it.
+          declared=$(grep -c '^ARG OPAM_PACKAGES=' toolchain/checker.Dockerfile || true)
+          [ "$declared" = 1 ] || {
+            echo "::error::toolchain/checker.Dockerfile gives ARG OPAM_PACKAGES a value $declared time(s): the checker image pins one list of opam packages"
+            exit 1; }
+          read -r -a pinned <<< "$(sed -n 's/^ARG OPAM_PACKAGES="\([^"]*\)"$/\1/p' toolchain/checker.Dockerfile)"
+          [ "${#pinned[@]}" -gt 0 ] || {
+            echo "::error::toolchain/checker.Dockerfile's ARG OPAM_PACKAGES is not one quoted list of NAME.VERSION"; exit 1; }
+          docker pull --quiet "$IMAGE"
+          installed=$(docker run --rm --network none "$IMAGE" opam list --installed --short --columns=package) || {
+            echo "::error::opam cannot list the packages installed in the checker image $IMAGE"; exit 1; }
+          # `--short` prints no header, and `--columns=package` one NAME.VERSION per line, with no padding: opam pads
+          # every column but the last, and cuts a line only at a terminal's width, which this output is not (ocaml/opam
+          # 2.6.1 and 2.1.0, src/client/opamListCommand.ml's Package column and display, src/core/opamStd.ml's
+          # align_table and terminal_columns).  An opam package's name is letters, digits, '-', '_' and '+' (the opam
+          # manual), so NAME.VERSION splits at its first '.'.
+          declare -A have=()
+          while read -r line; do
+            if [ -n "$line" ]; then have["${line%%.*}"]=${line#*.}; fi
+          done <<< "$installed"
+          refused=0
+          for p in "${pinned[@]}"; do
+            name=${p%%.*} version=${p#*.}
+            if [ "$name" = "$p" ] || [ -z "$name" ] || [ -z "$version" ]; then
+              echo "::error::toolchain/checker.Dockerfile's OPAM_PACKAGES names '$p', not NAME.VERSION"
+              refused=1
+            elif [ -z "${have[$name]+set}" ]; then
+              echo "::error::the checker image $IMAGE holds no opam package $name, and toolchain/checker.Dockerfile pins $p"
+              refused=1
+            elif [ "${have[$name]}" != "$version" ]; then
+              echo "::error::the checker image $IMAGE holds $name.${have[$name]}, and toolchain/checker.Dockerfile pins $p"
+              refused=1
+            else
+              echo "$p: installed"
+            fi
+          done
+          [ "$refused" = 0 ] || {
+            echo "- the checker image's opam packages differ from toolchain/checker.Dockerfile's OPAM_PACKAGES" >> "$GITHUB_STEP_SUMMARY"
+            exit 1; }
+          echo "the checker image holds each of the ${#pinned[@]} opam packages toolchain/checker.Dockerfile pins, at its version" |
+            tee -a "$GITHUB_STEP_SUMMARY"
+      # The image's model, and this change's theories/ compiled in it, when theories/ changes or the image moves.  A
+      # change that does neither leaves both as the base had them: the image was held to the model when it was
+      # pinned, and theories/ compiled in it then.
+      - name: this change's theories/ compiles against the model the pin names
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          PIN: ${{ steps.pin.outputs.pin }}
+          THEORIES: ${{ needs.plan.outputs.theories }}
+          REPIN: ${{ needs.plan.outputs.checker_repin }}
+        run: |
+          set -euo pipefail
+          case "$THEORIES $REPIN" in
+            "false false")
+              echo "theories/ unchanged and images.checker unchanged by this change: the image's model and theories/ are as they were before it"
+              exit 0 ;;
+            "true true" | "true false" | "false true") ;;
+            *) echo "::error::the plan answered theories '$THEORIES' and checker_repin '$REPIN', each to be true or false"; exit 1 ;;
+          esac
+          [[ "$PIN" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::the pin step gave no hash ('$PIN')"; exit 1; }
+          docker pull --quiet "$IMAGE"
+          # The image is pinned by digest and the pins agree, but a digest alone says nothing of the model inside
+          # it: a change could move semantics.commit and LPS_TREE_SHA256 together and leave images.checker at an
+          # image built from the model before them.  The image keeps the files it was built from, in ~opam/lps,
+          # and the build refused them unless they hashed to its LPS_TREE_SHA256, so hashing them here, the way
+          # that build does, ties the image to the commit release.yaml names.
+          got=$(docker run --rm --network none -u "$(id -u):$(id -g)" -e HOME=/tmp "$IMAGE" \
+            bash -c 'cd ~opam/lps && find . -type f -printf "%P\n" | LC_ALL=C sort |
+              xargs -d "\n" -r sha256sum | sha256sum | cut -c1-64') || {
+                echo "::error::the model's files cannot be read in the checker image $IMAGE"; exit 1; }
+          echo "the checker image's own model files hash to $got"
+          echo "- the checker image's own model files hash to \`$got\`" >> "$GITHUB_STEP_SUMMARY"
+          [ "$got" = "$PIN" ] || {
+            echo "::error::the checker image release.yaml pins was built from another model: its files hash to $got, and the pin is $PIN"
+            echo "the checker image was built from another model: \`$got\` against \`$PIN\`" >> "$GITHUB_STEP_SUMMARY"
+            exit 1; }
+          # The theory whole, not the changed files alone: a Rocq file compiles with its siblings or not at all.
+          # Every theories/*.v must leave its .vo: `dune build @theories/default` passes over a theories/ with no
+          # dune file, or over a file no stanza names, having compiled nothing, and on a draft this job is the
+          # only one that compiles theories/ at all.  No network, as every check of this repository compiles.
+          docker run --rm --network none -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$GITHUB_WORKSPACE/head:/work" -w /work "$IMAGE" \
+            bash -c 'dune build --root . @theories/default &&
+              for v in theories/*.v; do
+                [ -f "_build/default/${v%.v}.vo" ] ||
+                  { echo "no _build/default/${v%.v}.vo: @theories/default compiled nothing for $v"; exit 1; }
+              done &&
+              echo "compiled: $(find _build/default/theories -name "*.vo" | wc -l) theory file(s)"' || {
+              echo "::error::this change's theories/ does not compile against the model release.yaml and toolchain/checker.Dockerfile pin (the hashes are in the step above): it is written for another model, or theories/ builds nothing"
+              echo "theories/ does not compile against the pinned model" >> "$GITHUB_STEP_SUMMARY"
+              exit 1; }
+          echo "theories/ compiles against the pinned model"
+          echo "theories/ compiles against the pinned model" >> "$GITHUB_STEP_SUMMARY"
+
+  release-check:
+    needs: [plan, fetch-drafts, check, lps_pin]
+    if: always()
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: every job green, and every planned harness checked
+        env:
+          UNITS: ${{ needs.plan.outputs.units }}
+          FULL: ${{ needs.plan.outputs.full }}
+          DEFERRED: ${{ needs.plan.outputs.deferred }}
+          CHECK_OF_RECORD: ${{ needs.plan.outputs.check_of_record }}
+          DRAFTS_LISTED: ${{ needs.plan.outputs.draft_legs != '[]' }}
+          QUEUE_RUNS: ${{ needs.plan.outputs.queue_runs }}
+          # whether this commit touches release.yaml, toolchain/ or theories/, and how the job that holds such a
+          # commit to the pinned model and checker and runner images ended (the lps_pin job)
+          LPS_PIN: ${{ needs.plan.outputs.lps_pin }}
+          LPS_PIN_RESULT: ${{ needs.lps_pin.result }}
+          PLAN_RESULT: ${{ needs.plan.result }}
+          DRAFTS_RESULT: ${{ needs.fetch-drafts.result }}
+          CHECK_RESULT: ${{ needs.check.result }}
+        run: |
+          set -euo pipefail
+          [ "$PLAN_RESULT" = success ] || { echo "::error::the plan failed: nothing was checked"; exit 1; }
+          if [ "$DRAFTS_LISTED" = true ]; then
+            [ "$DRAFTS_RESULT" = success ] || { echo "::error::fetching the draft binaries failed or did not run"; exit 1; }
+          else
+            [ "$DRAFTS_RESULT" = skipped ] || { echo "::error::no draft binary listed, yet fetch-drafts ran"; exit 1; }
+          fi
+          # the plan's answers, each one it must give: an empty one must not read as "nothing to check"
+          [[ "$UNITS" =~ ^[0-9]+$ ]] || { echo "::error::the plan answered units '$UNITS', not a count"; exit 1; }
+          case "$FULL" in true|false) ;; *) echo "::error::the plan answered full '$FULL', neither true nor false"; exit 1 ;; esac
+          case "$DEFERRED" in true|false) ;; *)
+            echo "::error::the plan answered deferred '$DEFERRED', neither true nor false"; exit 1 ;; esac
+          case "$LPS_PIN" in true|false) ;; *)
+            echo "::error::the plan answered lps_pin '$LPS_PIN', neither true nor false"; exit 1 ;; esac
+          # The model and the images a commit to release.yaml, toolchain/ or theories/ is held to.  A theories/
+          # change no job compiled is a failure here as it is on a pull request, never a pass with everything
+          # skipped (Dispatch issue OSSV-440): on this path no lint and no hold can skip the job, so the two answers
+          # are the job's own.
+          if [ "$LPS_PIN" = true ]; then
+            [ "$LPS_PIN_RESULT" = success ] || {
+              echo "::error::this commit touches release.yaml, toolchain/ or theories/, and the job that holds it to the pinned model and checker and runner images failed or did not run (lps_pin: $LPS_PIN_RESULT)"
+              echo "release.yaml, toolchain/ or theories/ changed and lps_pin did not pass ($LPS_PIN_RESULT)" >> "$GITHUB_STEP_SUMMARY"
+              exit 1; }
+            echo "release.yaml, toolchain/ or theories/ changed: lps_pin held the model's two pins to one hash and the checker and runner images to their attestations"
+          else
+            [ "$LPS_PIN_RESULT" = skipped ] || {
+              echo "::error::no release.yaml, toolchain/ or theories/ file changed, yet lps_pin ran ($LPS_PIN_RESULT)"; exit 1; }
+            echo "no release.yaml, toolchain/ or theories/ file changed: the LPS pin check did not run"
+          fi
+          # A push that left parts to the publishing gate's run (the plan step): never a full plan, never a
+          # push the merge queue checked
+          if [ "$DEFERRED" = true ]; then
+            [ "$FULL" = false ] && [ -z "$QUEUE_RUNS" ] || {
+              echo "::error::the plan deferred parts with full plan $FULL and merge queue runs '$QUEUE_RUNS'"; exit 1; }
+            if [ -n "$CHECK_OF_RECORD" ]; then
+              # the tree main before this push pins with a deferred check: no part was planned (the plan step)
+              [ "$UNITS" -eq 0 ] || { echo "::error::the plan deferred the pinned tree and planned $UNITS harness(es)"; exit 1; }
+              echo "this push is the tree main before it pins for a deferred check: no part was checked here; the check of record: $CHECK_OF_RECORD"
+            else
+              echo "parts this push changed through shared files were not checked here: the corpus-wide check of this commit is the publishing gate's run on the release commit that contains it (the plan job's summary says what and why)"
+            fi
+          fi
+          # A full plan says every committed proof and finding; a tree that names none is not a release tree.
+          if [ "$FULL" = true ] && [ "$UNITS" -eq 0 ]; then
+            echo "::error::no harness with a committed proof or finding was checked"; exit 1
+          fi
+          if [ -n "$QUEUE_RUNS" ]; then
+            # pr.yml's merge queue checked every commit of this push (the plan's queue step): nothing is planned here
+            [[ "$QUEUE_RUNS" =~ ^[0-9]+( [0-9]+)*$ ]] && [ "$UNITS" -eq 0 ] && [ "$FULL" = false ] || {
+              echo "::error::the plan named merge queue runs ('$QUEUE_RUNS') with $UNITS harness(es), full plan $FULL"; exit 1; }
+            for run in $QUEUE_RUNS; do
+              echo "merge queue run $run of pr.yml checked a commit of this push: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
+            done
+          fi
+          if [ "$UNITS" -gt 0 ]; then
+            [ "$CHECK_RESULT" = success ] || { echo "::error::a check failed or did not run"; exit 1; }
+          else
+            # a skipped job reports success, so this job, not the matrix, says that nothing ran
+            [ "$CHECK_RESULT" = skipped ] || { echo "::error::no harness planned, yet check ran"; exit 1; }
+          fi
+          if [ -n "$CHECK_OF_RECORD" ]; then
+            echo "harnesses checked: $UNITS (full plan: $FULL; deferred to the check of record: $DEFERRED)"
+          else
+            echo "harnesses checked: $UNITS (full plan: $FULL; deferred to the publishing gate: $DEFERRED)"
+          fi

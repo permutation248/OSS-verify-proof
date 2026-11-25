@@ -1,0 +1,153 @@
+# Proving or refuting a statement
+
+A proof is a directory `projects/<project>/<harness>/proofs/<statement>/`
+holding a `Proof.v`, any helper `.v` files beside it, and a `proof.yaml`;
+`oft generate --skip-shared` adds its `dune` file. Files that several proofs of
+a harness share go in `projects/<project>/<harness>/proofs/lib/`. `Proof.v`
+ends in a theorem named after the statement:
+
+    From OSSVerify.zlib.checksum_fuzzer Require Import Statements.
+
+    Theorem plain_halts_holds : Statements.plain_halts.
+    Proof. (* ... *) Qed.
+
+A bound proof names its bound, `Theorem asan_disagrees_at_most_holds :
+Statements.asan_disagrees_at_most (1 # 1000).`, and records it in `proof.yaml`
+as `bound: 1/1000`. The bound is below 1: `b = 1` holds of every program, so
+the rules refuse a proof that names 1 or more for every statement that takes a
+bound (a bound statement, a classifier-bound statement, and a classifier-maybe
+statement of a harness with a distribution). A refutation is a
+`Refutation.v` ending in
+`Theorem plain_halts_refuted : ~ Statements.plain_halts.`, with `refutes:`
+instead of `proves:`.
+
+`proof.yaml` ([schema](../tools/oft/schemas/proof.yaml)) tells the checker which
+statement the proof is of, and pins it to that statement's published
+fingerprint:
+
+    schema: oss-fuzz-theorems/proof/1
+    proves: zlib/checksum_fuzzer/plain_halts
+    fingerprint: <the statement's fingerprint in index/statements.tsv>
+
+The fingerprint must be the statement's current one, so a proof is always of the
+statement as published. `check:` (wall time and peak memory), when present, is
+written by CI or a maintainer, never by the author. The file names no author.
+
+## What a proof may use
+
+Only Rocq's own libraries (Corelib, Stdlib, Ltac2), the library of this
+repository, the LPS core library (`LinuxProcessSemantics`) and the libraries it
+builds on (stdpp, Flocq, rocq-read-file). A proof
+may not declare an `Axiom` or `Parameter`, end in `Admitted`, admit an
+obligation (`Admit Obligations`), declare an axiom another way (`Declare
+Instance`, `Declare Module`, or a `Variable`, `Hypothesis` or `Context` outside
+a Section), carry a `deprecated` or `warn` attribute (`#[...]` or the
+`Attributes` command), go back in the file with `Reset`, load a plugin, touch
+files or switch a checker off; `oft lint` refuses those on sight (its
+`proofs` rule), and what the wrapper's `Print Assumptions` lists, every entry
+checked against [toolchain/allowed-axioms.txt](../toolchain/allowed-axioms.txt),
+is the authority. Nor may a proof set a wall-clock limit, which can fail a
+check on a loaded machine: no `Set Default Timeout`, no `Timeout` command, no
+Ltac `timeout` tactical, no Ltac2 `Control.timeout` or `Control.timeoutf`
+(under any qualifier or import, so no use of the name `timeout` or `timeoutf`
+at all). The same rule refuses those in every Rocq file of the repository
+(`projects/`, `theories/`, `tests/` and the `.v` templates of
+`tools/oft/templates/`), except on a line that ends with a comment
+of the form `(* timeout-ok: <why> *)`. The reason must say why an expiry
+cannot fail the check: for example, the `timeout` is in a `first` arm, and a
+later arm proves the same goal in a different way, so the limit changes only
+the speed. Reviewers examine each reason.
+
+An Ltac2 `@external` can give any plugin primitive, `"timeout"` among them, a
+new name. So in the same files each `@external` must bind a primitive on a
+short allowlist, `EXTERNAL_ALLOWED` in `tools/oft/lint.py`. Today the list has
+one entry: `"rocq-runtime.plugins.ltac2" "string_get"`. A `timeout-ok`
+comment does not allow another primitive. To add one, change the list in the
+same pull request and say there why the primitive cannot depend on time or
+on the machine.
+
+A contract file of a fuzz target with a symbol fact (`<fn>_c.v` under
+`lib/Prog/`, `lib/U/Prog/`, `lib/A/Prog/` or `lib/B/Prog/` of its proofs
+folder) names each function, data object and section from the fuzz target's
+`Symbols.v` ([facts.md](facts.md)): a function or a data object as
+`Symbols.<Build>.s_<name>`, a section as `Symbols.<Build>.Sec.s_<name>` (the
+name less its leading `.`), and data inside one as that and an offset; never by
+its address, so that a rebuild that moves it changes `Symbols.v` and not the
+contract. `oft lint` (its `contract-literals` rule) refuses a numeral there,
+hexadecimal or decimal (`0x132a0` and `78496` alike), outside comments and
+strings, whose value lies inside an allocated section of one of the fuzz
+target's builds, and a name that the build's `Symbols.v` does not define. A
+numeral that no section holds (a count, a size, an offset, the image's base, a
+division's magic multiplier, a stack bound) passes, and so does one that is not
+an integer.
+
+A proof file whose numerals were read out of a published binary says so in a
+comment of its own, which the start-up tools write:
+
+```
+(* Read from: <file> (<project>/<harness> <build>) sha256 <hex>; unstripped twin sha256 <hex> *)
+```
+
+`oft lint` (its `read-from` rule) holds that comment to the facts: `<file>` is
+the `file` of a build the fuzz target's own `harness.yaml` records, and every
+SHA-256 the comment holds is the one `harness.yaml` pins for that build, beside
+the size. A digest that is not the pin is a finding naming the file, the line
+and both digests; a comment that names a binary that is no build of this fuzz
+target, or that holds no digest of the binary at all, is a finding too.
+
+Two digests are not read. The unstripped twin's: it is the same link without
+`--strip-all`, read for its symbol names, and no `harness.yaml` pins it, so its
+clause is cut out of the comment first. And a withheld build's, since
+`harness.yaml` shows none for one. A build record's copy of someone else's
+proof text (`provenance/recipe/`, `provenance/port/`) is not read either: it
+ships as it is and describes the donor's image.
+
+A proof relocated from another fuzz target keeps the donor's `Read from:` line
+and adds one of its own: rewriting the donor's line would make the file say
+something false to satisfy a check. The donor's line names another fuzz
+target's binary, and it passes only where the same file also carries a
+`Read from:` naming a build of its **own** fuzz target whose name and SHA-256
+are the pin that unit's `harness.yaml` gives in the tree being linted. A name
+that is no build of any fuzz target the facts record is still a finding, a
+donor line with no line of this fuzz target's own beside it is still a finding,
+and a pin that cannot be read clears nothing. `oft lint` counts the lines it
+exempts and prints them, one line per fuzz target with its count, or each one
+with `--list-donors`.
+
+## Where to start
+
+- [tests/](../tests/) has toy binaries of a few instructions (generated by
+  `tests/toy/make_elf.py`), their statements, finished proofs of the halts,
+  halts-may-fail and agreement shapes, one refutation, and proofs that must be
+  refused.
+- The smallest published plain images are about 42 KB
+  ([index/binaries.tsv](../index/binaries.tsv) lists every size). Statements about
+  them still need the start-up code of musl and the driver to be reasoned about.
+  The published proofs do this for their own binaries, in their `lib/`; no
+  shared library for it is published yet.
+- A refutation is often one concrete execution, and a good first result. So is a
+  counterexample to a halts statement: a failing input for the real binary,
+  which goes in `projects/<project>/<harness>/counterexamples/<statement>/` with
+  `input.bin`, a nearby `control.bin` that exits with a status the statement
+  allows, and `expect.yaml` ([schema](../tools/oft/schemas/counterexample.yaml)).
+
+A counterexample that shows a memory-safety bug in a library goes to that
+library first ([SECURITY.md](../SECURITY.md)). Checking a proof needs LPS and
+the checker image that [release.yaml](../release.yaml) names, both public
+([checking.md](checking.md)).
+
+## Checking a proof locally
+
+    ./oft fetch zlib
+    python3 -m pip install --require-hashes --target "$HOME/oft-pydeps" -r tools/oft/requirements.txt
+    docker run --rm --network none --ulimit stack=-1:-1 -u "$(id -u):$(id -g)" -e HOME=/tmp -e PYTHONPATH=/pydeps \
+      -v "$HOME/oft-pydeps:/pydeps:ro" -v "$PWD:/work" -w /work <checker image of release.yaml> \
+      ./oft check zlib/checksum_fuzzer --parts statements,proofs
+
+`--ulimit stack=-1:-1` gives Rocq the stack it needs ([checking.md](checking.md#stack-size)).
+
+`oft check` builds the images and statements, checks every proof of the harness
+(counterexamples are checked in the runner image, with `--parts counterexamples`)
+through a wrapper that it writes itself, and checks every assumption the wrapper
+prints against the allowlist ([checking.md](checking.md)). `--rocqchk` adds an
+independent re-check with `rocqchk`, which can take hours for one proof.

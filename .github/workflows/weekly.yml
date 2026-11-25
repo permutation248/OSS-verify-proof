@@ -1,0 +1,298 @@
+# weekly.yml: everything, with nothing cached, every Monday, for a release and on request.
+#
+#   plan         every harness (or the ones named)
+#   sweep        each harness: fetch, build every image afresh, every proof
+#                and its assumptions against the allowlist, every counterexample
+#   assets       every release asset the facts pin, downloaded and hashed again
+#   determinism  two kinds of machine snapshot the same ELF files; the outputs
+#                are compared byte for byte, so no reference digest is needed
+#   weekly       the run's one verdict: every job above passed.  It always
+#                runs, since a skipped job reports success.
+#
+# release.yml calls this workflow with `release` and `units`: the fuzz targets of
+# the projects that release attached a file to, checked against the assets it
+# actually published (empty: every one).  No job reads or writes a
+# cache: check-units.sh checks each unit in a container of its own, with
+# dune's cache off.
+#
+# The schedule runs every unit, every Monday at 03:17 UTC.  A publication
+# checks only the parts whose content keys it changes, so this run is what
+# checks again every proof that no publication touched.  It also finds what no
+# commit causes: a release asset deleted or replaced after its release (the
+# assets job hashes each again) and a runner that builds other ELF bytes (the
+# determinism job).  It publishes nothing.  The schedule runs in the public
+# repository only (1430054678 is its id, as `gh api repos/{owner}/{repo} --jq .id`
+# gives it): this file ships from the internal repository, where one full sweep
+# measured about 137 hours of 16-core runners, so there it has no schedule
+# (the stream lead, 2026-10-28).  A run by hand or a release's call runs in both.
+name: weekly
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      units:
+        description: "PROJECT/HARNESS ... to check (empty: all)"
+        default: ""
+  workflow_call:
+    inputs:
+      release:
+        description: "the release tag whose published assets are checked"
+        type: string
+        required: true
+      units:
+        description: "PROJECT/HARNESS ... to check (empty: all)"
+        type: string
+        default: ""
+permissions:
+  contents: read
+  packages: read   # to pull the pinned checker and runner images from ghcr.io
+defaults:
+  run:
+    shell: bash
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  # every job that needs no other job carries this condition: a scheduled run outside the public repository plans
+  # nothing, and the jobs after plan skip with it
+  plan:
+    if: github.event_name != 'schedule' || github.repository_id == '1430054678'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      units: ${{ steps.plan.outputs.units }}
+      sample: ${{ steps.plan.outputs.sample }}
+      sample_projects: ${{ steps.plan.outputs.sample_projects }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          ref: ${{ inputs.release || github.ref }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet --require-hashes -r tools/oft/requirements.txt
+      - name: plan
+        id: plan
+        env:
+          UNITS: ${{ inputs.units }}
+        run: |
+          set -euo pipefail
+          # with no base and no recorded pass, every part of every harness is planned
+          PYTHONPATH=tools python -m oft plan --max-jobs 1 > "$RUNNER_TEMP/all.json"
+          if [ -n "${UNITS:-}" ]; then
+            read -r -a named <<< "$UNITS"
+            printf '%s\n' "${named[@]}" > "$RUNNER_TEMP/units.txt"
+          else
+            jq -r '.units[]' "$RUNNER_TEMP/all.json" > "$RUNNER_TEMP/units.txt"
+          fi
+          [ -s "$RUNNER_TEMP/units.txt" ] || { echo "::error::no harness to check: nothing examined"; exit 1; }
+          # --hosted leaves out each unit whose measured check is longer than any hosted job may run
+          # (pack.SWEEP_TIMES against pack.HOSTED_CAP) and gives the plan a sentence about each, which
+          # the summary below carries: a reader sees which units this week did not check and how old the farm
+          # check that still stands for each is.
+          # 40 shards.  pack.jobs_needed says the units pack.SWEEP_TIMES times, less the three --hosted leaves
+          # out, need 35 jobs to keep every job holding more than one of them inside pack.CAP, 210 minutes, and
+          # the plan gives a job of its own to each proved unit no run ever saw finish as well: 1 of those in
+          # the public tree on 2026-11-09 and 3 here.  210 minutes is about 3.8 hours with a shard's own 8-13
+          # minutes of checkout, pip and image pull.  At 32 shards and no measured table, run 42556340137 lost
+          # two shards to the 6-hour limit and run 42597756616 lost seven.  The hosted runners available here
+          # are ubuntu-24.04-16core and ubuntu-24.04-4core, and up to 80 of the 16-core ones run at once.
+          PYTHONPATH=tools python -m oft plan --units "$RUNNER_TEMP/units.txt" --max-jobs 40 --hosted \
+            > "$RUNNER_TEMP/plan.json"
+          # the determinism job's sample: the first job with published builds (a harness whose every build is
+          # withheld has a finding to re-run, and no binary to snapshot), as two small values, since the plan's jobs
+          # grow with the tree and an environment value may not exceed 131,072 bytes
+          sample='[.jobs[] | select(.check_units != "")][0]'
+          {
+            echo "plan=$(jq -c .jobs "$RUNNER_TEMP/plan.json")"
+            echo "units=$(jq '.units | length' "$RUNNER_TEMP/plan.json")"
+            echo "sample=$(jq -r "$sample.check_units // \"\"" "$RUNNER_TEMP/plan.json")"
+            echo "sample_projects=$(jq -r "$sample.projects // \"\"" "$RUNNER_TEMP/plan.json")"
+          } >> "$GITHUB_OUTPUT"
+          echo "harnesses: $(jq '.units | length' "$RUNNER_TEMP/plan.json") of $(jq '.units | length' "$RUNNER_TEMP/all.json")" >> "$GITHUB_STEP_SUMMARY"
+          # one line per unit no hosted job can check, with the farm check of record that still stands for it
+          jq -r '.skipped[]' "$RUNNER_TEMP/plan.json" | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+
+  sweep:
+    needs: plan
+    name: sweep ${{ matrix.job.index }}
+    # a proof check peaks at 14.5-19.4 GiB on 16 cores: the 16-core/64 GB GitHub-hosted larger runner
+    # (pr.yml's check job)
+    runs-on: ubuntu-24.04-16core
+    # GitHub cancels a hosted job here, with no result.  Planning holds a shard of several units well inside it
+    # (pack.CAP), and the plan leaves out a unit longer than any hosted job can be planned to check at all
+    # (pack.HOSTED_CAP, the plan step's --hosted): three units on 2026-11-09, the longest of them held to 11
+    # CPUs by its memory and still running at 347 minutes when the limit cancelled the job it had to itself.
+    # None can be split here, and the only hosted runners available are this one and ubuntu-24.04-4core, so
+    # where those three are checked instead is a decision this file does not make; the run summary names each,
+    # with the farm check of record that still stands for it, rather than this file naming any of them.
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        job: ${{ fromJSON(needs.plan.outputs.plan) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          ref: ${{ inputs.release || github.ref }}
+          path: work
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: the tools' dependencies (PyYAML, idna), hash-pinned
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --require-hashes -r work/tools/oft/requirements.txt
+          python -m pip install --quiet --require-hashes --target "$RUNNER_TEMP/pydeps" -r work/tools/oft/requirements.txt
+      - name: the tools, copied out of the tree they check
+        run: cp -r -- work/tools "$RUNNER_TEMP/tools"
+      - name: sign in to ghcr.io, where the pinned images are (needed while their packages are private)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: check, from nothing
+        env:
+          WORK: ${{ github.workspace }}/work
+          TOOLS: ${{ runner.temp }}/tools
+          UNITS: ${{ matrix.job.check_units }}
+          PROOF_UNITS: ${{ toJSON(matrix.job.proof_units) }}  # JSON: check-units.sh refuses null, a plan without it
+          PROJECTS: ${{ matrix.job.projects }}
+          CX_UNITS: ${{ matrix.job.counterexamples }}
+          FINDINGS: ${{ matrix.job.findings }}
+          CPUS: ${{ matrix.job.cpus }}
+          ASSETS: ${{ runner.temp }}/assets
+          PYDEPS: ${{ runner.temp }}/pydeps
+          GH_TOKEN: ${{ github.token }}
+        run: bash "$RUNNER_TEMP/tools/oft/ci/check-units.sh"
+
+  assets:
+    if: github.event_name != 'schedule' || github.repository_id == '1430054678'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          ref: ${{ inputs.release || github.ref }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet --require-hashes -r tools/oft/requirements.txt
+      - name: every asset, downloaded again and hashed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # a published archive comes from the repository oft fetch downloads pins from (fetch.RELEASES): in
+          # another repository the release of the same name may be a draft, which this job's token cannot see
+          releases="$(PYTHONPATH=tools python -c 'from oft import fetch; print("/".join(fetch.RELEASES.split("/")[3:5]))')"
+          ./oft fetch --all --list > "$RUNNER_TEMP/assets.txt"
+          [ -s "$RUNNER_TEMP/assets.txt" ] || { echo "::error::no asset listed: nothing examined"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/assets"
+          while read -r rel file _; do
+            gh release download "$rel" --repo "$releases" --pattern "$file" --dir "$RUNNER_TEMP/assets"
+          done < "$RUNNER_TEMP/assets.txt"
+          ./oft fetch --all --assets-only --source "$RUNNER_TEMP/assets"
+          echo "assets checked: $(wc -l < "$RUNNER_TEMP/assets.txt")" >> "$GITHUB_STEP_SUMMARY"
+
+  determinism:
+    needs: plan
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          ref: ${{ inputs.release || github.ref }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet --require-hashes -r tools/oft/requirements.txt
+      - name: snapshot a sample of ELF files with the pinned elf-snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # the plan job's sample (its step says which), not the whole plan, which can outgrow an environment value
+          SAMPLE: ${{ needs.plan.outputs.sample }}
+          SAMPLE_PROJECTS: ${{ needs.plan.outputs.sample_projects }}
+        run: |
+          set -euo pipefail
+          [ -n "$SAMPLE" ] || { echo "::error::no planned harness has published builds: nothing to snapshot"; exit 1; }
+          commit="$(python -c 'import yaml; print(yaml.safe_load(open("release.yaml"))["semantics"]["commit"])')"
+          # the model repository keeps elf-snapshot at tools/elf_snapshot.py (2afba80c has no package/tools/)
+          curl -fsSL -o "$RUNNER_TEMP/elf_snapshot.py" \
+            "https://raw.githubusercontent.com/theorem-labs/rocq-linux-process-semantics/$commit/tools/elf_snapshot.py"
+          mkdir -p "$RUNNER_TEMP/assets" "$RUNNER_TEMP/snap"
+          read -r -a projects <<< "$SAMPLE_PROJECTS"
+          releases="$(PYTHONPATH=tools python -c 'from oft import fetch; print("/".join(fetch.RELEASES.split("/")[3:5]))')"
+          ./oft fetch --list "${projects[@]}" | while read -r rel file _; do
+            case "$file" in *-bin.tar.zst)
+              gh release download "$rel" --repo "$releases" --pattern "$file" --dir "$RUNNER_TEMP/assets" ;;
+            esac
+          done
+          ./oft fetch --source "$RUNNER_TEMP/assets" "${projects[@]}"
+          n=0
+          read -r -a sample <<< "$SAMPLE"
+          for unit in "${sample[@]}"; do
+            for elf in projects/"${unit%%/*}"/bin/"${unit#*/}"/*; do
+              out="$RUNNER_TEMP/snap/${unit//\//__}/$(basename -- "$elf")"
+              mkdir -p "$out"
+              python "$RUNNER_TEMP/elf_snapshot.py" "$elf" "$out/Image.v" --prefix Image --module-name M --namespace X
+              n=$((n + 1))
+            done
+          done
+          [ "$n" -gt 0 ] || { echo "::error::no ELF snapshotted: nothing examined"; exit 1; }
+          echo "snapshotted $n ELF files on ${{ matrix.os }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: snapshot-${{ matrix.os }}
+          path: ${{ runner.temp }}/snap
+          retention-days: 3
+
+  determinism-compare:
+    needs: determinism
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          path: snap
+      - name: the two machines wrote the same bytes
+        run: |
+          set -euo pipefail
+          n="$(find snap/snapshot-ubuntu-24.04 -type f | wc -l)"
+          [ "$n" -gt 0 ] || { echo "::error::no snapshot files: nothing compared"; exit 1; }
+          diff -r snap/snapshot-ubuntu-24.04 snap/snapshot-ubuntu-24.04-arm
+          echo "identical: $n files"
+
+  weekly:
+    needs: [plan, sweep, assets, determinism, determinism-compare]
+    if: always()
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: every job passed
+        env:
+          # plan's own condition: false for a scheduled run outside the public repository, which checks nothing
+          HERE: ${{ github.event_name != 'schedule' || github.repository_id == '1430054678' }}
+          PLAN: ${{ needs.plan.result }}
+          SWEEP: ${{ needs.sweep.result }}
+          ASSETS: ${{ needs.assets.result }}
+          DETERMINISM: ${{ needs.determinism.result }}
+          COMPARE: ${{ needs.determinism-compare.result }}
+        run: |
+          set -euo pipefail
+          got="plan $PLAN, sweep $SWEEP, assets $ASSETS, determinism $DETERMINISM, determinism-compare $COMPARE"
+          if [ "$HERE" != true ]; then
+            [ "$PLAN/$SWEEP/$ASSETS/$DETERMINISM/$COMPARE" = skipped/skipped/skipped/skipped/skipped ] ||
+              { echo "::error::a scheduled run outside the public repository ran a job: $got"; exit 1; }
+            echo "a scheduled run outside the public repository: nothing checked"
+            exit 0
+          fi
+          [ "$PLAN/$SWEEP/$ASSETS/$DETERMINISM/$COMPARE" = success/success/success/success/success ] ||
+            { echo "::error::a job did not pass: $got"; exit 1; }
+          echo "every job passed: $got"
