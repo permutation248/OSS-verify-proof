@@ -1,0 +1,582 @@
+schema: oss-fuzz-theorems/harness/1
+project: zlib
+harness: zlib_uncompress3_fuzzer
+rocq: OSSVerify.zlib.zlib_uncompress3_fuzzer
+origin: oss-fuzz
+summary: uncompress2 with an output length from the first 3 bytes (clamped to 256 KiB); return code ignored.
+entry: LLVMFuzzerTestOneInput
+source:
+  files:
+  - source/zlib_uncompress3_fuzzer.cc
+  from:
+    repository: https://github.com/google/oss-fuzz
+    commit: fadbcdfb9e96aaa26734fbc936ab64a6f4f18ab4
+    path: projects/zlib/zlib_uncompress3_fuzzer.cc
+  modified: false
+  licence: Apache-2.0
+library:
+  repository: https://github.com/madler/zlib
+  commit: 99623ef7097352da7993ba614161fd6a311e046e
+  version: '1.4'
+  licence: Zlib
+modifications:
+- Linked against zlib 1.4 at commit 99623ef7.
+- zlib carries the public inflate fix https://github.com/madler/zlib/pull/1390 in every build.
+- In every build, getenv() returns NULL, getpid() returns 1 and mkstemp() uses a fixed name, so the program
+  depends only on its input.
+- A small driver reads the input file, calls the harness one to four times and prints each return value.
+builds:
+  plain:
+    file: zlib_uncompress3_fuzzer.plain
+    bytes: 66496
+    sha256: e6d12458a570ee80f478a4f70f9524150bc0af59c3dcea16d41e03c3a3bab63b
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+    uninstrumented:
+    - name: clang_rt.crtbegin.o
+      kind: compiler-rt
+      sha256: 0ba7749fe1a9cfc61b7b4dbb8616ce4cffad430bdd04ec029cd291d030925e72
+    - name: libclang_rt.builtins.a
+      kind: compiler-rt
+      sha256: 7e376dbc917599242272aa6e70e66b249ed063d78bd707e88e607e6ed375fa29
+    - name: crt1.o
+      kind: libc
+      sha256: 111e0dda16a02983fee66cc70e332b41860dccad42d8fb0990776814ef70930a
+    - name: libc.a
+      kind: libc
+      sha256: f19509197da87e158d2111bde83f0943296a4ee5506b024004f1d68c63c496e9
+  ubsan:
+    file: zlib_uncompress3_fuzzer.ubsan
+    bytes: 71384
+    sha256: 0c9724f87f4ffc95c2c4205e7394429ba3aa1a94cfa66a24339212f97ef55e59
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+    uninstrumented:
+    - name: clang_rt.crtbegin.o
+      kind: compiler-rt
+      sha256: 0ba7749fe1a9cfc61b7b4dbb8616ce4cffad430bdd04ec029cd291d030925e72
+    - name: libclang_rt.builtins.a
+      kind: compiler-rt
+      sha256: 7e376dbc917599242272aa6e70e66b249ed063d78bd707e88e607e6ed375fa29
+    - name: crt1.o
+      kind: libc
+      sha256: 111e0dda16a02983fee66cc70e332b41860dccad42d8fb0990776814ef70930a
+    - name: libc.a
+      kind: libc
+      sha256: f19509197da87e158d2111bde83f0943296a4ee5506b024004f1d68c63c496e9
+  asan:
+    file: zlib_uncompress3_fuzzer.asan
+    bytes: 797032
+    sha256: 5e190bd28da1f0d5d813b1e21807abbc93f3871581f4ce54708f4f91efeaf399
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+    uninstrumented:
+    - name: clang_rt.crtbegin.o
+      kind: compiler-rt
+      sha256: 0ba7749fe1a9cfc61b7b4dbb8616ce4cffad430bdd04ec029cd291d030925e72
+    - name: libclang_rt.asan.a
+      kind: sanitizer-runtime
+      sha256: 078168dea88da7f13cccc6ca7305c6e2df0202f4f0364c7caa23a20a1faa5418
+    - name: libclang_rt.builtins.a
+      kind: compiler-rt
+      sha256: 7e376dbc917599242272aa6e70e66b249ed063d78bd707e88e607e6ed375fa29
+    - name: crt1.o
+      kind: libc
+      sha256: 111e0dda16a02983fee66cc70e332b41860dccad42d8fb0990776814ef70930a
+    - name: libc++.a
+      kind: cxx-runtime
+      sha256: 9f938a67536a35ed70027d736d48ee9033f9a02e8cde0f2064aad2b735c7ca97
+    - name: libc.a
+      kind: libc
+      sha256: f19509197da87e158d2111bde83f0943296a4ee5506b024004f1d68c63c496e9
+    - name: libunwind.a
+      kind: cxx-runtime
+      sha256: 80167e95a699a1a21d3933967631fe5484817812aeda2cb98a55b652d608f812
+  asan-ubsan:
+    file: zlib_uncompress3_fuzzer.asan-ubsan
+    bytes: 802456
+    sha256: 9655c7cfc427eccd3a286f1b6a00071977d28adb1e578d8df2060df83a9d319e
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+    uninstrumented:
+    - name: clang_rt.crtbegin.o
+      kind: compiler-rt
+      sha256: 0ba7749fe1a9cfc61b7b4dbb8616ce4cffad430bdd04ec029cd291d030925e72
+    - name: libclang_rt.asan.a
+      kind: sanitizer-runtime
+      sha256: 078168dea88da7f13cccc6ca7305c6e2df0202f4f0364c7caa23a20a1faa5418
+    - name: libclang_rt.builtins.a
+      kind: compiler-rt
+      sha256: 7e376dbc917599242272aa6e70e66b249ed063d78bd707e88e607e6ed375fa29
+    - name: crt1.o
+      kind: libc
+      sha256: 111e0dda16a02983fee66cc70e332b41860dccad42d8fb0990776814ef70930a
+    - name: libc++.a
+      kind: cxx-runtime
+      sha256: 9f938a67536a35ed70027d736d48ee9033f9a02e8cde0f2064aad2b735c7ca97
+    - name: libc.a
+      kind: libc
+      sha256: f19509197da87e158d2111bde83f0943296a4ee5506b024004f1d68c63c496e9
+    - name: libunwind.a
+      kind: cxx-runtime
+      sha256: 80167e95a699a1a21d3933967631fe5484817812aeda2cb98a55b652d608f812
+licence: NOASSERTION
+checks: []
+distribution:
+  file: Distribution.v
+  argv0: zlib_uncompress3_fuzzer
+  input_file: input.bin
+  prefix_hex: 000000000000ffffff789c
+  payload:
+    length: geometric
+    p: 1/1025
+    mean_bytes: 1024
+    alphabet: bytes
+  components:
+    payload: 9/10
+    wrong_argc: 1/50
+    missing_file: 1/50
+    full_support: 3/50
+  mass: '1'
+classifiers:
+  ubsan:
+    a:
+      file: zlib_uncompress3_fuzzer.classifier-a-ubsan
+      bytes: 5704
+      sha256: bf2ae298f2d1ba1539980248f74905f8fdea8b4692f6b46d74874d559b899543
+      segments:
+      - 1
+      - 1
+      - 1
+      - 1
+    b:
+      file: zlib_uncompress3_fuzzer.classifier-b-ubsan
+      bytes: 5704
+      sha256: bf2ae298f2d1ba1539980248f74905f8fdea8b4692f6b46d74874d559b899543
+      segments:
+      - 1
+      - 1
+      - 1
+      - 1
+  asan:
+    a:
+      file: zlib_uncompress3_fuzzer.classifier-a-asan
+      bytes: 5704
+      sha256: bf2ae298f2d1ba1539980248f74905f8fdea8b4692f6b46d74874d559b899543
+      segments:
+      - 1
+      - 1
+      - 1
+      - 1
+    b:
+      file: zlib_uncompress3_fuzzer.classifier-b-asan
+      bytes: 5704
+      sha256: bf2ae298f2d1ba1539980248f74905f8fdea8b4692f6b46d74874d559b899543
+      segments:
+      - 1
+      - 1
+      - 1
+      - 1
+  asan-ubsan:
+    a:
+      file: zlib_uncompress3_fuzzer.classifier-a-asan-ubsan
+      bytes: 5704
+      sha256: bf2ae298f2d1ba1539980248f74905f8fdea8b4692f6b46d74874d559b899543
+      segments:
+      - 1
+      - 1
+      - 1
+      - 1
+    b:
+      file: zlib_uncompress3_fuzzer.classifier-b-asan-ubsan
+      bytes: 5704
+      sha256: bf2ae298f2d1ba1539980248f74905f8fdea8b4692f6b46d74874d559b899543
+      segments:
+      - 1
+      - 1
+      - 1
+      - 1
+originals:
+  plain:
+    file: zlib_uncompress3_fuzzer.original-plain
+    bytes: 66568
+    sha256: edf3288d9e3e3e526d7ebe1cc1cc231d752d6cecc8f6dcc6b05fc66bb9e9cbb0
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+  ubsan:
+    file: zlib_uncompress3_fuzzer.original-ubsan
+    bytes: 71392
+    sha256: 41198dfa33bc78c174d6fe68802ac3f40989f29228d959f64996b9f52725b8f8
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+  asan:
+    file: zlib_uncompress3_fuzzer.original-asan
+    bytes: 797016
+    sha256: 15b3cb58d576c11d701ff1c2538adfdae3201d3928aaf2b8223d86919aa7641e
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+  asan-ubsan:
+    file: zlib_uncompress3_fuzzer.original-asan-ubsan
+    bytes: 802568
+    sha256: d70b3c1c2a73109d3139e5b8b34d30a0afd2284d5e175338638078230e387278
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+statements:
+  asan_agrees:
+    kind: agreement
+    builds:
+    - plain
+    - asan
+    reading: may-fail
+    budgets: asan
+    status: open
+    revision: 2
+  asan_disagrees_at_most:
+    kind: bound
+    builds:
+    - plain
+    - asan
+    reading: may-fail
+    status: open
+    revision: 2
+  asan_agreement_decidable:
+    kind: decidability
+    builds:
+    - plain
+    - asan
+    reading: may-fail
+    status: open
+    revision: 2
+  ubsan_agrees:
+    kind: agreement
+    builds:
+    - plain
+    - ubsan
+    reading: may-fail
+    budgets: standard
+    status: open
+    revision: 2
+  ubsan_disagrees_at_most:
+    kind: bound
+    builds:
+    - plain
+    - ubsan
+    reading: may-fail
+    status: open
+    revision: 2
+  ubsan_agreement_decidable:
+    kind: decidability
+    builds:
+    - plain
+    - ubsan
+    reading: may-fail
+    status: open
+    revision: 2
+  asan_ubsan_agrees:
+    kind: agreement
+    builds:
+    - plain
+    - asan-ubsan
+    reading: may-fail
+    budgets: asan
+    status: open
+    revision: 2
+  asan_ubsan_disagrees_at_most:
+    kind: bound
+    builds:
+    - plain
+    - asan-ubsan
+    reading: may-fail
+    status: open
+    revision: 2
+  asan_ubsan_agreement_decidable:
+    kind: decidability
+    builds:
+    - plain
+    - asan-ubsan
+    reading: may-fail
+    status: open
+    revision: 2
+  plain_halts:
+    kind: halts
+    builds:
+    - plain
+    reading: budget
+    exits:
+    - 0
+    - 2
+    binds_checks: false
+    status: open
+    revision: 2
+  plain_halts_may_fail:
+    kind: halts
+    builds:
+    - plain
+    reading: may-fail
+    exits: any
+    binds_checks: false
+    status: open
+    revision: 2
+  asan_halts:
+    kind: halts
+    builds:
+    - asan
+    reading: budget
+    exits:
+    - 0
+    - 2
+    binds_checks: false
+    status: open
+    revision: 2
+  ubsan_halts:
+    kind: halts
+    builds:
+    - ubsan
+    reading: budget
+    exits:
+    - 0
+    - 2
+    binds_checks: false
+    status: open
+    revision: 2
+  ubsan_halts_may_fail:
+    kind: halts
+    builds:
+    - ubsan
+    reading: may-fail
+    exits: any
+    binds_checks: false
+    status: open
+    revision: 2
+  asan_ubsan_halts:
+    kind: halts
+    builds:
+    - asan-ubsan
+    reading: budget
+    exits:
+    - 0
+    - 2
+    binds_checks: false
+    status: open
+    revision: 2
+  asan_agrees_alloc_forced_only:
+    kind: agreement
+    builds:
+    - plain
+    - asan
+    reading: alloc-forced-only
+    budgets: asan
+    twin: alloc-forced-only
+    status: open
+  asan_bound_diff:
+    kind: classifier-bound
+    builds:
+    - plain
+    - asan
+    classifier: b
+    status: open
+  asan_bound_good:
+    kind: classifier-bound
+    builds:
+    - plain
+    - asan
+    classifier: a
+    status: open
+  asan_ca_sound:
+    kind: classifier-sound
+    builds:
+    - plain
+    - asan
+    classifier: a
+    reading: alloc-forced-only
+    originals: unpatched
+    status: open
+  asan_ca_total:
+    kind: classifier-total
+    builds:
+    - plain
+    - asan
+    classifier: a
+    status: open
+  asan_cb_sound:
+    kind: classifier-sound
+    builds:
+    - plain
+    - asan
+    classifier: b
+    reading: alloc-forced-only
+    originals: unpatched
+    status: open
+  asan_cb_total:
+    kind: classifier-total
+    builds:
+    - plain
+    - asan
+    classifier: b
+    status: open
+  asan_ubsan_agrees_alloc_forced_only:
+    kind: agreement
+    builds:
+    - plain
+    - asan-ubsan
+    reading: alloc-forced-only
+    budgets: asan
+    twin: alloc-forced-only
+    status: open
+  asan_ubsan_bound_diff:
+    kind: classifier-bound
+    builds:
+    - plain
+    - asan-ubsan
+    classifier: b
+    status: open
+  asan_ubsan_bound_good:
+    kind: classifier-bound
+    builds:
+    - plain
+    - asan-ubsan
+    classifier: a
+    status: open
+  asan_ubsan_ca_sound:
+    kind: classifier-sound
+    builds:
+    - plain
+    - asan-ubsan
+    classifier: a
+    reading: alloc-forced-only
+    originals: unpatched
+    status: open
+  asan_ubsan_ca_total:
+    kind: classifier-total
+    builds:
+    - plain
+    - asan-ubsan
+    classifier: a
+    status: open
+  asan_ubsan_cb_sound:
+    kind: classifier-sound
+    builds:
+    - plain
+    - asan-ubsan
+    classifier: b
+    reading: alloc-forced-only
+    originals: unpatched
+    status: open
+  asan_ubsan_cb_total:
+    kind: classifier-total
+    builds:
+    - plain
+    - asan-ubsan
+    classifier: b
+    status: open
+  ubsan_agrees_alloc_forced_only:
+    kind: agreement
+    builds:
+    - plain
+    - ubsan
+    reading: alloc-forced-only
+    budgets: standard
+    twin: alloc-forced-only
+    status: open
+  ubsan_bound_diff:
+    kind: classifier-bound
+    builds:
+    - plain
+    - ubsan
+    classifier: b
+    status: open
+  ubsan_bound_good:
+    kind: classifier-bound
+    builds:
+    - plain
+    - ubsan
+    classifier: a
+    status: open
+  ubsan_ca_sound:
+    kind: classifier-sound
+    builds:
+    - plain
+    - ubsan
+    classifier: a
+    reading: alloc-forced-only
+    originals: unpatched
+    status: open
+  ubsan_ca_total:
+    kind: classifier-total
+    builds:
+    - plain
+    - ubsan
+    classifier: a
+    status: open
+  ubsan_cb_sound:
+    kind: classifier-sound
+    builds:
+    - plain
+    - ubsan
+    classifier: b
+    reading: alloc-forced-only
+    originals: unpatched
+    status: open
+  ubsan_cb_total:
+    kind: classifier-total
+    builds:
+    - plain
+    - ubsan
+    classifier: b
+    status: open
+  asan_halts_any_exit:
+    kind: halts
+    builds:
+    - asan
+    reading: budget
+    exits: any
+    twin: any-exit
+    status: open
+  asan_ubsan_halts_any_exit:
+    kind: halts
+    builds:
+    - asan-ubsan
+    reading: budget
+    exits: any
+    twin: any-exit
+    status: open
+  plain_halts_any_exit:
+    kind: halts
+    builds:
+    - plain
+    reading: budget
+    exits: any
+    twin: any-exit
+    status: open
+  ubsan_halts_any_exit:
+    kind: halts
+    builds:
+    - ubsan
+    reading: budget
+    exits: any
+    twin: any-exit
+    status: open

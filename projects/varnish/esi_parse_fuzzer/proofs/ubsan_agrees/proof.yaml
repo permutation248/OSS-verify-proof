@@ -1,0 +1,3 @@
+schema: oss-fuzz-theorems/proof/1
+proves: varnish/esi_parse_fuzzer/ubsan_agrees
+fingerprint: cc559b7b4b2c100a6cc827ade2d562a2c31d21985db6171e406ee6e4867a08ea
