@@ -1,0 +1,533 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-10: ported to the binaries of release 2026.10.0 and LPS 2afba80c; the theorem statements are restated in the form this release states them. *)
+(* Modified by Theorem Labs, 2026-11: ported to LPS 727298f3 (22 recorded proofs replaced by written proofs (alw_le_trans, fp_le_trans, rng_fp_le and 19 more); node_soundA gains nsA_rob, RomBase.sys_rob at every node, which node_srealizes passes to srz_node; csteps_srealizes discharges it by sys_rob_instr; imports RomBase). *)
+(* [comment removed for export] *)
+
+From Stdlib Require Import ZArith NArith List Lia Bool.
+From LinuxProcessSemantics.LinuxProcessSem Require Import BvBase RiscvSemantics MemImageType State Monad Specs Run.
+From LinuxProcessSemantics.Riscv Require Import Prelude Instr Decode DecodeC Sem.
+From OSSVerify.Proofs.zstd.huf_decompress.lib.Lib Require Import PropExec MState Mem Exec Cfg ITree.
+From OSSVerify.Proofs.zstd.huf_decompress.lib.LibA Require Import AcctCore ExecF.
+From OSSVerify.Proofs.zstd.huf_decompress.lib.AS Require ShapeAlg SpinAlg RomBase.
+From OSSVerify.Proofs.zstd.huf_decompress.lib Require KReplay.
+Ltac2 kr_t_ITreeA () := "C46Stdlib5Lists4List2hdI46Stdlib5Lists4List5NoDup00C46Stdlib5Lists4List8nil_consC47Corelib4Init5Logic8eq_ind_rK47Corelib7Numbers7BinNums8positive02K47Corelib7Numbers7BinNums1N02I45stdpp9bitvector;definitions2bv00c59OSSVerify5KrLib4LibA6ITreeA6alw_leC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA3alwC1?~~~~~~~~~~~~~~~K47Corelib7Numbers7BinNums8positive03C4ELinuxProcessSemantics?LinuxProcessSem2Fs4pathI47Corelib4Init5Logic2eq00C47Corelib4Init5Logic6eq_indC47Corelib4Init5Logic8eq_transC47Corelib4Init5Logic7f_equalC47Corelib4Init6Specif9proj1_sigC47Corelib4Init9Datatypes3fstC4ELinuxProcessSemantics?LinuxProcessSem2Fs2FsC4ELinuxProcessSemantics?LinuxProcessSem3Run9is_prefixC4ELinuxProcessSemantics?LinuxProcessSem3Run>is_prefix_reflC4ELinuxProcessSemantics?LinuxProcessSem3Run=is_prefix_nilC4ELinuxProcessSemantics?LinuxProcessSem3Run?is_prefix_transC4ELinuxProcessSemantics?LinuxProcessSem3Run=is_prefix_appC47Corelib4Init9Datatypes3appC4ELinuxProcessSemantics5Riscv7Prelude5bvmapC4ELinuxProcessSemantics?LinuxProcessSem5State7PipeBufc59OSSVerify5KrLib4LibA6ITreeA5fp_leC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA5ExecF9footprintC1?~~~~~~~~~~~~~~~I47Corelib7Numbers7BinNums1Z00I47Corelib4Init9Datatypes3nat00C59OSSVerify5KrLib4LibA5ExecF3rngC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z2leC56Stdlib6ZArith6BinInt1Z3addK47Corelib7Numbers7BinNums1Z02C56Stdlib6ZArith6BinInt1Z3powC56Stdlib6ZArith6BinInt1Z6of_natI47Corelib4Init5Logic3and00K47Corelib4Init5Logic3and01K47Corelib7Numbers7BinNums1Z01I47Corelib4Init9Datatypes4prod00I47Corelib4Init9Datatypes4list00C4ELinuxProcessSemantics?LinuxProcessSem5State>page_in_rangesC59OSSVerify5KrLib4LibA5ExecF5fp_okC1?~~~~~~~~~~~~~~~C47Corelib4Init5Peano2ltC56Stdlib6ZArith6BinInt1Z2ltC4ELinuxProcessSemantics?LinuxProcessSem5State<page_base_ofI47Corelib4Init5Logic2or00C59OSSVerify5KrLib4LibA8AcctCore7page_okC1?~~~~~~~~~~~~~~~K47Corelib4Init5Logic2eq01C57Corelib7BinNums6IntDef1Z6of_natC57Corelib7BinNums6IntDef1Z3addC47Corelib4Init5Logic6eq_symC47Corelib4Init5Logic9False_indK47Corelib4Init5Logic2or01K47Corelib4Init5Logic2or02I47Corelib4Init9Datatypes4bool00K47Corelib4Init9Datatypes4bool01K47Corelib4Init9Datatypes4bool02I47Corelib4Init5Logic4True00I47Corelib4Init5Logic5False00K47Corelib4Init5Logic4True01c59OSSVerify5KrLib4LibA6ITreeA7acct_okC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem5State9m_vm_lazyC59OSSVerify5KrLib4LibA5ExecF<footprint_okC1?~~~~~~~~~~~~~~~C47Corelib4Init9Datatypes6lengthI47Corelib4Init5Peano2le00C46Stdlib5Lists4List2InI47Corelib4Init5Logic2ex00C59OSSVerify5KrLib4LibA8AcctCore=nonlazy_bytesC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z3mulC4ELinuxProcessSemantics?LinuxProcessSem5State8m_vmmapsC4ELinuxProcessSemantics?LinuxProcessSem5State8vm_limitc59OSSVerify5KrLib4LibA6ITreeA4mrelC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib4LibA8AcctCore4ainv00C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA8AcctCore<same_but_matC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem5StateAm_vm_materializedK47Corelib4Init9Datatypes4list01C59OSSVerify5KrLib4LibA8AcctCoreBsame_but_mat_frameC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem5State4m_fdC4ELinuxProcessSemantics?LinuxProcessSem5State4m_ioC4ELinuxProcessSemantics?LinuxProcessSem5State6m_fsysC4ELinuxProcessSemantics?LinuxProcessSem5State6m_procC4ELinuxProcessSemantics?LinuxProcessSem5State5m_limC4ELinuxProcessSemantics?LinuxProcessSem5State6m_timeC59OSSVerify5KrLib4LibA8AcctCoreDsame_but_mat_nonlazyC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib4LibA8AcctCore4ainv01C1?~~~~~~~~~~~~~~~I4ELinuxProcessSemantics?LinuxProcessSem5State7IoState00I4ELinuxProcessSemantics?LinuxProcessSem5State7FsState00I4ELinuxProcessSemantics?LinuxProcessSem5State9ProcState00I4ELinuxProcessSemantics?LinuxProcessSem5State8LimState00I4ELinuxProcessSemantics?LinuxProcessSem5State9TimeState00I4ELinuxProcessSemantics?LinuxProcessSem5State5Model00C4ELinuxProcessSemantics?LinuxProcessSem5State9page_sizeI4ELinuxProcessSemantics?LinuxProcessSem5State7FdState00I4ELinuxProcessSemantics?LinuxProcessSem5State6VmMaps00I47Corelib4Init9Datatypes6option00C4ELinuxProcessSemantics?LinuxProcessSem5State8m_haltedC59OSSVerify5KrLib4LibA8AcctCoreCsame_but_mat_haltedC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem5State4m_fsC4ELinuxProcessSemantics?LinuxProcessSem5State:fsst_imageC59OSSVerify5KrLib4LibA8AcctCoreBsame_but_mat_transC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA5implFC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA5ExecF4evtFC1?~~~~~~~~~~~~~~~I4ELinuxProcessSemantics?LinuxProcessSem>RiscvSemantics=machine_state00C59OSSVerify5KrLib3Lib5ITree?is_prefix_app_lC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib3Lib5ITree5itree00C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5ITree9itree_indC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib3Lib5ITree5itree01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA5ExecF9evtF_monoC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib3Lib5ITree5itree02C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5ITree4nretC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5ITree4respC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA5ExecF8evtF_cutC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5ITree4bindC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA:implF_evtFC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA6tsafeAC1?~~~~~~~~~~~~~~~C47Corelib4Init5Logic5proj1I4ELinuxProcessSemantics?LinuxProcessSem5State5event00c59OSSVerify5KrLib4LibA6ITreeA7ptracesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5ITree6ttraceC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA8tree_atAC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5ITreeDleaves_unreachable_mC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA;tsafeA_acctC1?~~~~~~~~~~~~~~~K47Corelib4Init9Datatypes6option02c59OSSVerify5KrLib4LibA6ITreeA9mrel_ainvC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5ITreeIleaves_unreachable_m_stepC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA9nsA_soundC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA5mpostC1?~~~~~~~~~~~~~~~K4ELinuxProcessSemantics?LinuxProcessSem3Run6config01c59OSSVerify5KrLib4LibA6ITreeA7mrel_leC1?~~~~~~~~~~~~~~~K47Corelib4Init5Logic2ex01K4ELinuxProcessSemantics?LinuxProcessSem3Run7step_to01I4ELinuxProcessSemantics?LinuxProcessSem3Run9sstep_cfg00C59OSSVerify5KrLib3Lib3Cfg4ACFGC1?~~~~~~~~~~~~~~~i59OSSVerify5KrLib4LibA6ITreeA;node_soundA00C1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA=tree_atA_ainvC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA=tree_atA_stepC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5ITreeHleaves_unreachable_m_retC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA;mrel_haltedC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA5ExecF9evtF_liftC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib4LibA5ExecF6csteps00C1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA:mrel_afterC1?~~~~~~~~~~~~~~~C47Corelib4Init5Logic5proj2c59OSSVerify5KrLib4LibA6ITreeA<nsA_progressC1?~~~~~~~~~~~~~~~K4ELinuxProcessSemantics?LinuxProcessSem5State5event03K47Corelib4Init9Datatypes4prod01K47Corelib4Init9Datatypes4list02c59OSSVerify5KrLib4LibA6ITreeA=ttrace_existsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib2AS8ShapeAlgCis_prefix_app_splitC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA5ExecF5cstepC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem>RiscvSemantics>ms_svc_pendingI4ELinuxProcessSemantics?LinuxProcessSem>RiscvSemantics>machine_result00C59OSSVerify5KrLib2AS8ShapeAlg7node_okC1?~~~~~~~~~~~~~~~K4ELinuxProcessSemantics?LinuxProcessSem>RiscvSemantics>machine_result01K4ELinuxProcessSemantics?LinuxProcessSem3Run9sstep_cfg01C4ELinuxProcessSemantics?LinuxProcessSem3Run?mi_account_stepK4ELinuxProcessSemantics?LinuxProcessSem>RiscvSemantics>machine_result02K4ELinuxProcessSemantics?LinuxProcessSem>RiscvSemantics>machine_result03K47Corelib4Init9Datatypes6option01C4ELinuxProcessSemantics?LinuxProcessSem3Run9sys_inputC4ELinuxProcessSemantics?LinuxProcessSem5StateGsyscall_effect_accessesC4ELinuxProcessSemantics?LinuxProcessSem5StateJmaterialize_model_accessesC4ELinuxProcessSemantics?LinuxProcessSem3Run<apply_effectC4ELinuxProcessSemantics?LinuxProcessSem5Specs<syscall_specC4ELinuxProcessSemantics?LinuxProcessSem5State8m_killedK4ELinuxProcessSemantics?LinuxProcessSem5State5event04K4ELinuxProcessSemantics?LinuxProcessSem5Monad7outcome02C47Corelib4Init9Datatypes3sndK4ELinuxProcessSemantics?LinuxProcessSem5Monad7outcome01C4ELinuxProcessSemantics?LinuxProcessSem3RunDspurious_refusal_cfgC47Corelib4Init5Logic3notC4ELinuxProcessSemantics?LinuxProcessSem3Run@advance_past_svcI4ELinuxProcessSemantics?LinuxProcessSem3Run7step_to00I4ELinuxProcessSemantics?LinuxProcessSem3Run6config00K4ELinuxProcessSemantics?LinuxProcessSem3Run7step_to02I4ELinuxProcessSemantics?LinuxProcessSem5State=SyscallEffect00I47Corelib4Init9Datatypes4unit00K47Corelib4Init9Datatypes4unit01I59OSSVerify5KrLib2AS7SpinAlg9srealizes00C1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA=cstep_node_okC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib2AS7SpinAlg;srz_silent1C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA5ExecF:csteps_indC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib2AS8ShapeAlg4TSetC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA4succC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib2AS7SpinAlg9srealizes01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib2AS8ShapeAlg5t_altC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA5s_evsC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA4s_nxC1?~~~~~~~~~~~~~~~K47Corelib4Init6Specif3sig01c59OSSVerify5KrLib4LibA6ITreeA<nsA_completeC1?~~~~~~~~~~~~~~~I47Corelib4Init6Specif3sig00c59OSSVerify5KrLib4LibA6ITreeA3NSFC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA3FOKC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA4INV1C1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA3s_TC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem3Run9cfg_modelc59OSSVerify5KrLib4LibA6ITreeA=step_tree_atAC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem3Run6cfg_msC4ELinuxProcessSemantics?LinuxProcessSem3Run=obs_trace_cfgC59OSSVerify5KrLib2AS7SpinAlgAsrealizes_obs_iffC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib2AS8ShapeAlg4t_eqC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib2AS7SpinAlg9srealizes03C1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib2AS7SpinAlg9srealizes02C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib2AS8ShapeAlg5t_nilC1?~~~~~~~~~~~~~~~C47Corelib4Init5Logic3iffC46Stdlib5Lists4List9app_nil_rc59OSSVerify5KrLib4LibA6ITreeA8nsA_exitC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib2AS8ShapeAlg6t_emitC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA<succ_node_okC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA>succ_srealizesC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA=node_shape_eqC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA>node_srealizesC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA@csteps_srealizesC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA?implF_srealizesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib2AS7SpinAlgBsrealizes_no_errorC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA>implF_no_errorC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem3RunEreaches_unmodeled_cfgC4ELinuxProcessSemantics?LinuxProcessSem3RunWreaches_unmodeled_cfg_reaches_error_cfgc59OSSVerify5KrLib4LibA6ITreeA6epostFC1?~~~~~~~~~~~~~~~K69OSSVerify5KrLib3Lib5ITree3Exc3exc01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA5ExecF9evtF_doneC1?~~~~~~~~~~~~~~~I69OSSVerify5KrLib3Lib5ITree3Exc3exc00C1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA:implF_bindC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5ITree5ebindC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA=implF_ret_unrC1?~~~~~~~~~~~~~~~K69OSSVerify5KrLib3Lib5ITree3Exc3exc02C1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib4LibA6ITreeA:implF_monoC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5ITree5enodeC1?~~~~~~~~~~~~~~~".
+Import ListNotations.
+Import Exc.
+Open Scope bv_scope.
+
+(* [comment removed for export] *)
+Definition alw := word -> Prop.
+Definition alw_le (A A' : alw) : Prop := forall p, A p -> A' p.
+Lemma alw_le_refl : forall A, alw_le A A.
+Proof.
+ltac2:(KReplay.run1 (kr_t_ITreeA ()) [] "h01Ah11Hh21pp;1p;2p-1R0p10000p4p710p8P0p1000Gp4p710p8p1000cp4p710p1001@p4p710p8g001^j10Tg002Cj13Tg002aj12Tg003Dj21Tg004;g004o#0#0#0#0#0#0#3#2f1f0R0O1P0W1W21100eW0o"). Qed.
+Lemma alw_le_trans : forall A B C, alw_le A B -> alw_le B C -> alw_le A C.
+Proof. intros A B C H1 H2 p H. apply H2, H1, H. Qed.
+
+(* [comment removed for export] *)
+Definition fp_le (R R' : footprint) : Prop := forall b j, R b j -> R' b j.
+Lemma fp_le_refl : forall R, fp_le R R.
+Proof.
+ltac2:(KReplay.run1 (kr_t_ITreeA ()) [] "h01Hh11Rh21bh31jp;2p1005Tp4p70R0p1006Dp4p710R1p8P0p1006^p4p710R2p8P0p1007:p4p710R3p8P0p1007Xp4p7210R4p8P0p10085p4p710R5p8P0p1001@p4p710R6p8P0p1008UR0p4p710R7p8p10092p4p70R8P1p8P8P2p8P8p1009`p4p710p8P8p1000cp4p710p8P8P3p8P8p100:Vp4p710p8P8P4p8P8p100;Qp4p710p8P8p100<Kp4p710p8P8p100=Gp4p710p8P8P5p8P8P6p8P8P7p8P8P0p4p7210p8P8p100>Ap4p710p8p100>^p4p7210R8P1p8P8P2p8P8P3p8P8P4p8P8P5p8P8P6p8P8P7p8p100?Jp4p70R8P1p8P8P2p8P8P3p8P8P4p8P8P5p8P8P6p8P8P7p8g00@@j20Tg00A6g00Aog00BMf2f1f0R7O2P7W0W3W21077eW1o"). Qed.
+Lemma fp_le_trans : forall A B C, fp_le A B -> fp_le B C -> fp_le A C.
+Proof. intros A B C H1 H2 b j H. apply H2, H1, H. Qed.
+Lemma rng_fp_le : forall R R' lo len, fp_le R R' -> rng R lo len -> rng R' lo len.
+Proof. intros R R' lo len HL (A & B & H). split; [exact A|]. split; [exact B|]. intros b j Hb Hj. apply HL, H; assumption. Qed.
+
+(* [comment removed for export] *)
+Lemma fp_ok_mono : forall lz lz' (A A' : alw),
+  (forall p, page_in_ranges p lz' = true -> page_in_ranges p lz = true) ->
+  alw_le A A' ->
+  fp_le (fp_ok lz A) (fp_ok lz' A').
+Proof.
+  intros lz lz' A A' SUB LE b j H k Hk Hb.
+  destruct (H k Hk Hb) as [NL | AL].
+  - left. destruct (page_in_ranges _ lz') eqn:E; [|reflexivity]. apply SUB in E. congruence.
+  - right. apply LE, AL.
+Qed.
+
+Section ITreeA.
+
+Variable node : Type.
+Variable segs : list Segment.
+
+(* [comment removed for export] *)
+Variable at_node : node -> footprint -> machine_state -> Prop.
+(* [comment removed for export] *)
+Variable nstep : node -> Model -> resp -> Model -> list event -> Prop.
+Variable nexit : node -> Model -> word -> Model -> Prop.
+Variable minv : Model -> Prop.
+Variable nsafe : node -> Model -> Prop.
+(* [comment removed for export] *)
+Variable fstep : node -> resp -> footprint -> footprint -> Prop.
+(* [comment removed for export] *)
+Variable NMAX : nat.
+
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+
+(* [comment removed for export] *)
+Definition mrel (A : alw) (mo mo_ : Model) : Prop :=
+  same_but_mat mo mo_ /\ m_vm_materialized mo = [] /\
+  List.NoDup (m_vm_materialized mo_) /\ (forall p, List.In p (m_vm_materialized mo_) -> A p).
+
+(* [comment removed for export] *)
+Definition acct_ok (RNG : footprint) (A : alw) (mo : Model) : Prop :=
+  footprint_ok (m_vm_lazy mo) A RNG /\
+  (exists L, List.NoDup L /\ (List.length L <= NMAX)%nat /\ forall p, A p -> List.In p L) /\
+  (nonlazy_bytes mo + Z.of_nat NMAX * page_size <= vm_limit (m_vmmaps mo))%Z.
+
+Lemma mrel_ainv : forall RNG A mo mo_,
+  acct_ok RNG A mo -> mrel A mo mo_ -> ainv (m_vm_lazy mo) A NMAX mo_.
+Proof.
+  intros RNG A mo mo_ (FOK & FIN & ROOM) (SB & CAN & ND & AL).
+  pose proof (same_but_mat_frame _ _ SB) as (_ & VM & LZ & _).
+  constructor; auto.
+  - rewrite (same_but_mat_nonlazy _ _ SB), VM. exact ROOM.
+Qed.
+
+Lemma mrel_halted : forall A mo mo_, mrel A mo mo_ -> m_halted mo_ = m_halted mo.
+Proof. intros A mo mo_ (SB & _). apply same_but_mat_halted. exact SB. Qed.
+
+Lemma mrel_fs : forall A mo mo_, mrel A mo mo_ -> m_fs mo_ = m_fs mo.
+Proof.
+  intros A mo mo_ (SB & _). pose proof (same_but_mat_frame _ _ SB) as (_ & _ & _ & _ & FS & _).
+  unfold m_fs. rewrite FS. reflexivity.
+Qed.
+
+Lemma mrel_le : forall A A' mo mo_, mrel A mo mo_ -> alw_le A A' -> mrel A' mo mo_.
+Proof. intros A A' mo mo_ (SB & CAN & ND & AL) LE. split; [exact SB|]. split; [exact CAN|]. split; [exact ND|]. intros p Hp. apply LE, AL, Hp. Qed.
+
+(* [comment removed for export] *)
+Lemma mrel_after : forall A mo mo_ mo_',
+  mrel A mo mo_ -> same_but_mat mo_ mo_' -> ainv (m_vm_lazy mo) A NMAX mo_' -> mrel A mo mo_'.
+Proof.
+  intros A mo mo_ mo_' (SB & CAN & _ & _) SB' INV. split; [eapply same_but_mat_trans; eauto|].
+  split; [exact CAN|]. destruct INV as [_ ND AL _ _]. auto.
+Qed.
+
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+
+(* [comment removed for export] *)
+Definition mpost (A : alw) (mo' mo_' : Model) : Prop := mrel A mo' mo_'.
+
+Record node_soundA : Prop := {
+  (* [comment removed for export] *)
+  nsA_pending : forall n RNG ms, at_node n RNG ms -> ms_svc_pending ms <> None;
+  (* [comment removed for export] *)
+  nsA_complete : forall n RNG A ms mo mo_ evs X,
+      at_node n RNG ms -> m_halted mo = None -> minv mo -> nsafe n mo ->
+      footprint_ok (m_vm_lazy mo) A RNG -> mrel A mo mo_ -> ainv (m_vm_lazy mo) A NMAX mo_ ->
+      sstep_cfg segs ACFG (mkCfg ms mo_) evs X ->
+        (exists rsp mo' mo_', X = SNext (mkCfg (nret ms rsp) mo_') /\ nstep n mo rsp mo' evs /\ mpost A mo' mo_')
+     \/ (exists code mo' mo_', X = SNext (mkCfg ms mo_') /\ nexit n mo code mo' /\
+                              evs = [ExitEv code (m_fs mo')] /\ m_halted mo_' = Some code);
+  (* [comment removed for export] *)
+  nsA_sound : forall n RNG A ms mo mo_ rsp mo' evs,
+      at_node n RNG ms -> m_halted mo = None -> minv mo -> nsafe n mo ->
+      footprint_ok (m_vm_lazy mo) A RNG -> mrel A mo mo_ -> ainv (m_vm_lazy mo) A NMAX mo_ ->
+      nstep n mo rsp mo' evs ->
+      m_halted mo' = None /\ minv mo' /\
+      exists mo_', sstep_cfg segs ACFG (mkCfg ms mo_) evs (SNext (mkCfg (nret ms rsp) mo_')) /\ mpost A mo' mo_';
+  nsA_exit : forall n RNG A ms mo mo_ code mo',
+      at_node n RNG ms -> m_halted mo = None -> minv mo -> nsafe n mo ->
+      mrel A mo mo_ ->
+      nexit n mo code mo' ->
+      m_halted mo' = Some code /\
+      exists mo_', sstep_cfg segs ACFG (mkCfg ms mo_) [ExitEv code (m_fs mo')] (SNext (mkCfg ms mo_')) /\ m_halted mo_' = Some code;
+  (* [comment removed for export] *)
+  nsA_progress : forall n RNG A ms mo mo_, at_node n RNG ms -> m_halted mo = None -> minv mo -> nsafe n mo ->
+      footprint_ok (m_vm_lazy mo) A RNG -> mrel A mo mo_ -> ainv (m_vm_lazy mo) A NMAX mo_ ->
+      (exists rsp mo' evs, nstep n mo rsp mo' evs) \/ (exists code mo', nexit n mo code mo');
+  (* LPS 727298f3: the node's system call reads no byte a larger read-only backing adds
+     ([RomBase.sys_rob]), so the walk lifts to the run's segments ([RomStable.srun_init]) *)
+  nsA_rob : forall n RNG A ms mo mo_,
+      at_node n RNG ms -> m_halted mo = None -> minv mo -> nsafe n mo ->
+      mrel A mo mo_ -> RomBase.sys_rob segs (mkCfg ms mo_)
+}.
+
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+
+Fixpoint implF {R} (RNG : footprint) (t : itree node R)
+    (Q : R -> footprint -> machine_state -> Prop) (ms : machine_state) : Prop :=
+  match t with
+  | Ret r => evtF segs RNG (Q r RNG) ms
+  | Vis n k => evtF segs RNG (fun ms1 => at_node n RNG ms1 /\
+                 forall rsp RNG', fstep n rsp RNG RNG' -> implF RNG' (k rsp) Q (nret ms1 rsp)) ms
+  end.
+
+Lemma implF_ret_intro : forall {R} RNG (r : R) Q ms, evtF segs RNG (Q r RNG) ms -> implF RNG (Ret r) Q ms.
+Proof. intros. exact H. Qed.
+
+Lemma implF_mono : forall {R} RNG (t : itree node R) (Q Q' : R -> footprint -> machine_state -> Prop) ms,
+  implF RNG t Q ms -> (forall r RNG' ms', Q r RNG' ms' -> Q' r RNG' ms') -> implF RNG t Q' ms.
+Proof.
+  intros R RNG t; revert RNG. induction t as [r|n k IH]; intros RNG Q Q' ms H HQ; cbn in *.
+  - eapply evtF_mono; [exact H|]. cbn. intros ms' H'. apply HQ. exact H'.
+  - eapply evtF_mono; [exact H|]. intros ms1 [Hat Hk]. split; [exact Hat|].
+    intros rsp RNG' HF. eapply IH; eauto.
+Qed.
+
+(* [comment removed for export] *)
+Lemma implF_evtF : forall {R} RNG (t : itree node R) Q P ms,
+  evtF segs RNG P ms -> (forall ms', P ms' -> implF RNG t Q ms') -> implF RNG t Q ms.
+Proof.
+  intros R RNG t Q P ms H K. destruct t; cbn in *; eapply evtF_cut; eauto; intros ms' HP; apply (K _ HP).
+Qed.
+
+(* [comment removed for export] *)
+Lemma implF_bind : forall {A B} RNG (t : itree node A) (f : A -> itree node B) Q1 Q ms,
+  implF RNG t Q1 ms -> (forall r RNG' ms', Q1 r RNG' ms' -> implF RNG' (f r) Q ms') -> implF RNG (bind node t f) Q ms.
+Proof.
+  intros A B RNG t; revert RNG. induction t as [r|n k IH]; intros RNG f Q1 Q ms H Hf; cbn [bind].
+  - cbn in H. eapply implF_evtF; [exact H|]. intros ms' HQ. exact (Hf _ _ _ HQ).
+  - cbn in H |- *. eapply evtF_mono; [exact H|]. intros ms1 [Hat Hk]. split; [exact Hat|].
+    intros rsp RNG' HF. eapply IH; eauto.
+Qed.
+
+(* [comment removed for export] *)
+
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+
+Fixpoint tsafeA {R} (RNG : footprint) (A : alw) (t : itree node R) (mo : Model) : Prop :=
+  acct_ok RNG A mo /\
+  match t with
+  | Ret _ => True
+  | Vis n k => nsafe n mo /\
+      forall rsp mo' evs, nstep n mo rsp mo' evs ->
+        exists RNG' A', fstep n rsp RNG RNG' /\ alw_le A A' /\ tsafeA RNG' A' (k rsp) mo'
+  end.
+
+Lemma tsafeA_acct : forall {R} RNG A (t : itree node R) mo, tsafeA RNG A t mo -> acct_ok RNG A mo.
+Proof. intros R RNG A [r|n k] mo H; exact (proj1 H). Qed.
+
+(* [comment removed for export] *)
+Definition ptraces {R} (t : itree node R) (mo : Model) : ShapeAlg.TSet :=
+  fun tr => exists full, ttrace nstep nexit t mo full /\ is_prefix tr full.
+
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+
+(* [comment removed for export] *)
+Definition tree_atA {R} (RNG : footprint) (A : alw) (t : itree node R) Q
+    (ms : machine_state) (mo mo_ : Model) : Prop :=
+  implF RNG t Q ms /\ leaves_unreachable_m nstep t mo /\ m_halted mo = None /\ minv mo /\
+  tsafeA RNG A t mo /\ mrel A mo mo_.
+
+Lemma tree_atA_ainv : forall {R} RNG A (t : itree node R) Q ms mo mo_,
+  tree_atA RNG A t Q ms mo mo_ -> ainv (m_vm_lazy mo) A NMAX mo_.
+Proof. intros R RNG A t Q ms mo mo_ (_ & _ & _ & _ & TS & MR). eapply mrel_ainv; [eapply tsafeA_acct; exact TS| exact MR]. Qed.
+
+(* [comment removed for export] *)
+Lemma tree_atA_step : node_soundA -> forall {R} RNG A n (k : resp -> itree node R) Q ms1 mo mo_ rsp mo' evs,
+  at_node n RNG ms1 -> (forall rsp RNG', fstep n rsp RNG RNG' -> implF RNG' (k rsp) Q (nret ms1 rsp)) ->
+  leaves_unreachable_m nstep (Vis n k) mo -> m_halted mo = None -> minv mo -> tsafeA RNG A (Vis n k) mo ->
+  mrel A mo mo_ ->
+  nstep n mo rsp mo' evs ->
+  exists RNG' A' mo_',
+    tree_atA RNG' A' (k rsp) Q (nret ms1 rsp) mo' mo_'
+    /\ sstep_cfg segs ACFG (mkCfg ms1 mo_) evs (SNext (mkCfg (nret ms1 rsp) mo_')).
+Proof.
+  intros NS R RNG A n k Q ms1 mo mo_ rsp mo' evs Hat Hk Hl Hh Hinv Hsf MR Hst.
+  pose proof Hsf as (ACC & Hns & Hk').
+  destruct (Hk' rsp mo' evs Hst) as (RNG' & A' & HF & HLE & Hsf').
+  pose proof (mrel_ainv RNG A mo mo_ ACC MR) as INV.
+  destruct (nsA_sound NS n RNG A ms1 mo mo_ rsp mo' evs Hat Hh Hinv Hns (proj1 ACC) MR INV Hst)
+    as (Hh' & Hinv' & mo_' & Hss & MP).
+  exists RNG', A', mo_'. split; [|exact Hss].
+  split; [apply Hk; exact HF|]. split; [eapply leaves_unreachable_m_step; eassumption|].
+  split; [exact Hh'|]. split; [exact Hinv'|]. split; [exact Hsf'|].
+  eapply mrel_le; [exact MP| exact HLE].
+Qed.
+
+(* [comment removed for export] *)
+Lemma ttrace_exists : node_soundA -> forall {R} (t : itree node R) RNG A Q ms mo mo_,
+  tree_atA RNG A t Q ms mo mo_ -> exists full, ttrace nstep nexit t mo full.
+Proof.
+  intros NS R t. induction t as [r|n k IH]; intros RNG A Q ms mo mo_ HT.
+  - destruct HT as (_ & Hl & _). destruct (leaves_unreachable_m_ret _ nstep r mo Hl).
+  - pose proof HT as (Ht & Hl & Hh & Hinv & Hsf & MR).
+    cbn [implF] in Ht.
+    pose proof (tree_atA_ainv _ _ _ _ _ _ _ HT) as INV.
+    destruct (evtF_lift segs (m_vm_lazy mo) A NMAX RNG _ ms mo_ (proj1 (tsafeA_acct _ _ _ _ Hsf)) INV
+                ltac:(rewrite (mrel_halted _ _ _ MR); exact Hh) Ht)
+      as (ms1 & mo1_ & CS & [Hat1 Hk1] & INV1 & SB1).
+    assert (MR1 : mrel A mo mo1_) by (eapply mrel_after; eauto).
+    destruct (nsA_progress NS n RNG A ms1 mo mo1_ Hat1 Hh Hinv (proj1 (proj2 Hsf)) (proj1 (tsafeA_acct _ _ _ _ Hsf)) MR1 INV1)
+      as [(rsp & mo' & evs & Hst)|(code & mo' & Hex)].
+    + destruct (tree_atA_step NS RNG A n k Q ms1 mo mo1_ rsp mo' evs Hat1 Hk1 Hl Hh Hinv Hsf MR1 Hst) as (RNG' & A' & mo_' & HT' & _).
+      destruct (IH rsp RNG' A' Q (nret ms1 rsp) mo' mo_' HT') as (full' & Hfull').
+      exists (evs ++ full'). cbn. right. exists rsp, mo', evs, full'. repeat split; assumption.
+    + exists [ExitEv code (m_fs mo')]. cbn. left. exists code, mo'. split; [assumption|reflexivity].
+Qed.
+
+Lemma ptraces_nonempty : node_soundA -> forall {R} (t : itree node R) RNG A Q ms mo mo_,
+  tree_atA RNG A t Q ms mo mo_ -> ptraces t mo [].
+Proof.
+  intros NS R t RNG A Q ms mo mo_ HT. destruct (ttrace_exists NS t RNG A Q ms mo mo_ HT) as (full & Hf).
+  exists full. split; [exact Hf| apply is_prefix_nil].
+Qed.
+
+(* [comment removed for export] *)
+
+Lemma cstep_node_ok : forall ms mo ms' mo',
+  cstep segs (ms, mo) (ms', mo') ->
+  ShapeAlg.node_ok segs (mkCfg ms mo) unit (fun _ => []) (fun _ => mkCfg ms' mo').
+Proof.
+  intros ms mo ms' mo' (Hh & Hs & Ha). cbn in Hh, Hs, Ha. split.
+  - intros _. eapply sstep_cfg_instr; eauto.
+  - intros e st Hss. exists tt. inversion Hss; subst; try congruence.
+    all: try (rewrite Ha in *; congruence).
+    match goal with H : mi_account_step segs ms mo = MachineOk _ |- _ => rewrite Ha in H; inversion H; subst; auto end.
+Qed.
+
+Lemma csteps_srealizes : forall ms mo ms' mo' T,
+  csteps segs (ms, mo) (ms', mo') ->
+  SpinAlg.srealizes segs (mkCfg ms' mo') T -> SpinAlg.srealizes segs (mkCfg ms mo) T.
+Proof.
+  intros ms mo ms' mo' T CS.
+  remember (ms, mo) as c eqn:Ec. remember (ms', mo') as c' eqn:Ec'.
+  revert ms mo ms' mo' Ec Ec'. induction CS as [c|c c1 c2 ST CS IH]; intros ms mo ms' mo' -> E2 Hs.
+  - inversion E2; subst. exact Hs.
+  - destruct c1 as [ms1 mo1]. eapply SpinAlg.srz_silent1;
+      [apply cstep_node_ok; exact ST | apply RomBase.sys_rob_instr; exact (proj1 (proj2 ST)) |].
+    eapply IH; eauto.
+Qed.
+
+(* [comment removed for export] *)
+
+Section NodeCase.
+  Context {R : Type}.
+  Variables (n : node) (k : resp -> itree node R) (Q : R -> footprint -> machine_state -> Prop).
+  Variables (RNG : footprint) (A : alw) (ms1 : machine_state) (mo mo1_ : Model).
+  Hypothesis NS : node_soundA.
+  Hypothesis Hat : at_node n RNG ms1.
+  Hypothesis Hk : forall rsp RNG', fstep n rsp RNG RNG' -> implF RNG' (k rsp) Q (nret ms1 rsp).
+  Hypothesis Hl : leaves_unreachable_m nstep (Vis n k) mo.
+  Hypothesis Hh : m_halted mo = None.
+  Hypothesis Hinv : minv mo.
+  Hypothesis Hsf : tsafeA RNG A (Vis n k) mo.
+  Hypothesis MR : mrel A mo mo1_.
+  (* [comment removed for export] *)
+  Hypothesis IH : forall rsp RNG' A' ms' mo' mo_',
+    tree_atA RNG' A' (k rsp) Q ms' mo' mo_' -> SpinAlg.srealizes segs (mkCfg ms' mo_') (ptraces (k rsp) mo').
+
+  Let c1 : config := mkCfg ms1 mo1_.
+
+  (* [comment removed for export] *)
+  Definition succ : Type := { ce : config * list event | sstep_cfg segs ACFG c1 (snd ce) (SNext (fst ce)) }.
+  Definition s_evs (i : succ) : list event := snd (proj1_sig i).
+  Definition s_nx (i : succ) : config := fst (proj1_sig i).
+
+  (* [comment removed for export] *)
+  Definition s_T (i : succ) : ShapeAlg.TSet :=
+    fun tr =>
+      (m_halted (cfg_model (s_nx i)) = None /\
+       exists rsp mo', cfg_ms (s_nx i) = nret ms1 rsp /\ nstep n mo rsp mo' (s_evs i) /\
+                      mpost A mo' (cfg_model (s_nx i)) /\ ptraces (k rsp) mo' tr)
+      \/ (m_halted (cfg_model (s_nx i)) <> None /\ tr = []).
+
+  Lemma INV1 : ainv (m_vm_lazy mo) A NMAX mo1_.
+Proof. eapply mrel_ainv; [eapply tsafeA_acct; exact Hsf| exact MR]. Qed.
+
+  Lemma FOK : footprint_ok (m_vm_lazy mo) A RNG.
+  Proof. exact (proj1 (tsafeA_acct _ _ _ _ Hsf)). Qed.
+
+  Lemma NSF : nsafe n mo.
+  Proof. exact (proj1 (proj2 Hsf)). Qed.
+
+  Lemma succ_node_ok : ShapeAlg.node_ok segs c1 succ s_evs s_nx.
+Proof.
+    split.
+    - intros [[c e] Hs]. exact Hs.
+    - intros e st Hss.
+      destruct (nsA_complete NS n RNG A ms1 mo mo1_ e st Hat Hh Hinv NSF FOK MR INV1 Hss)
+        as [(rsp & mo' & mo_' & -> & _) | (code & mo' & mo_' & -> & _)].
+      + exists (exist _ (mkCfg (nret ms1 rsp) mo_', e) Hss). split; reflexivity.
+      + exists (exist _ (mkCfg ms1 mo_', e) Hss). split; reflexivity.
+  Qed.
+
+  Lemma step_tree_atA : forall rsp mo' evs mo_',
+    nstep n mo rsp mo' evs -> mpost A mo' mo_' ->
+    exists RNG' A', tree_atA RNG' A' (k rsp) Q (nret ms1 rsp) mo' mo_'.
+Proof.
+    intros rsp mo' evs mo_' Hst MP.
+    pose proof Hsf as (ACC & Hns & Hk').
+    destruct (Hk' rsp mo' evs Hst) as (RNG' & A' & HF & HLE & Hsf').
+    destruct (nsA_sound NS n RNG A ms1 mo mo1_ rsp mo' evs Hat Hh Hinv Hns FOK MR INV1 Hst) as (Hh' & Hinv' & _).
+    exists RNG', A'. split; [apply Hk; exact HF|]. split; [eapply leaves_unreachable_m_step; eassumption|].
+    split; [exact Hh'|]. split; [exact Hinv'|]. split; [exact Hsf'|]. eapply mrel_le; eauto.
+  Qed.
+
+  Lemma succ_srealizes : forall i, SpinAlg.srealizes segs (s_nx i) (s_T i).
+Proof.
+    intros [[c e] Hss]. unfold s_nx, s_evs, s_T. cbn [proj1_sig fst snd].
+    destruct (nsA_complete NS n RNG A ms1 mo mo1_ e (SNext c) Hat Hh Hinv NSF FOK MR INV1 Hss)
+      as [(rsp & mo' & mo_' & E & Hst & MP) | (code & mo' & mo_' & E & Hex & -> & Hh')]; inversion E; subst; cbn [cfg_ms cfg_model].
+    -
+      destruct (step_tree_atA rsp mo' e mo_' Hst MP) as (RNG' & A' & HT').
+      pose proof (IH rsp RNG' A' _ _ _ HT') as SR.
+      eapply SpinAlg.srz_conseq; [exact SR|].
+      assert (Hh0 : m_halted mo_' = None).
+      { rewrite (mrel_halted _ _ _ MP). exact (proj1 (proj2 (proj2 HT'))). }
+      intros tr. split.
+      + intros Htr. left. split; [exact Hh0|]. exists rsp, mo'. split; [reflexivity|]. split; [exact Hst|]. split; [exact MP| exact Htr].
+      + intros [(_ & rsp2 & mo2 & Ems & Hst2 & MP2 & Htr) | [Hc _]]; [| exfalso; apply Hc; exact Hh0].
+        destruct (step_tree_atA rsp2 mo2 e mo_' Hst2 MP2) as (RNG2 & A2 & HT2).
+        rewrite <- Ems in HT2.
+        pose proof (IH rsp2 RNG2 A2 _ _ _ HT2) as SR2.
+        apply (SpinAlg.srealizes_obs_iff segs _ _ SR tr).
+        apply (SpinAlg.srealizes_obs_iff segs _ _ SR2 tr). exact Htr.
+    -
+      eapply SpinAlg.srz_conseq; [apply SpinAlg.srz_halt; cbn; congruence|].
+      intros tr. unfold ShapeAlg.t_nil. split.
+      + intros ->. right. split; [cbn; congruence| reflexivity].
+      + intros [(Hc & _) | [_ ->]]; [cbn in Hc; congruence| reflexivity].
+  Qed.
+
+  Lemma node_shape_eq :
+    ShapeAlg.t_eq (ShapeAlg.t_alt (fun i => ShapeAlg.t_emit (s_evs i) (s_T i))) (ptraces (Vis n k) mo).
+Proof.
+    intros tr. unfold ShapeAlg.t_alt, ShapeAlg.t_emit, ptraces. split.
+    - intros ([[c e] Hss] & Hi). unfold s_nx, s_evs, s_T in Hi. cbn [proj1_sig fst snd] in Hi.
+      destruct (nsA_complete NS n RNG A ms1 mo mo1_ e (SNext c) Hat Hh Hinv NSF FOK MR INV1 Hss)
+        as [(rsp & mo' & mo_' & E & Hst & MP) | (code & mo' & mo_' & E & Hex & -> & Hh')]; inversion E; subst; cbn [cfg_ms cfg_model] in Hi.
+      + destruct (step_tree_atA rsp mo' e mo_' Hst MP) as (RNG' & A' & HT').
+        destruct Hi as [Hp | (tr' & -> & [(_ & rsp2 & mo2 & Ems & Hst2 & MP2 & (full2 & Hf2 & Hp2)) | [Hc _]])].
+        * destruct (ttrace_exists NS (k rsp) RNG' A' Q _ _ _ HT') as (full' & Hf').
+          exists (e ++ full'). split; [| eapply is_prefix_trans; [exact Hp| apply is_prefix_app]].
+          cbn. right. exists rsp, mo', e, full'. repeat split; assumption.
+        * exists (e ++ full2). split; [| apply is_prefix_app_l; exact Hp2].
+          cbn. right. exists rsp2, mo2, e, full2. repeat split; assumption.
+        * exfalso. apply Hc. cbn [s_nx proj1_sig fst snd cfg_model]. rewrite (mrel_halted _ _ _ MP). exact (proj1 (proj2 (proj2 HT'))).
+      + destruct Hi as [Hp | (tr' & -> & [(Hc & _) | [_ ->]])].
+        * exists [ExitEv code (m_fs mo')]. split; [| exact Hp]. cbn. left. exists code, mo'. auto.
+        * cbn [s_nx proj1_sig fst snd cfg_model] in Hc. congruence.
+        * exists [ExitEv code (m_fs mo')]. split. { cbn. left. exists code, mo'. auto. }
+          rewrite app_nil_r. apply is_prefix_refl.
+    - intros (full & Hf & Hp). cbn in Hf.
+      destruct Hf as [(code & mo' & Hex & ->) | (rsp & mo' & evs & tr' & Hst & Hf' & ->)].
+      + destruct (nsA_exit NS n RNG A ms1 mo mo1_ code mo' Hat Hh Hinv NSF MR Hex) as (Hh' & mo_' & Hss & Hh_').
+        exists (exist _ (mkCfg ms1 mo_', [ExitEv code (m_fs mo')]) Hss). cbn [s_evs s_nx proj1_sig fst snd].
+        left. exact Hp.
+      + destruct (nsA_sound NS n RNG A ms1 mo mo1_ rsp mo' evs Hat Hh Hinv NSF FOK MR INV1 Hst) as (Hh' & Hinv' & mo_' & Hss & MP).
+        exists (exist _ (mkCfg (nret ms1 rsp) mo_', evs) Hss). unfold s_evs, s_nx, s_T. cbn [proj1_sig fst snd cfg_ms cfg_model].
+        destruct (ShapeAlg.is_prefix_app_split _ _ _ Hp) as [Hp1 | (tr2 & -> & Hp2)].
+        * left. exact Hp1.
+        * right. exists tr2. split; [reflexivity|]. left. cbn [s_nx proj1_sig fst snd cfg_model cfg_ms].
+          split; [rewrite (mrel_halted _ _ _ MP); exact Hh'|].
+          exists rsp, mo'. split; [reflexivity|]. split; [exact Hst|]. split; [exact MP|]. exists tr'. auto.
+  Qed.
+
+  Lemma node_srealizes : SpinAlg.srealizes segs c1 (ptraces (Vis n k) mo).
+Proof.
+    destruct (nsA_progress NS n RNG A ms1 mo mo1_ Hat Hh Hinv NSF FOK MR INV1) as [(rsp & mo' & evs & Hst)|(code & mo' & Hex)].
+    - destruct (nsA_sound NS n RNG A ms1 mo mo1_ rsp mo' evs Hat Hh Hinv NSF FOK MR INV1 Hst) as (_ & _ & mo_' & Hss & _).
+      eapply SpinAlg.srz_conseq; [| apply node_shape_eq].
+      apply (SpinAlg.srz_node segs c1 succ s_evs s_nx s_T (exist _ (mkCfg (nret ms1 rsp) mo_', evs) Hss)
+               succ_node_ok (nsA_rob NS n RNG A ms1 mo mo1_ Hat Hh Hinv NSF MR) succ_srealizes).
+    - destruct (nsA_exit NS n RNG A ms1 mo mo1_ code mo' Hat Hh Hinv NSF MR Hex) as (_ & mo_' & Hss & _).
+      eapply SpinAlg.srz_conseq; [| apply node_shape_eq].
+      apply (SpinAlg.srz_node segs c1 succ s_evs s_nx s_T (exist _ (mkCfg ms1 mo_', [ExitEv code (m_fs mo')]) Hss)
+               succ_node_ok (nsA_rob NS n RNG A ms1 mo mo1_ Hat Hh Hinv NSF MR) succ_srealizes).
+  Qed.
+End NodeCase.
+
+(* [comment removed for export] *)
+
+Theorem implF_srealizes : node_soundA -> forall {R} (t : itree node R) RNG A Q ms mo mo_,
+  tree_atA RNG A t Q ms mo mo_ -> SpinAlg.srealizes segs (mkCfg ms mo_) (ptraces t mo).
+Proof.
+  intros NS R t. induction t as [r|n k IHk]; intros RNG A Q ms mo mo_ HT.
+  - destruct HT as (_ & Hl & _). destruct (leaves_unreachable_m_ret _ nstep r mo Hl).
+  - pose proof HT as (Ht & Hl & Hh & Hinv & Hsf & MR).
+    cbn [implF] in Ht.
+    pose proof (tree_atA_ainv _ _ _ _ _ _ _ HT) as INV.
+    destruct (evtF_lift segs (m_vm_lazy mo) A NMAX RNG _ ms mo_ (proj1 (tsafeA_acct _ _ _ _ Hsf)) INV
+                ltac:(rewrite (mrel_halted _ _ _ MR); exact Hh) Ht)
+      as (ms1 & mo1_ & CS & [Hat1 Hk1] & INV1 & SB1).
+    assert (MR1 : mrel A mo mo1_) by (eapply mrel_after; eauto).
+    eapply csteps_srealizes; [exact CS|].
+    apply (node_srealizes n k Q RNG A ms1 mo mo1_ NS Hat1 Hk1 Hl Hh Hinv Hsf MR1).
+    intros rsp RNG' A' ms' mo' mo_' HT'. eapply IHk. exact HT'.
+Qed.
+
+(* [comment removed for export] *)
+Theorem implF_obs_trace : node_soundA -> forall {R} (t : itree node R) RNG A Q ms mo mo_,
+  tree_atA RNG A t Q ms mo mo_ ->
+  forall tr, obs_trace_cfg segs ACFG (mkCfg ms mo_) tr <-> ptraces t mo tr.
+Proof. intros NS R t RNG A Q ms mo mo_ HT. apply SpinAlg.srealizes_obs_iff. eapply implF_srealizes; eauto. Qed.
+
+Theorem implF_no_error : node_soundA -> forall {R} (t : itree node R) RNG A Q ms mo mo_,
+  tree_atA RNG A t Q ms mo mo_ -> ~ reaches_error_cfg segs ACFG (mkCfg ms mo_).
+Proof. intros NS R t RNG A Q ms mo mo_ HT. eapply SpinAlg.srealizes_no_error. eapply implF_srealizes; eauto. Qed.
+
+Theorem implF_modeled : node_soundA -> forall {R} (t : itree node R) RNG A Q ms mo mo_,
+  tree_atA RNG A t Q ms mo mo_ -> ~ reaches_unmodeled_cfg segs ACFG (mkCfg ms mo_).
+Proof.
+  intros NS R t RNG A Q ms mo mo_ HT Hu. apply (implF_no_error NS t RNG A Q ms mo mo_ HT).
+  apply reaches_unmodeled_cfg_reaches_error_cfg. exact Hu.
+Qed.
+
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+
+Definition epostF {X} (Q : X -> footprint -> machine_state -> Prop) : exc X -> footprint -> machine_state -> Prop :=
+  fun r RNG ms => match r with Unr => True | Ok a => Q a RNG ms end.
+
+Lemma implF_ret_unr : forall {X} RNG (Q : X -> footprint -> machine_state -> Prop) ms,
+  implF RNG (Ret Unr) (epostF Q) ms.
+Proof. intros X RNG Q ms. cbn. apply evtF_done. exact I. Qed.
+
+Lemma implF_ret_ok : forall {X} RNG (Q : X -> footprint -> machine_state -> Prop) a ms,
+  evtF segs RNG (Q a RNG) ms -> implF RNG (Ret (Ok a)) (epostF Q) ms.
+Proof. intros X RNG Q a ms H. exact H. Qed.
+
+Lemma implF_ebind : forall {X Y} RNG (t : itree node (exc X)) (f : X -> itree node (exc Y)) Q1 Q ms,
+  implF RNG t (epostF Q1) ms -> (forall a RNG' ms', Q1 a RNG' ms' -> implF RNG' (f a) (epostF Q) ms') ->
+  implF RNG (ebind t f) (epostF Q) ms.
+Proof.
+  intros X Y RNG t f Q1 Q ms Ht Hf. unfold ebind. eapply implF_bind; [exact Ht|].
+  intros [|a] RNG' ms' H'; cbn in H'.
+  - apply implF_ret_unr.
+  - apply Hf. exact H'.
+Qed.
+
+Lemma implF_epost_mono : forall {X} RNG (t : itree node (exc X)) (Q Q' : X -> footprint -> machine_state -> Prop) ms,
+  implF RNG t (epostF Q) ms -> (forall a RNG' ms', Q a RNG' ms' -> Q' a RNG' ms') -> implF RNG t (epostF Q') ms.
+Proof.
+  intros X RNG t Q Q' ms H HQ. eapply implF_mono; [exact H|]. intros [|a] RNG' ms'; cbn; auto.
+Qed.
+
+(* [comment removed for export] *)
+Lemma implF_enode : forall {X} RNG n (pl : resp -> option X) (Q : X -> footprint -> machine_state -> Prop) ms,
+  evtF segs RNG (fun ms1 => at_node n RNG ms1 /\
+                   forall rsp RNG' a, fstep n rsp RNG RNG' -> pl rsp = Some a -> evtF segs RNG' (Q a RNG') (nret ms1 rsp)) ms ->
+  implF RNG (enode n pl) (epostF Q) ms.
+Proof.
+  intros X RNG n pl Q ms H. cbn. eapply evtF_mono; [exact H|]. intros ms1 [Hat Hk]. split; [exact Hat|].
+  intros rsp RNG' HF. specialize (Hk rsp RNG'). destruct (pl rsp) as [a|]; cbn.
+  - apply Hk; [exact HF| reflexivity].
+  - apply evtF_done. exact I.
+Qed.
+
+End ITreeA.
+
+Arguments mrel A mo mo_ /.
+Arguments implF {node} segs at_node fstep {R} RNG t Q ms.
+Arguments tsafeA {node} nstep nsafe fstep NMAX {R} RNG A t mo.
+Arguments ptraces {node} nstep nexit {R} t mo _.
+Arguments tree_atA {node} segs at_node nstep minv nsafe fstep NMAX {R} RNG A t Q ms mo mo_.
+Arguments implF_srealizes {node} segs at_node nstep nexit minv nsafe fstep NMAX _ {R} t RNG A Q ms mo mo_ _.
+Arguments implF_obs_trace {node} segs at_node nstep nexit minv nsafe fstep NMAX _ {R} t RNG A Q ms mo mo_ _.
+Arguments implF_no_error {node} segs at_node nstep nexit minv nsafe fstep NMAX _ {R} t RNG A Q ms mo mo_ _.

@@ -1,0 +1,1217 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-11: ported to LPS 727298f3 (18 recorded proofs replaced by written proofs (busy_slot_range, xfree_free, xfree_cache and 15 more)). *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+From Stdlib Require Import ZArith NArith List Lia Bool.
+From Stdlib Require Import Sorting.Permutation.
+From stdpp Require Import gmap.
+From LinuxProcessSemantics.LinuxProcessSem Require Import BvBase RiscvSemantics MemImageType State Run.
+From LinuxProcessSemantics.Riscv Require Import Prelude Instr Decode DecodeC Sem Fpu.
+From OSSVerify.Proofs.zstd.huf_decompress.lib.Lib Require Import PropExec MState Mem Cells Exec Step Frame Arr Tac ITree Nodes Decode InitMem.
+From OSSVerify.Proofs.zstd.huf_decompress.lib.LibA Require Import ExecF ITreeA StepF.
+From OSSVerify.Proofs.zstd.huf_decompress.lib.Spec Require Import STree AsanCtrl AsanEmbed.
+From OSSVerify.Proofs.zstd.huf_decompress.lib.BothW Require Import ASecFacts BImg AProto ABase ABytes AQConst AMalloc_iface ADepot_iface ARep ARepQ ARepQP ALayout AHeapP ARepKit ARepFrame ARepStore
+     AKit AModelFacts AFreeModel AFreeRep AFreeGeo AFreeRead F_afree_tail F_afree_icpt F_afree_arep AFreeStoreK.
+From OSSVerify.Proofs.zstd.huf_decompress.lib.Common Require Import RunDraw.
+From OSSVerify.Proofs.zstd.huf_decompress.lib Require KReplay.
+Ltac2 kr_t_AFreeStore () := "C47Corelib7Classes9Morphisms6ProperC47Corelib7Program6Basics4flipC47Corelib7Classes9MorphismsKrespectful_per_obligation_1I47Corelib5Lists7ListDef6Forall00C47Corelib4Init9Datatypes3fstC46Stdlib5Lists4List8nil_consC47Corelib4Init5Logic6eq_indC47Corelib4Init5Logic8eq_ind_rI35stdpp9countable9Countable00C35stdpp4base;RelDecisionC59OSSVerify5KrLib4Spec8AsanCtrl4aptrC1?~~~~~~~~~~~~~~~C46Stdlib5Lists4List2hdC47Corelib5Lists7ListDef3mapC47Corelib4Init5Logic8eq_transC47Corelib4Init5Logic7f_equalC35stdpp8fin_maps:map_deleteC47Corelib4Init9Datatypes8list_indC47Corelib4Init9Datatypes3appC35stdpp4gmapBgmap_partial_alterC46Stdlib5Lists4List8map_consC35stdpp4base6LookupC35stdpp4base6DeleteC46Stdlib5Lists4List7existsbI35stdpp8fin_maps6FinMap00C35stdpp8fin_maps7MapFoldC35stdpp8fin_maps:map_insertC35stdpp4base5EmptyC35stdpp4base4FMapC35stdpp4base4OMapC35stdpp4base6InsertC35stdpp4base<PartialAlterC35stdpp4base5MergeI35stdpp4gmap4gmap00C35stdpp4base4fmapC35stdpp8fin_maps:map_eq_iffC4ELinuxProcessSemantics5Riscv7Prelude5bvmapC46Stdlib5Lists4List3revC35stdpp8fin_maps@lookup_insert_eqC35stdpp4gmap;gmap_lookupC35stdpp4gmap:gmap_emptyC35stdpp4gmap9gmap_foldC59OSSVerify5KrLib5BothW7ALayout4aobjC1?~~~~~~~~~~~~~~~K47Corelib7Numbers7BinNums8positive02K47Corelib7Numbers7BinNums1Z02C56Stdlib6ZArith6BinInt1Z2leC59OSSVerify5KrLib6Common7RunDraw:atop_rangeC1?~~~~~~~~~~~~~~~K47Corelib7Numbers7BinNums8positive01C59OSSVerify5KrLib3Lib8RunConst4ATOPC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z6moduloC56Stdlib6ZArith6BinInt1Z3addC56Stdlib6ZArith6BinInt1Z3mulI47Corelib4Init5Logic3and00C46Stdlib9micromega9SatDivModCZ_mod_nonneg_nonnegC56Stdlib6ZArith6BinInt1Z7div_modC47Corelib4Init5Logic3notC56Stdlib6ZArith6BinInt1Z3divI47Corelib4Init5Logic2eq00C56Stdlib6ZArith6BinInt1Z=mod_pos_boundC56Stdlib6ZArith6BinInt1Z2ltC56Stdlib6ZArith6BinInt1Z=mod_neg_boundC56Stdlib5omega8PreOmega1Z;div_0_r_extC56Stdlib5omega8PreOmega1Z;mod_0_r_extC59OSSVerify5KrLib3Lib9LiaTuning9zify_doneC1?~~~~~~~~~~~~~~~K47Corelib4Init9Datatypes3nat02K46Stdlib9micromega=RingMicromega5Psatz02K46Stdlib9micromega=RingMicromega5Psatz06K46Stdlib9micromega:ZMicromega;ZArithProof02K47Corelib4Init9Datatypes4list01K47Corelib4Init9Datatypes4list02I47Corelib4Init9Datatypes4list00K46Stdlib9micromega6VarMap1t01K46Stdlib9micromega6VarMap1t02K46Stdlib9micromega6VarMap1t03I46Stdlib9micromega6VarMap1t00I46Stdlib9micromega=RingMicromega7Formula00K46Stdlib9micromega7EnvRing5PExpr02K47Corelib4Init9Datatypes6option02K46Stdlib9micromega7EnvRing5PExpr03K46Stdlib9micromega5Tauto8GFormula06C46Stdlib9micromega5Tauto8BFormulaK47Corelib4Init5Logic2eq01C46Stdlib9micromega:ZMicromega=ZTautoCheckerC46Stdlib9micromega6VarMap4findC46Stdlib9micromega:ZMicromegaCZTautoChecker_soundK46Stdlib9micromega7EnvRing5PExpr01K46Stdlib9micromega7EnvRing5PExpr05K47Corelib4Init5Logic2ex01K46Stdlib9micromega5Tauto8GFormula03K47Corelib4Init5Logic3and01I47Corelib4Init5Logic2or00I47Corelib4Init5Logic2ex00K46Stdlib9micromega=RingMicromega7Formula01K46Stdlib9micromega5Tauto8GFormula04K46Stdlib9micromega5Tauto8GFormula05K46Stdlib9micromega5Tauto8GFormula08I47Corelib7Numbers7BinNums1Z00K47Corelib7Numbers7BinNums1Z01C46Stdlib9micromega5Tauto5eKindI47Corelib4Init9Datatypes4unit00K46Stdlib9micromega5Tauto4kind01K46Stdlib9micromega=RingMicromega3Op203K47Corelib4Init9Datatypes4unit01K47Corelib7Numbers7BinNums8positive03K47Corelib4Init5Logic4True01I46Stdlib9micromega:ZMicromega;ZArithProof00K47Corelib4Init9Datatypes3nat01K46Stdlib9micromega:ZMicromega;ZArithProof01I47Corelib4Init9Datatypes4bool00K47Corelib4Init9Datatypes4bool01C46Stdlib5Lists4List2InI47Corelib4Init9Datatypes4prod00K47Corelib7Numbers7BinNums1N02I45stdpp9bitvector;definitions2bv00I47Corelib4Init9Datatypes6option00C59OSSVerify5KrLib5BothW;AFreeStoreK7kfactsFC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec9AsanEmbed4shadC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Frame5munchC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Frame5wmonoC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase7ab_addrC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase7ab_sizeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Frame=disjoint_fromC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW5ABase6abkind02C1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW5ABase6ablock01C1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z3subC59OSSVerify5KrLib5BothW7AQConst3qszC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z3powC59OSSVerify5KrLib5BothW=AMalloc_iface<aclient_addrC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib3Mem2waC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem>RiscvSemantics5wviewC59OSSVerify5KrLib3Lib5Frame7outsideC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase4iclrC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase8in_blockC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW;AFreeStoreK5KF_hiC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Frame@disjoint_outsideC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase9in_rangesC1?~~~~~~~~~~~~~~~C46Stdlib5Lists4List=Forall_forallC47Corelib4Init5Logic5proj1C56Stdlib6ZArith6BinInt1Z>pow_pos_nonnegC56Stdlib6ZArith6BinInt1Z:pow_nonnegC59OSSVerify5KrLib5BothW;AFreeStoreK6KF_imgC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame8shad_divC1?~~~~~~~~~~~~~~~K47Corelib7Numbers7BinNums1Z03K46Stdlib9micromega7EnvRing3Pol01K46Stdlib9micromega=RingMicromega5Psatz04K46Stdlib9micromega=RingMicromega5Psatz07K46Stdlib9micromega=RingMicromega5Psatz05K46Stdlib9micromega5Tauto8GFormula07K46Stdlib9micromega7EnvRing5PExpr07C59OSSVerify5KrLib5BothW;AFreeStoreK7KF_shadC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase7in_fakeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW;AFreeStoreK6KF_lowC1?~~~~~~~~~~~~~~~C45stdpp9bitvector;definitions;bv_unsignedC59OSSVerify5KrLib3Lib3Mem;wa_unsignedC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW=AMalloc_iface:aheap_presC1?~~~~~~~~~~~~~~~C47Corelib4Init9Datatypes3sndK47Corelib4Init9Datatypes4prod01C59OSSVerify5KrLib5BothW5ABase4sclrC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase7AIMG_HIC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW5ABase6ablock00C1?~~~~~~~~~~~~~~~K46Stdlib9micromega=RingMicromega3Op205K46Stdlib9micromega=RingMicromega3Op201C59OSSVerify5KrLib5BothW4BImg5bsegsC1?~~~~~~~~~~~~~~~I47Corelib4Init5Logic4True00C59OSSVerify5KrLib4Spec9AsanEmbed6ASHOFFC1?~~~~~~~~~~~~~~~I47Corelib4Init5Logic5False00C46Stdlib5Lists4List9in_or_appC46Stdlib5Lists4List6in_mapC35stdpp4base6lookupC59OSSVerify5KrLib5BothW4ARep3awfC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl;a_space_begC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase<al_space_begC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl;a_ptr_arrayC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase<al_ptr_arrayC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl7get_clsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep5x_clsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=size_of_classC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl@c_allocated_userC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=c_mapped_userC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl;c_num_freedC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrlCc_mapped_free_arrayC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7xc_freeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep8xc_cacheC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl7c_countC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep8xb_classC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep5xb_stC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep4xb_nC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl<rounded_sizeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl7rz_sizeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep5xb_b1C1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z4landC59OSSVerify5KrLib5BothW4ARep6xb_ctxC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl6a_liveC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib4Spec8AsanCtrl6achunk01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep6x_busyC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW4ARep6bstate01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7xb_slotC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep5ndistC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep:busy_slotsC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z3eqbC46Stdlib5Lists4List6filterC46Stdlib5Lists4List9filter_InC56Stdlib6ZArith6BinInt1Z8eqb_reflK47Corelib4Init5Logic2or02C47Corelib4Init9Datatypes6lengthC56Stdlib6ZArith6BinInt1Z6of_natI46Stdlib5Lists4List5NoDup00C59OSSVerify5KrLib4Spec8AsanCtrl9max_countC1?~~~~~~~~~~~~~~~K47Corelib4Init9Datatypes6option01C59OSSVerify5KrLib4Spec8AsanCtrl6a_nextC1?~~~~~~~~~~~~~~~C56Stdlib6NArith6BinNat1N2ltI59OSSVerify5KrLib5BothW4ARep5xbusy00C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl7K_ALIGNC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=K_NUM_CLASSESC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=K_FREEARR_OFFC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl:K_USER_MAPC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=K_FREEARR_MAXC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=K_FREEARR_MAPC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib4Spec8AsanCtrl6aclass00C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl7aclass0C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase7AREQMAXC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib4Spec8AsanCtrl6achunk00C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=K_BATCH_CLASSC1?~~~~~~~~~~~~~~~I47Corelib7Numbers7BinNums1N00C59OSSVerify5KrLib4Spec8AsanCtrl<K_SPACE_SIZEC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=K_SPACE_EXTRAC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW5ABase7alayout00C1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib4Spec8AsanCtrl6astate00C1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW4ARep5aconc00C1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW4ARep6xclass00C1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW4ARep6bstate00C1?~~~~~~~~~~~~~~~C45stdpp7numbers1N6eq_decC35stdpp9countable;N_countableC59OSSVerify5KrLib5BothW8AFreeRep5bquarC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW4ARep5aconc01C1?~~~~~~~~~~~~~~~C46Stdlib5Lists4List:removelastK59OSSVerify5KrLib5BothW4ARep6xclass01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep6bbatchC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z8eqb_specI47Corelib4Init9Datatypes7reflect00c59OSSVerify5KrLib5BothW:AFreeStore5xfreeC1?~~~~~~~~~~~~~~~C47Corelib4Init9Datatypes4negbC47Corelib4Init9Datatypes4andbK47Corelib4Init9Datatypes4bool02C46Stdlib5Lists4List4findC59OSSVerify5KrLib5BothW8AFreeRep6xbatchC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7busy_ofC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep6bfreedC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep5xquarC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep=busy_of_xquarC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore?busy_of_xbatch'C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7aregionC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z;lt_ge_casesK47Corelib4Init5Logic2or01C59OSSVerify5KrLib4Spec8AsanCtrl8K_REGIONC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z6eq_decI47Corelib4Init6Specif7sumbool00C59OSSVerify5KrLib5BothW:AFreeModel9same_coreC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl7a_cinitC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl6a_nresC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl6a_nsecC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP4arngC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA5ExecF3rngC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase4al_tC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase6al_ctxC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase8al_nodesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase8al_storeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase7al_fakeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec9AsanEmbed5shlenC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep8afreearrC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP=sec_chunks_ofC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP4RSECC1?~~~~~~~~~~~~~~~C46Stdlib7Sorting;Permutation?Permutation_symC59OSSVerify5KrLib5BothW6AHeapP9RSEC_permC1?~~~~~~~~~~~~~~~I46Stdlib7Sorting;Permutation;Permutation00C59OSSVerify5KrLib5BothW7ALayout7al_dtlsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA5ExecF9footprintC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep;NoDup_app_lC1?~~~~~~~~~~~~~~~C47Corelib4Init5Logic9False_indC46Stdlib5Lists4List7map_appC59OSSVerify5KrLib5BothW5ARepQ7qb_slotC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ;abatch_addrC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW5ARepQ7qbatchc01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ6qaddrsC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW5ARepQ7qbatchc00C1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore=qaddrs_reslotC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ6qfirstC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ5qlastC1?~~~~~~~~~~~~~~~C46Stdlib5Lists4List4lastC56Stdlib6ZArith6BinInt1Z6to_natK59OSSVerify5KrLib3Lib5Cells4cell05C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib4Step8rw_cellsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Cells8cells_atC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Cells:cells_sizeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib3Mem5wr_atC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Cells8cells_wfC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Cells;cells_bytesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib3Mem8bytes_atC1?~~~~~~~~~~~~~~~C47Corelib4Init5Peano2ltC59OSSVerify5KrLib3Lib3Mem3mrdC1?~~~~~~~~~~~~~~~C46Stdlib5Lists4List9nth_errorC46Stdlib9micromega;ZifyClasses7rew_iffC56Stdlib6ZArith4Znat5Nat2Z9is_nonnegC47Corelib4Init3Nat3addC56Stdlib6ZArith6BinInt1Z3maxC47Corelib4Init5Logic8iff_reflC46Stdlib9micromega;ZifyClasses3injC46Stdlib9micromega;ZifyClasses5mkrelC56Stdlib6ZArith6BinInt1Z8max_specC46Stdlib9micromega;ZifyClasses;rew_iff_revC46Stdlib9micromega;ZifyClasses6eq_iffC46Stdlib9micromega;ZifyClasses9and_morphC46Stdlib9micromega;ZifyClasses5mkappC46Stdlib9micromega;ZifyClasses6mkapp2I47Corelib4Init9Datatypes3nat00C56Stdlib6ZArith4Znat5Nat2Z6inj_ltC46Stdlib9micromega8ZifyInst@of_nat_to_nat_eqC56Stdlib5Arith8PeanoNat3Nat3addC56Stdlib6ZArith4Znat5Nat2Z7inj_addI59OSSVerify5KrLib3Lib5Cells4cell00C1?~~~~~~~~~~~~~~~C46Stdlib9micromega8ZifyInst7Inj_Z_ZC59OSSVerify5KrLib3Lib3Arr6u64arrC1?~~~~~~~~~~~~~~~C47Corelib4Init3Nat3mulC59OSSVerify5KrLib3Lib3Arr4u64sC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_icptBrw_cells_of_u64arrC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ARepKit=junk_of_cellsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7junk_atC1?~~~~~~~~~~~~~~~C56Stdlib5Arith8PeanoNat3Nat7add_0_rC56Stdlib6ZArith4Znat5Nat2Z7inj_mulC59OSSVerify5KrLib5BothW8AFreeGeo=rz_size_factsC1?~~~~~~~~~~~~~~~K46Stdlib9micromega:ZMicromega;ZArithProof03C59OSSVerify5KrLib5BothW<F_afree_tail6ek_preC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail4ek_bC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW<F_afree_tail8enq_kind01C1?~~~~~~~~~~~~~~~C45stdpp9bitvector;definitions7Z_to_bvK59OSSVerify5KrLib3Lib5Cells4cell01C1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW<F_afree_tail8enq_kind02C1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib3Lib5Cells4cell02C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib3Arr6u32arrC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW<F_afree_tail8enq_kind00C1?~~~~~~~~~~~~~~~C47Corelib7Classes9Morphisms?eq_proper_proxyC47Corelib7Classes9MorphismsMtrans_co_eq_inv_impl_morphismC46Stdlib5Lists4List:length_mapC35stdpp4base6deleteC35stdpp4base6insertI59OSSVerify5KrLib5BothW7ALayout:alayout_ok00C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_arep3AHQC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep4AREPC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ8AQUAR_atC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP7ablocksC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW5ABase6abkind01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl8set_liveC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl<a_qloc_bytesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead5ek_ofC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead3fhmC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail8ek_deltaC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead4g_ofC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail6dk_preC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ5q_locC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_icpt>free_fast_postC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7arep_rtC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep9ainstanceC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7athreadC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep<aslot_shadowC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep=ashadow_availC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP7AHEAP_PC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModel8st_afterC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW=AMalloc_iface:afree_postC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7ah_quarC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep6ah_secC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep8ah_depotC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep6arelroC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep8arep_rt2C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep8arep_rt3C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase6al_topC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase6al_botC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep<acache_cellsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead;freed_rangeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep:freed_liveC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeGeo9chunk_geoC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep:aslot_addrC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl3rupC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeGeo8slot_geoC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeGeo@slot_sep_objectsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeGeo@chunk_shadow_geoC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep8granulesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout9alayout_tC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout;alayout_ctxC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout=alayout_depotC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout=alayout_stackC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout=alayout_spaceC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout6ao_resC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout6al_resC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout4ao_tC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout6ao_ctxC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout8ao_nodesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout8ao_storeC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore9aobj4_intC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore8aobj_intC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout9ao_res_hiC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout8ao_spaceC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout8ad_t_resC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout5adisjC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout<ad_nodes_resC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout<ad_store_resC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout:ad_ctx_resC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout<ad_ctx_nodesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout<ad_ctx_storeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout8ad_t_ctxC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW4AKit5boxed01C1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW4AKit5boxed00C1?~~~~~~~~~~~~~~~C45stdpp9bitvector;definitionsDbv_unsigned_in_rangeC45stdpp9bitvector;definitions:bv_modulusC59OSSVerify5KrLib5BothW4ARep6aslotsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep:afreearrayC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep=aregion_cellsC1?~~~~~~~~~~~~~~~C47Corelib4Init5Logic5proj2C59OSSVerify5KrLib5BothW9AFreeRead:read_chunkC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib3Lib5Cells4cell03C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARepBblock_shadow_bytesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ@aquar_glob_constC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst9aq_tcacheC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl6a_qlocC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ6q_globC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=a_qglob_bytesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ8abatchesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl7a_qglobC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ4q_iaC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib3Mem3le8C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ8qcoupledC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ4qnumC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=batches_bytesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl6b_sizeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ9qentry_okC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ8qentriesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ6q_pendC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead<st_enq_bytesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModel6st_enqC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl:chunk_sizeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead:enq_is_appC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead?enq_is_app_specC1?~~~~~~~~~~~~~~~C47Corelib4Init5Logic6eq_symC56Stdlib6ZArith4Znat5Nat2Z7inj_iffC47Corelib4Init5Logic7iff_symC59OSSVerify5KrLib5BothW9AFreeRead7read_dkC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_icpt7dk_sepsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail5g_lstC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail7dk_glstC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead;bslot_rangeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead;qlast_casesC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail7g_drainC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Frame3mkRC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib8PropExec7seg_romC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail6ek_lstC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail5ek_nbC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib6MState6ret_pcC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail;tcache_postC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<ADepot_iface6ADEPOTC1?~~~~~~~~~~~~~~~I46Stdlib5Lists4List6Exists00K46Stdlib5Lists4List6Exists01K46Stdlib5Lists4List6Exists02K47Corelib5Lists7ListDef6Forall01K47Corelib5Lists7ListDef6Forall02C59OSSVerify5KrLib5BothW<F_afree_icpt>sub_fp_by_inclC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Frame<munch_weakenC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore;ek_pre_b_hiC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst7qsz_eq0C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst7qsz_posC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW;AFreeStoreK6KF_ctxC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW;AFreeStoreK4KF_tC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW;AFreeStoreK6KF_resC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW;AFreeStoreK6KF_objC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModel=st_after_coreC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl5a_clsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModel7enq_appC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModel7enq_newC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModel<enq_app_SomeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl7b_countC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl8b_chunksC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModel<enq_new_coreC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModel?same_core_transC1?~~~~~~~~~~~~~~~C47Corelib4Init9Datatypes2idC59OSSVerify5KrLib4Spec8AsanCtrl=cls_set_countC1?~~~~~~~~~~~~~~~C35stdpp4gmap9gmap_fmapC35stdpp4gmap9gmap_omapC35stdpp4gmap:gmap_mergeC35stdpp4gmap;gmap_finmapC59OSSVerify5KrLib4Spec8AsanCtrl:max_cachedC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep9awf_xquarC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep:awf_xbatchC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame8rt_hullsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame=arep_rt_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame?ainstance_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame<arelro_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame>arep_rt2_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame>arep_rt3_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame;cells_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail7ek_postC1?~~~~~~~~~~~~~~~C46Stdlib9micromega;ZifyClasses8or_morphC46Stdlib5Lists4List:length_appC59OSSVerify5KrLib5BothW9ARepFrame<u32arr_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep=cache24_splitC1?~~~~~~~~~~~~~~~C46Stdlib5Lists4List9app_assocC46Stdlib4Bool4Bool;andb_true_rc59OSSVerify5KrLib5BothW:AFreeStore;xfree_cacheC1?~~~~~~~~~~~~~~~C46Stdlib4Bool4Bool<andb_false_rC59OSSVerify5KrLib5BothW4ARep;acache_addrC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrameBacache_cells_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ARepKit:junk_splitC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame:junk_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ARepKit:junk_mergeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead:bslot_busyC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead9other_keyC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep>busy_of_X_selfC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z4of_NC56Stdlib6ZArith4Znat3N2Z7inj_iffC56Stdlib6ZArith4Znat3N2Z9is_nonnegC59OSSVerify5KrLib5BothW9ARepFrame>slots_disjointC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame;regions_sepC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrameCsize_of_class_factsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame;aregion_modC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep<aregion_infoC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrameCaregion_cells_frameC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore:xfree_freeC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore<farr_vs_userC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame<shlen_nonnegC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame8shad_sepC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame@afreearray_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame7xb_fitsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep:aslot_busyC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore7rz_gt16C1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW4ARep5xbusy01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep8xb_allocC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep;bstate_byteC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore=busy_of_xfreeC1?~~~~~~~~~~~~~~~K46Stdlib9micromega5Tauto8GFormula01K46Stdlib9micromega5Tauto8GFormula02c59OSSVerify5KrLib5BothW:AFreeStore>junk_of_u64arrC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore@busy_of_In_nodupC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ5qhdrsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail6ek_fstC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail4g_nbC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail6g_fullC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail5g_fstC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail4g_qbC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW<F_afree_tail3gqd01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeGeo=slots_sep_anyC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrameBbusy_of_Some_factsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame8awf_fitsC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore>undist_vs_userC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW;AFreeStoreKAaslots_update_genC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARepAslot_shadow_bytesC1?~~~~~~~~~~~~~~~C47Corelib5Lists7ListDef6repeatC56Stdlib6ZArith4Znat5Z2Nat2idC59OSSVerify5KrLib5BothW9ARepFrame6cb_appC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW;AFreeStoreKBslot_shadow_bbatchC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame<slot_alignedC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z8le_transC59OSSVerify5KrLib5BothW9ARepFrame>mod16_of_classC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW;AFreeStoreKGaslot_shadow_update_genC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrameCashadow_avail_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst9qsz_boundC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP=sec_untouchedC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP6is_secC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModelBst_after_enq_qfiltC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep=sec_same_freeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP8hs_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase9lb_removeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep=ablocks_xquarC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep>ablocks_xbatchC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase6hb_idsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7xb_userC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib4Spec8AsanCtrl6achunk02C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout7ao_fakeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout9ad_t_fakeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout;ad_fake_resC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout=ad_nodes_fakeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout=ad_store_fakeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout7ao_dtlsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP>fake_untouchedC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout9ad_t_dtlsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout;ad_dtls_resC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout=ad_nodes_dtlsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7ALayout=ad_store_dtlsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP8hf_frameC1?~~~~~~~~~~~~~~~C47Corelib4Init5Logic3iffC59OSSVerify5KrLib5BothW5ABase7ab_kindC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep<In_lb_removeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP9hf_blocksC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep9qnum_freeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModel:st_after_qC1?~~~~~~~~~~~~~~~C46Stdlib9micromega9SatDivModCZ_div_nonneg_nonnegC59OSSVerify5KrLib5BothW5ARepQ5AQUARC1?~~~~~~~~~~~~~~~C46Stdlib5Lists4List>rev_involutiveC59OSSVerify5KrLib5BothW9AFreeRead9last_app1C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ5qb_ksC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6ARepQP:qlast_app1C1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z7eqb_neqC59OSSVerify5KrLib5BothW5ARepQ;abatches_toC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6ARepQP?abatches_to_appC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeReadBbslots_nodup_splitC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6ARepQPAabatches_to_frameC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ4qhdrC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6ARepQP:qhdrs_consC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep<qcoupled_appC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z3ltbC56Stdlib6ZArith6BinInt1Z6ltb_ltC59OSSVerify5KrLib5BothW5ARepQ7aqcacheC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore=qfirst_reslotC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6ARepQP:qfirst_appC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore<qlast_reslotC1?~~~~~~~~~~~~~~~C46Stdlib5Lists4List:app_eq_nilC59OSSVerify5KrLib5BothW6ARepQP9qlast_appC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ<abatch_cellsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6ABytes<rw_cells_appC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6ARepQP<qhdrs_lengthC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame<u64arr_frameC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore9hd_qaddrsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep>qcoupled_drainC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z6ltb_geK59OSSVerify5KrLib4Spec8AsanCtrl6abatch01C1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore<qfirst_app_rC1?~~~~~~~~~~~~~~~C46Stdlib5Lists4List8rev_unitc59OSSVerify5KrLib5BothW:AFreeStore8junk_nilC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep<qcoupled_newC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore?busy_slot_rangeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP7sec_wf1C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase4ablkC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl<sec_map_sizeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP9sec_clearC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ASecFacts9sec_factsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl;needed_sizeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA6ITreeA5fp_leC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib6MState2MSC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4LibA6ITreeA:fp_le_reflC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore?aheap_pres_freeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7ah_fakeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW8AFreeRep?sec_chunks_freeC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW:AFreeModel5qfiltC1?~~~~~~~~~~~~~~~C46Stdlib7Sorting;Permutation@Permutation_reflC46Stdlib7Sorting;PermutationAPermutation_transC59OSSVerify5KrLib5BothW6AHeapP7arng_stC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore9arng_coreC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_arep?store_free_stmtC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep7fill_atC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib3Lib5Cells4cell04C1?~~~~~~~~~~~~~~~K46Stdlib9micromega7EnvRing5PExpr04C59OSSVerify5KrLib5BothW5ARepQ6aintalC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib5Frame3stkC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ARepQ9qprim_idsC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep8acompactC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib3Lib3Mem7mem_invC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW<F_afree_tail7dk_postC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z7le_reflC59OSSVerify5KrLib5BothW9ARepFrame9shlen_divC1?~~~~~~~~~~~~~~~c59OSSVerify5KrLib5BothW:AFreeStore5unbxFC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl8set_qlocC1?~~~~~~~~~~~~~~~C35stdpp6option;from_optionK46Stdlib9micromega5Tauto8GFormula0:K46Stdlib9micromega7EnvRing3Pol03K46Stdlib9micromega7EnvRing3Pol02K46Stdlib9micromega:ZMicromega;ZArithProof04C46Stdlib5Lists4ListCapp_removelast_lastC46Stdlib5Lists4List8in_splitK59OSSVerify5KrLib5BothW5ARepQ5qconc01C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl:is_primaryC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl7Q_CACHEC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl5Q_MAXC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib4Spec8AsanCtrl6abatch00C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst9AQ_GCACHEC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst6AQ_MAXC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst8AQ_MUTEXC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst8AIA_FLAGC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst8AIA_BASEC1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW4ARep6bstate03C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead;dummy_batchC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9AFreeRead8dummy_qbC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6ARepQP@size_of_class_24C1?~~~~~~~~~~~~~~~I4ELinuxProcessSemantics?LinuxProcessSem>RiscvSemantics=machine_state00C59OSSVerify5KrLib4Spec8AsanCtrl7Q_BATCHC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl=Q_BATCH_BYTESC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith4Znat5Nat2Z8inj_succC59OSSVerify5KrLib5BothW9AFreeRead3K24C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase3KLSC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW6AHeapP8SEC_UOFFC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW5ABase6abkind00C1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW5ARepQ5qconc00C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase;AFREE_STACKC1?~~~~~~~~~~~~~~~I59OSSVerify5KrLib5BothW<F_afree_tail3gqd00C1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep<ASTATS_WORDSC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW4ARep6AMAGICC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib4Spec8AsanCtrl5Q_MINC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst8AIA_SIZEC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst<AIA_MAP1_LENC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW7AQConst8AIA_MAP1C1?~~~~~~~~~~~~~~~K59OSSVerify5KrLib5BothW4ARep6bstate02C1?~~~~~~~~~~~~~~~C45stdpp7numbers1Z6eq_decC35stdpp9countable;Z_countableC59OSSVerify5KrLib5BothW5ABase9AINSTANCEC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase9ARELRO_LOC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW5ABase9ARELRO_HIC1?~~~~~~~~~~~~~~~C59OSSVerify5KrLib5BothW9ARepFrame9rt3_hullsC1?~~~~~~~~~~~~~~~K46Stdlib9micromega5Tauto4kind02C59OSSVerify5KrLib5BothW7AQConst5qsz_0C1?~~~~~~~~~~~~~~~C47Corelib7Classes?RelationClasses>iff_TransitiveI4ELinuxProcessSemantics?LinuxProcessSem<MemImageType7Segment00".
+Import ListNotations.
+Open Scope Z_scope.
+Local Ltac Z.euclidean_division_equations_cleanup ::= idtac.
+(* [comment removed for export] *)
+Notation Wf sp t UB gq nodes store lst eb gl :=
+  ([(sp - 4096, sp); (0xb7008, 0xb7030); (0xbb500, 0x13c530); (0x149d88, 0x149d8c); (ADEPOT_LO, ADEPOT_HI);
+    (t + 80, t + 112); (t + 2128, t + 2132); (t + 2784, t + 2792); (t + 2800, t + 3169);
+    (UB - 16, UB + 8); (shad UB, shad UB + gq);
+    (nodes, nodes + 1048576); (store, store + 8388608);
+    (lst, lst + qsz lst); (eb, eb + 8192); (gl, gl + 8)]%Z) (only parsing).      (* [comment removed for export] *)
+
+(* [comment removed for export] *)
+Section CANSEC1. Context {rc : runConstT}.
+(* [comment removed for export] *)
+Local Lemma aobj_int : forall a n, aobj a n -> 0x10000 <= n ->
+  6352896 <= a /\ a + n <= ATOP /\ exists k, 0 <= k <= 1 /\ a + n <= 2147446784 + k * 18446744073709551616 /\ 17594333495296 * k <= a.
+Proof.
+ltac2:(KReplay.run1 (kr_t_AFreeStore ()) ["CANSEC1"] "h04__x1h14__x2h21Hh31kh47__arithh54__ffh68__varmaph75__with84__x3h94__p1h:2H0h;2H1h<3H10h=2H2h>2H3h?2H4h@2H5hA2H6hB2H7hC2H8hD2H9hE2HnhF6__sat6hG1ahH1np;3p;1p;2p;4p;7p;6p;8p-1R0p10000p4p710p9P0p1000SR1p4p710p9P0P1p4p7210p9P0P1p4p73110p9P0p10011p4p710p9P0p1001ip4p710p8P0p1002JR1p4p710p8P0P1p4p7210p8p1002gp4p710R1p1003Dp4p710R0p8P1p1003`p4p710R1p8p1004>p4p710R2p1004\R3p4p710R4p8P2P3p4p7210R3p8p10055p4p70R5p1005lp4p710p8P5p1006Cp4p710p8P5P0p8P5p1006_p4p710p8P5p1007=p4p7210p8P5P1p8P5p1007Zp4p710p8P5p10086p4p710p8P5p1008Xp4p710p8P5p10095R6p4p710p8P5p1009UR7p4p710p8P5p100:2R8p4p710R9p8P5p100:Fp4p710p8P5p100:Zp4p710p8p100;6R5p4p73101R:p100;PR;p4p73110p8P:p100;iR<p4p73110p8P:p100<Ep4p710p8P:p100<XR=p4p7201p8P:p100<jp4p7201p8P:P8p4p73110p8P:p100=<R8p4p73110p8P:p100=PR>p4p73110p8P:p100=jp4p7201p8P5p4p710R:P;p4p710p8P:P<p4p710p8P:P4p8P:P3p8P:P9p8P:P8p4p710p8P:P>p4p710p8p100>=R>p4p710R:P2p8P:P4p8P:P3p8P:p100>Qp4p73110p8P>p4p741110R>p100>cp4p73101p8p100??p4p7210P1p8p100?kp4p710P0p8P7p4p7210R7P0p8P7P1p8p100@Cp4p7<111111111110P1p8p100@ep4p741110R1P5p4p7511100R7p8P7P1p8p100A>p4p741110R1P5p4p76111100R7p8P7P1p8P6p4p741110R6P5p4p771111100R1p8P1P6p8p100AVp4p741110R6P5p4p7:1111111100R5p8P5P6p8P=p4p7200R=P>p8P>P=p8g00Amj3yTg00Bdj12Tg00CIj1;Tg00Cgj20Tg00DCj1oTg00EAj17Tg00Efj1^Tg00F\j2BTg00G<j21Tg00GYj2?Tg00H6R=j28Tg00HQj2dTg00IBj2cTg00Icj1aTg00J<j2STg00JYj3LTg00K3j2`Tg00KZj2KTg00L6j2_Tg00L]j2]Tg00MCj2\Tg00Mij2[Tg00Nej1JTg00ODj2GTg00Omj3NTg00PVj2ZTg00QBj1xTg00Qbj3YTg00RBj1wTg00Rbj1vTg00S@j2XTg00S^j4HTg00T<j1uTg00TZj1tTg00UEj2PTg00Uhj1rTg00VJj3MTg00Vmj7qTg00WQj2pTg00X3j2nTg00XMj2mTg00Y9j3lTg00YXj4kTg00ZJj2UTg00Zmj3OTg00[Pj4VTg00[jj6iTg00\Nj4TTg00\iR>j2WTg00]Cj2hTg00]]j4gTg00^Hj7fTg00^lj7sTg00_Pj8eTf0R6#2#2p=D%26#2#2#2#2#2#2#2p=5%76#7#7#7p=9%76#7p=b%26#2#2#2p=@f2R5f1R1/06'8p=Eg00`4R7g00`RR07L6p=Qf3R:/051016'Wp=31816,85p=R1051/86,8:p=:1006p=C1151/06p=F1016,85,8:p=I1h76p=A1051/86p=61U76p==P5g00a0R3g00aOR4P4g00aoR2P7P1g00bOP6Cgg00c6Ffp=4P5P3P4P4P2P1P6Fsp=>P:P3P4P4P2P5P1P6Gep=<1W16,85p=jp,2rcR8?y16g00cVR9#2R<#2R;#D#5R?#2R@#2#DRA#;RB/01RC%o8%79RD#7#9#9#9RE#2#7#bRF#7#9#2#D#@#5#5#;%^8R8'0RG%7E#9#9#2#D#@#5#5#;RE7E8P=f4RH%;?R?'B#Q10?HRI11H:RJP8PJ%@F#5#;RF%9@#9#9#9#2#D#@#5#;R@PHC3PJPB%79#2#@#9#@#5#;RJPHC37RIC:f5RI11IH%C6%;9RK7E6RLf6RM%5A#5#5#5#5#5#;RA,?6,1FRN7FI1?@6ROPMCIX37#A76856JP51BM?#Qf7RP,0?RQ11PMRRP8PRPFP@PPC3PRPBPJPPC37RQC:P=f8RQ,0?RR11QPRPPPPFP@PQC3PPPBPJPQC37RR768f9RR11RQPLf:RP?FRNPOPPCIX37#A76856JP610?Pf;RR/1PRPPPPFP@PRC3P?PRPPPBPJPRC3C:768P=f<RP/1RRR/08PRPFP@PPC3P?PPPRPBPJPPC3C:f=RR11RPPLf>RS/1RRRPN10OSC:X37#A76856JP610R8f?RR/1SRSPFP@PRC3P?PRPSPBPJPRC3C:P=f@R=/1RRRPFP@P=C3PRPBPJP=C396?=fARR11R=PLfBR=/1RRSPN10O=C:X37#A76856JP6PSPFP@P=C3fCRS11S=PBPJPSC356?fDR=,0J11=SRT/08RUPLfERV/1=RWPN10OVC:X37#ARX'81d=?%C=%C?fFRY/B?RZ#C[[1cV?%Q?R[#a1SY?,??/1Z9L7Y[1`Y?1K0?fGRZ/B?R\#C1K\?'8[1_Z?1K?0fHR\/B?R],K??E]0[1]\?fIR\/S?#Q\[1\\?fJR]/B?=L7]\[g00d;1[]?R]eP]g00dWR]g00eCR[#JR^#JR_#JR`#J,G71G7^R^1G7_5N75N7g00ebR_'Z%x]Ra3Y%w]RbP7%v7RcP11X75RdCH%u7Re%t7Rf%=BRg1P7DRD54f%r4RhPf%=?1P79R954fRiPfP3P4P4P2AM79D=4fg%=J=4f9RgFq5>fPhPfPiPhPgC<C<C<1pf2RgP6P5g00fNRjg00fnRk'n1m65=LjkdAl701CkRkb5b6b7X07X1710?1Rj1115Rl/0B10J13j10?510J:[[\C^07^17P6fKRCfLP\PQPRO5b410JCeb<bDbCbBbAb2bFPUPXPaPbP7PdP11X7:RXCHPePf1P7<9M79R<=4fDRDPhPDC<PgPkb5b6b7X07X17X871161RD/0510l:[^07^17^87P6P8P=PVPMO4b4P>10TF10@=PLAFYVNPOPYCIX37#AP110WFP7PLAFZYNPOPZCIX37ROP0PaPbP7PdP1PcCHPePf%=FRd94f<PhPfPiPh1U70Ri=4fi%=KRN94fiRL5>f%=ARW9O7i9M7d94f<%=@R==O7i=4f95>f5>fC<C<PgPkb5b6b7X07X1710DF%CKRD9600115:Ri1?0A,1F1?@0/05C:\j[^07^17P6PYPZP1PPO4b4CVW2P6O110@VP7POPKp-0RO1G7`1G7[9N7^5N7/Z_=Y]aPbP7P7PXP5PcCHP1PcCHPePfPfP3P4P4P2PIEi1P7;R;%=E54f5>fPhPfA4f=9PhPfA4f<;PhA4fNN9>fLAO7NW9M7d94f<AO7=N=4f95>f5>fC<C<C<PgPkb5b6b7X07X17X87W9AE:5E10@110iHAEDKK1?KA,1F9F:H1?@KP:CI[[[^07^17^87^9OP6PGP8PYPZPSP1PQO7b4CVW2P6O1n200100001021100011000CTCTW@W?P1P6O2n2001000010121000000W2W>P1P6O2n2001000010121000000W2W=P1P6O2n2011000010121000000W2W;P1P6O2n2011000010121000000b:WEW2XH7XG7o"). Qed.
+Local Lemma aobj4_int : forall a, aobj a 4096 ->
+  4096 <= a /\ a + 4096 <= ATOP
+  /\ (exists k, 0 <= k <= 1 /\ a + 4096 <= 2147446784 + k * 18446744073709551616 /\ 17594333495296 * k <= a)
+  /\ (exists j, 0 <= j <= 1 /\ a + 4096 <= 65536 + j * 18446744073709551616 /\ 6352896 * j <= a).
+Proof.
+ltac2:(KReplay.run1 (kr_t_AFreeStore ()) ["CANSEC1"] "h04__x1h11jh21Hh31kh47__arithh54__ffh68__varmaph75__with84__x2h94__p1h:2H5h;2H0h<2H1h=2H2h>2H3h?2H4h@2_HhA1ap;1p;3p;2p;4p;6p;7p;8p-1R0p10000p4p710p9P0p1000SR1p4p710p9P0P1p4p7210p9P0P1p4p73110p9P0p10011p4p710p9P0p1001ip4p710p8P0p1002JR1p4p710p8P0P1p4p7210p8p1002gp4p710R1p1003Dp4p710R0p8P1p1003`p4p710R1p8p1004>p4p710R2p1004\R3p4p710R4p8P2P3p4p7210R3p8p10055p4p70R5p1005lp4p710p8P5p1006Cp4p710p8P5P0p8P5p1006_p4p710p8P5p1007=p4p7210p8P5P1p8P5p1007Zp4p710p8P5p10086p4p710p8P5p1008Xp4p710p8P5p10095R6p4p710p8P5p1009UR7p4p710p8P5p100:2R8p4p710R9p8P5p100:Fp4p710p8P5p100:Zp4p710p8p100;6R5p4p73101R:p100;PR;p4p73110p8P:p100;iR<p4p73110p8P:p100<Ep4p710p8P:p100<XR=p4p7201p8P:p100<jp4p7201p8P:P8p4p73110p8P:p100=<R8p4p73110p8P:p100=PR>p4p73110p8P:p100=jp4p7201p8P5p4p710R:P;p4p710p8P:P<p4p710p8P:P4p8P:P3p8P:P9p8P:P8p4p710p8P:P>p4p710p8p100>=R>p4p710R:P2p8P:P4p8P:P3p8P:p100>Qp4p73110p8P>p4p741110R>p100>cp4p73101p8p100??p4p7210P1p8p100?kp4p710P0p8P7p4p7210R7P0p8P7P1p8p100@Cp4p7<111111111110P1p8p100@ep4p741110R1P5p4p7511100R7p8P7P1p8p100A>p4p741110R1P5p4p76111100R7p8P7P1p8P6p4p741110R6P5p4p771111100R1p8P1P6p8p100AVp4p741110R6P5p4p7:1111111100R5p8P5P6p8P=p4p7200R=P>p8P>P=p8g00Bdj12Tg00CIj1>Tg00Amj3mTg00DCj1lTg00EAj1:Tg00Efj1\Tg00Cgj20Tg00F\j2TTg00JYj3ITg00G<j21Tg00GYj2?Tg00H6R=j26Tg00QBj1aTg00RBj1_Tg00S@j2OTg00T<j1^Tg00TZj1]Tg00UEj2JTg00Uhj1[Tg00WQj2ZTg00X3j2YTg00XMj2XTg00Y9j3WTg00YXj4VTg00Rbj1UTg00S^j4STg00VJj3ETg00ZJj2RTg00[Pj4GTg00Nej1NTg00ODj2KTg00Omj3QTg00PVj2kTg00Qbj3jTg00[jj6iTg00\Nj4MTg00\iR>j2gTg00]Cj2fTg00]]j4eTg00^Hj7dTg00_Pj8cTg00^lj7hTg00Zmj3bTf0R6#2#2p=F%26#2#2#2#2#2#2#2p=8%:6#:#:#:p=<%:6#:p=`%26#2#2#2p=Bf2R5f1R1/06'6p=Hf3R7/051016'gp=41616,65p=L1051/66,67p=D1051/66p=7f4R010751016'6'6p=5g00`4R:/f6p=91R:6p=@P5g00a0R3g00aOR4P4g00aoR2P:P1g00bOP6Ceg00c6Fdp=3P7P3P4P4P2P5P1P6Gcp=;1151/06p=CP5P3P4P4P2P1P6Fhp==Ab:16p=A1016,65,67p=Pp,2rcR8g00cVR9#2R<#2#F#8R;#>R?7m6%l8%:9R@#:#<#<#<RA#2#:#`RB#:#<#2#F#B#8#8#>%\8R8'0RC%:A#<#<#2#F#B#8#8#>RA7H8P=1T5?g00`RRD5I:10?5RE115?RFP8PF%BB#8#>RB%2;R;#<#<#<#<#2#F#B#8#>RGP5C4PF%2;#FR;#>RH%:9#2#B#<#B#8#>RIP5C47LECD117?RE%>9RJ,0697D6RK110?RL%8;#8#8#8#8#8#>R;,?6RM,1BRN1?G6ROP0D5X3:#9PKPL11HMRM1?I6RLP0D5X1:#9'677897?7P11T0?=I:Df5RP,0?RQ11P?RRP8PRPBPGPPC4PRPHPIPPC47LQCDP=f6RQ,0?RP11Q?RRPRPBPGPQC4PRPHPIPQC47LP778f7RP11P?PKf8RP/1?RRPNPOPPD5X3:#9PKPRPMPLPPD5X1:#9'677857?P610?Pf9RR/1?RSPSPBPGPRC4P?PRPSPHPIPRC4CD778P=f:RR/1?RS/08PSPBPGPRC4P?PRPSPHPIPRC4CDf;RS11S?PKf<RS/1?RTPNPOPSD5X3:#9PKPTPMPLPSD5X1:#9'677857?P610T8f=RT/1?RUPBPGPTC4P?PTPUPHPIPTC4CDP=f>RT/1?RUPBPGPTC4PUPHPIPTC497?Tf?RT11T?PKf@RT/1?RUPNPOPTD5X3:#9PKPUPMPLPTD5X1:#9'677857?P6PUPBPGPTC4fARU11U?PHPIPUC457?fBRU,0?RV11U?RW/08RXPKfCRY/1?RZPNPOPYD5X3:#9R[PKPZPMPLPYD5X1:#9R\'6R]'6g00dWR^#aR_%_^R`1O:1Ra%^:Rb%]:Rc%@?Rd1J:9R953cRe%[4RfPeC;1Zc2RgP6P5g00fNRhg00fnRi'Y1X65=IhidAW:D1CVRib5b6b7X0:10?610?1Rh[^0:P6PYPRO2b4PXP]P_P`P:1O:5R]P1%U:RXCSPbPcAE:9dRd1J:<53cR<PfP<C;PgPib5b6b7X0:X8:116?R</01AC1?5[^0:^8:P6P8PYPQO3b4P[P\P>10WB10GUPKfDR\/1?R[PNPOP\D5X3:#9P110ZBP:PKfERZ/1?RQPNPOPZD5X3:ROPDP_P`PaPbPc%@BRN93cdPfPcPePf1R:DRR=3cR%@JRj93cRRk5=cRl%@;Rm,ARRn9E:N93cd%@GRo/AR=3c95=c5=cC;C;PgPib5b6b7X0:10<B10DJRp97DDRqPF1?D;Rr,1B1?GDP5D5\h[^0:P6PZP1PSO3b4CGW2P6O110GYP:POPJp-0ROg00eCRs#NRt#N#N,K:1K:t1K:s5Q:5Q:g00eb'k=j^_R^P`P:PXP1P]CSR]PbPcPcP3P4P4P2P0Ei1J:@R@%@A53c5=cR0PfPcA3co9PfPcA3cd@R@PfA3cjj9=ckRk1AjmRm9E:N93cd1Aoj=3c95=c5=cC;C;C;PgPib5b6b7X0:X8:W9AH51ARA10G110F7RoAHpJJRpPE1?J;R;,1B1?GJP7D5[[[^0:^8:^9OP6PCP8PZPYP1PPO6b4CGW2P6O1n200100001021100011000P=PVPWPHPIPUC4PKP[PMPLP\D5X1:#9P610?\PQPHPIPZC4P>fFR>?C?H10I>PKfHR>?C?MPLP>CPX1:#9P6fGR>?C?HP:PKfIRK?C?MPLPKCPX1:RLPDP_P`PaPbPc%@HRa93cdPfPcPePfAE:an93cd%@IRn/AR=3c95=c9=clC;C;PgPib5b6b7X0:10<HPqPF11Hr1?IDP5D5\h[^0:P6PKP1PTO3b4CGW:P6O110I>P:PLPJP^P`P]PbPcP0PfPcA3cn9PfPcP@PfAE:am93cd1Anj=3c95=c9=ckC;C;C;PgPib5b6b7X0:X8:X9O10I1PpPE11H;1?IJP7D5\o[\A^0:^8:^9OP6PCP8PKP>P1PSO6b4CGW:P6O1n200100000021100011000W2W@P1P6O2n2001000000121000000CMCMCMW:W?P1P6O2n2001000010121000000W2W>P1P6O2n2011000010121000000W2W=P1P6O2n2011000010121000000W2W<P1P6O2n2011000010121000000b;W2XA:o"). Qed.
+
+Lemma aheap_pres_free : forall (CI : list (Z * Z)) sp t AB S UB gq nodes store res ctx lo grz ssz lst eb gl (LB : list ablock) m m',
+  kfactsF sp t AB S UB gq nodes store res ctx lo grz ssz lst eb gl ->
+  Forall (fun iv => 0x10000 <= fst iv /\ (snd iv <= ADEPOT_LO \/ ADEPOT_HI <= fst iv) /\ snd iv <= AIMG_HI
+                 /\ (snd iv <= 0xb6f70 \/ 0xb7030 <= fst iv)
+                 /\ (snd iv <= 0xbb500 \/ 0x13c530 <= fst iv)
+                 /\ (snd iv <= 0x149d88 \/ 0x149d8c <= fst iv)) CI ->
+  munch (Wf sp t UB gq nodes store lst eb gl) m m' -> wmono bsegs m m' ->
+  (forall b, In b LB -> disjoint_from (Wf sp t UB gq nodes store lst eb gl) (ab_addr b) (ab_size b)) ->
+  (forall cls FA sz, In (mkABlock (ABFake cls) FA sz) LB -> forall a', FA <= a' < FA + sz ->
+       disjoint_from (Wf sp t UB gq nodes store lst eb gl) (shad a') 1) ->
+  shad UB + gq <= shad ATOP ->
+  aheap_pres CI LB sp m m'.
+Proof.
+intros CI sp t AB S UB gq nodes store res ctx lo grz ssz lst eb gl LB m m' KF CIOK MU WM HBK HFK PSP a Ha CL.
+split; [| intros Hw; apply WM; exact Hw].
+apply MU. rewrite wa_unsigned by exact Ha.
+pose proof KF as KF'. destruct KF' as (F_lo & F_t & F_res & F_slot & F_sh & F_ns & F_ctx & F_lst & F_eb & F_gl).
+destruct CL as [ST | [CIa | [BLK | SH]]].
+-
+eapply disjoint_outside; [eapply (KF_hi _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF a 1); lia | lia].
+- destruct CIa as (iv & Hiv & R). pose proof (proj1 (Forall_forall _ _) CIOK iv Hiv) as (Q1 & Q2 & Q3 & Q4 & Q5 & Q6). cbn [fst snd] in *.
+eapply disjoint_outside; [eapply (KF_img _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF a 1); unfold AIMG_HI in *; lia | lia].
+- destruct BLK as (b & Hb & R). eapply disjoint_outside; [exact (HBK b Hb) | lia].
+- destruct SH as (a' & Ha' & ->).
+pose proof (shad_div a') as SD. pose proof (shad_div ATOP) as SDs. unfold ASHOFF in *.
+destruct Ha' as [ST | [CIa | FK]].
++ eapply disjoint_outside; [eapply (KF_shad _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF (shad a') 1) | lia].
+all: atop_facts; clear -ST SD SDs F_sh F_lo PSP; Z.div_mod_to_equations; lia.
++ destruct CIa as (iv & Hiv & R). pose proof (proj1 (Forall_forall _ _) CIOK iv Hiv) as (Q1 & Q2 & Q3 & _). cbn [fst snd] in *.
+eapply disjoint_outside; [eapply (KF_low _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF (shad a') 1) | lia].
+all: unfold AIMG_HI in *; clear -R SD Q1 Q3; Z.div_mod_to_equations; lia.
++ destruct FK as (cls & FA & sz & Hin & R). eapply disjoint_outside; [exact (HFK cls FA sz Hin a' R) | lia].
+Qed.
+
+Lemma busy_slot_range : forall L st X b, awf L st X -> In b (x_busy X) ->
+  1 <= xb_class b < K_NUM_CLASSES /\ 0 <= xb_slot b < ndist st (xb_class b).
+Proof.
+  intros L st X b WF Hb. pose proof WF as WF0. destruct WF0 as (_ & _ & _ & _ & _ & PERC & _ & BUSY & _).
+  destruct (BUSY b Hb) as [HC _]. split; [exact HC|].
+  destruct (PERC (xb_class b) HC) as (_ & _ & _ & _ & _ & _ & _ & _ & _ & _ & _ & RANGE).
+  apply RANGE. apply in_or_app. right. apply in_or_app. right. unfold busy_slots. apply in_map. apply List.filter_In.
+  split; [exact Hb| apply Z.eqb_refl].
+Qed.
+
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+Definition xfree (X : aconc) (app : bool) (c k n b1 ctx : Z) (l1 l2 : list xbusy) (k24 : Z) : aconc :=
+  if app then xquar X c k n b1 ctx l1 l2 else xbatch (xquar X c k n b1 ctx l1 l2) k24.
+
+Lemma xfree_free : forall X app c k n b1 ctx l1 l2 k24 c', xc_free (x_cls (xfree X app c k n b1 ctx l1 l2 k24) c') = xc_free (x_cls X c').
+Proof. intros. unfold xfree, xbatch, xquar. destruct app; cbn; [reflexivity|]. destruct (Z.eqb_spec c' K_BATCH_CLASS) as [->|]; reflexivity. Qed.
+Lemma xfree_cache : forall X app c k n b1 ctx l1 l2 k24 c',
+  xc_cache (x_cls (xfree X app c k n b1 ctx l1 l2 k24) c') =
+  if (negb app) && (c' =? K_BATCH_CLASS) then removelast (xc_cache (x_cls X K_BATCH_CLASS)) else xc_cache (x_cls X c').
+Proof.
+  intros. unfold xfree, xbatch, xquar. destruct app; cbn; [reflexivity|]. destruct (Z.eqb_spec c' K_BATCH_CLASS) as [->|]; reflexivity.
+Qed.
+Lemma busy_of_xbatch' : forall X k24 c' k',
+  busy_of (xbatch X k24) c' k' = if (K_BATCH_CLASS =? c') && (k24 =? k') then Some (bbatch k24) else busy_of X c' k'.
+Proof.
+  intros. unfold busy_of, xbatch. cbn [x_busy List.find xb_class xb_slot bbatch].
+  destruct ((K_BATCH_CLASS =? c') && (k24 =? k')); reflexivity.
+Qed.
+
+Lemma busy_of_xfree : forall L st X p c k n b1 ctx l1 l2 app k24 c' k',
+  x_busy X = l1 ++ bfreed p c k n b1 ctx :: l2 -> awf L st X ->
+  busy_of (xfree X app c k n b1 ctx l1 l2 k24) c' k' =
+    if (negb app) && (K_BATCH_CLASS =? c') && (k24 =? k') then Some (bbatch k24)
+    else if (c =? c') && (k =? k') then Some (bquar c k n b1 ctx) else busy_of X c' k'.
+Proof.
+  intros L st X p c k n b1 ctx l1 l2 app k24 c' k' XB WF. unfold xfree. destruct app; cbn [negb andb].
+  - apply (busy_of_xquar L st X p c k n b1 ctx l1 l2 XB WF).
+  - rewrite busy_of_xbatch'. destruct ((K_BATCH_CLASS =? c') && (k24 =? k')); [reflexivity|].
+    apply (busy_of_xquar L st X p c k n b1 ctx l1 l2 XB WF).
+Qed.
+
+(* [comment removed for export] *)
+Lemma farr_vs_user : forall L c'' c0 A k P Psz,
+  aregion L c0 <= P -> P + Psz <= aregion L c0 + K_FREEARR_OFF ->
+  aregion L c'' + K_FREEARR_OFF <= A -> A + k <= aregion L c'' + K_REGION ->
+  A + k <= P \/ P + Psz <= A.
+Proof.
+  intros L c'' c0 A k P Psz P1 P2 A1 A2. unfold aregion, K_FREEARR_OFF, K_REGION in *. change (2^32) with 4294967296 in *.
+  destruct (Z.lt_ge_cases c'' c0); [left| right]; nia.
+Qed.
+Lemma undist_vs_user : forall L c'' c0 A k P Psz alloc0,
+  aregion L c0 <= P -> P + Psz <= aregion L c0 + alloc0 -> alloc0 <= K_FREEARR_OFF ->
+  (c'' = c0 -> aregion L c0 + alloc0 <= A) ->
+  aregion L c'' <= A -> A + k <= aregion L c'' + K_FREEARR_OFF ->
+  A + k <= P \/ P + Psz <= A.
+Proof.
+  intros L c'' c0 A k P Psz alloc0 P1 P2 AL E A1 A2. unfold aregion, K_FREEARR_OFF, K_REGION in *. change (2^32) with 4294967296 in *.
+  destruct (Z.eq_dec c'' c0) as [->|NE]; [right; specialize (E eq_refl); lia|].
+  destruct (Z.lt_ge_cases c'' c0); [left| right]; nia.
+Qed.
+
+(* [comment removed for export] *)
+Lemma arng_core : forall L RNG s s', same_core s s' -> Permutation (sec_chunks_of s') (sec_chunks_of s) -> arng L RNG s -> arng L RNG s'.
+Proof.
+  intros L RNG s s' (_ & _ & _ & _ & _ & NR & _ & GC & M1 & M2 & M3 & M4) P (R1 & R2 & R3 & R4 & R5 & R6 & R7 & R8 & R9 & RC & RPA & RSC & RPSH).
+  unfold arng. repeat (split; [assumption|]). split; [| split; [rewrite NR; exact RPA| split; [eapply RSEC_perm; [apply Permutation_sym; exact P| exact RSC]| exact RPSH]]].
+  intros c' Hc'. cbv zeta. destruct (Z.eq_dec c' K_BATCH_CLASS) as [->|NE].
+  - rewrite M1, M4. exact (RC K_BATCH_CLASS Hc').
+  - rewrite (GC c' NE). exact (RC c' Hc').
+Qed.
+
+Definition unbxF {P : Prop} (b : boxed P) : P := match b with Box _ p => p end.
+
+(* [comment removed for export] *)
+Lemma busy_of_In_nodup : forall L st X y, awf L st X -> In y (x_busy X) -> busy_of X (xb_class y) (xb_slot y) = Some y.
+Proof.
+  intros L st X y WF Hy.
+  destruct WF as (_ & _ & _ & _ & _ & PERC & _ & BUSY & _). destruct (BUSY y Hy) as [CL _].
+  destruct (PERC (xb_class y) CL) as (_ & _ & _ & _ & _ & _ & _ & _ & _ & _ & ND & _).
+  apply NoDup_app_l in ND. apply NoDup_app_l in ND. unfold busy_slots in ND. unfold busy_of.
+  remember (x_busy X) as bs eqn:E. clear E BUSY PERC. induction bs as [|b bs IH]; [destruct Hy|].
+  cbn [List.find]. cbn [List.filter] in ND. destruct Hy as [<-|Hy].
+  - rewrite !Z.eqb_refl. reflexivity.
+  - destruct (Z.eqb_spec (xb_class b) (xb_class y)) as [EC|NC]; cbn [andb].
+    + cbn [map] in ND. inversion ND; subst.
+      destruct (Z.eqb_spec (xb_slot b) (xb_slot y)) as [EK|NK].
+      * exfalso. apply H1. rewrite EK. apply in_map. apply List.filter_In. split; [exact Hy| first [apply Z.eqb_refl| rewrite EC; apply Z.eqb_refl]].
+      * apply IH; [exact Hy| assumption].
+    + apply IH; [exact Hy| exact ND].
+Qed.
+
+Lemma qaddrs_reslot : forall L ql qz ks, qaddrs L (ql ++ [mkQB (qb_slot qz) ks]) = qaddrs L (ql ++ [qz]).
+Proof. intros. unfold qaddrs. rewrite !map_app. reflexivity. Qed.
+Lemma qfirst_reslot : forall L ql qz ks, qfirst L (ql ++ [mkQB (qb_slot qz) ks]) = qfirst L (ql ++ [qz]).
+Proof. intros. unfold qfirst. rewrite qaddrs_reslot. reflexivity. Qed.
+Lemma qlast_reslot : forall L ql qz ks, qlast L (ql ++ [mkQB (qb_slot qz) ks]) = qlast L (ql ++ [qz]).
+Proof. intros. unfold qlast. rewrite qaddrs_reslot. reflexivity. Qed.
+Lemma qfirst_app_r : forall L qs q, qfirst L (qs ++ [q]) = match qs with [] => abatch_addr L (qb_slot q) | _ => qfirst L qs end.
+Proof. intros L [|q0 qs] q; reflexivity. Qed.
+Lemma hd_qaddrs : forall L d qs, qs <> [] -> hd d (qaddrs L qs) = qfirst L qs.
+Proof. intros L d [|q qs] NE; [congruence| reflexivity]. Qed.
+Lemma junk_nil : forall m A, 0 <= A -> A <= 2^64 -> junk_at m A 0.
+Proof.
+  intros m A H0 H1. exists []. split; [split; [cbn; tauto|]|]; unfold bytes_at, wr_at; cbn; (split; [lia|]; split; [lia|]; intros i Hi; lia).
+Qed.
+
+Lemma junk_of_u64arr : forall m A ws, u64arr bsegs m A ws -> junk_at m A (8 * Z.of_nat (length ws)).
+Proof.
+  intros m A ws U. pose proof (junk_of_cells m A _ (rw_cells_of_u64arr m A ws U)) as J. cbn [cells_size csize] in J.
+  rewrite Nat.add_0_r, Nat2Z.inj_mul in J. exact J.
+Qed.
+
+Lemma rz_gt16 : forall n, 0 <= n -> 16 < rz_size n -> 32 <= rz_size n.
+Proof. intros n Hn H. pose proof (rz_size_facts n Hn) as [_ M]. Z.div_mod_to_equations. lia. Qed.
+
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+Lemma ek_pre_b_hi : forall ek RNG t nb lst n hm m, ek_pre ek RNG t nb lst n hm m -> 0x10007fff8000 <= ek_b ek lst.
+Proof.
+  intros ek RNG t nb lst n hm m EK.
+  destruct ek as [nx bsz cnt hs cnt24' maxc' csz' stj' | full nx bsz cnt24 maxc csz stj idxw chunks spacebeg b hs0]; cbn [ek_pre ek_b] in *.
+  - destruct EK as (NB1 & LB & CNT & BSZ & BSZN & NX & LA & LEN & LJ & L0 & L1 & DTL & DHL & CR' & STS' & RL). exact L0.
+  - destruct EK as (FULL & SB & CR & CH & LCH & CNT & NTH & IXS & STS & HB & BJ & SBP & B0 & BL1 & DTB & DTL & DBL & DHB & DHL & RB). exact B0.
+Qed.
+
+Section S.
+Variable DI : ADepotIface.
+Variables (ASEC : alayout -> astate -> aconc -> amem -> Prop) (AFK : alayout -> list ablock -> amem -> Prop).
+Hypothesis HL : ahole_laws (AHQ DI ASEC AFK).
+Variable CI : list (Z * Z).
+Hypothesis CI_OK : Forall (fun iv => 0x10000 <= fst iv /\ (snd iv <= ADEPOT_LO \/ ADEPOT_HI <= fst iv) /\ snd iv <= AIMG_HI
+                                  /\ (snd iv <= 0xb6f70 \/ 0xb7030 <= fst iv)
+                                  /\ (snd iv <= 0xbb500 \/ 0x13c530 <= fst iv)
+                                  /\ (snd iv <= 0x149d88 \/ 0x149d8c <= fst iv)) CI.
+
+Theorem store_free : store_free_stmt DI ASEC AFK CI.
+Proof.
+unfold store_free_stmt. intros L RNG ra sp gp tp s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 F fc m st LB X Q p c k n b1 ctx A lo k24 l1 l2 stj chunks.
+cbv zeta. intros ALO ARNG AR AQ BL HFK XB HIN N1 NEWF NOREC EK DK CEIL LO ms' PM. unfold AFREE_STACK in LO.
+set (st1 := set_live (delete p (a_live st)) st) in *.
+set (st2 := st_enq st1 (CPrim c n)) in *.
+set (ek := ek_of L st X Q n k24 stj chunks) in *.
+set (g := g_of L st Q (ek_delta ek n)) in *.
+pose proof AR as AR0. destruct AR0 as (WF & RT & INST & THR & CLS & HQ & HS & HD & HRO & HRT2 & AVL & RT3).
+cbn [ah_quar ah_sec ah_depot AHQ] in HQ, HS, HD.
+destruct THR as (T0 & T40 & CACHES & CSTATS & STATS0 & UNW).
+destruct (freed_range L st X p c k n b1 ctx l1 l2 WF XB) as [HC KR].
+pose proof (freed_live L st X p c k n b1 ctx l1 l2 XB WF) as (LIVE & N0 & FIT0 & B10 & AT0 & CTX0).
+pose proof (chunk_geo L st X c k n ALO WF HC KR (proj1 N0) FIT0) as (HM16 & UB16 & ABUB & ABHM & HLO & UBS & ABCE & HHI & N65 & NQM & ABLO & RUP & RUP8 & S8).
+pose proof (slot_geo L st X c k ALO WF HC KR) as (S16 & SM16 & AL16 & G1 & G2 & G3 & G4 & G5 & G6 & G7 & G8 & R8 & M8).
+pose proof (slot_sep_objects L st X c k ALO WF HC KR) as (DT & DC & DN & DSO & DF).
+pose proof (chunk_shadow_geo L st X c k n ALO WF HC KR (proj1 N0) FIT0) as (SE & GR3 & GE & G0 & GFS & SHLO & SHHI & SHM1 & SHM2).
+pose proof (rz_size_facts n (proj1 N0)) as [RZ1 RZ2].
+pose proof (alayout_t L ALO) as (TL1 & TL2 & TL3 & TL4).
+pose proof (alayout_ctx L ALO) as (CL1 & CL2 & CL3 & CL4 & CL5).
+pose proof (alayout_depot L ALO) as (DL1 & DL2 & DL3 & DL4 & DL5 & DL6 & DL7 & DL8 & DL9 & DL10).
+pose proof (alayout_stack L ALO) as (STK1 & STK2 & STK3).
+pose proof (alayout_space L ALO) as (SP1 & SP2 & SP3 & SP4).
+pose proof (ao_res L ALO) as RES. pose proof (ao_t L ALO) as OT. pose proof (ao_ctx L ALO) as OC. pose proof (ao_nodes L ALO) as ON. pose proof (ao_store L ALO) as OS.
+pose proof (aobj4_int _ OT) as (_ & _ & [kT TBND] & [jT TIMG]).
+pose proof (aobj_int _ _ OC ltac:(clear; lia)) as (Ci & _ & [kC CBND]). pose proof (aobj_int _ _ ON ltac:(clear; lia)) as (Ni & _ & [kN NBND]).
+pose proof (aobj_int _ _ OS ltac:(clear; lia)) as (Si & _ & [kS SBND]). pose proof (ao_res_hi L ALO) as RHI.
+unfold aobj in RES, OT, OC, ON, OS. pose proof (ao_space L ALO) as RSP.
+pose proof (ad_t_res L ALO) as D_t_res. pose proof (ad_nodes_res L ALO) as D_n_res. pose proof (ad_store_res L ALO) as D_s_res.
+pose proof (ad_ctx_res L ALO) as D_c_res. pose proof (ad_ctx_nodes L ALO) as D_c_n. pose proof (ad_ctx_store L ALO) as D_c_s.
+unfold adisj in D_t_res, D_n_res, D_s_res, D_c_res, D_c_n, D_c_s.
+assert (D_c_t : al_ctx L + 65536 <= al_t L \/ al_t L + 4096 <= al_ctx L) by (pose proof (ad_t_ctx L ALO) as X1; unfold adisj in X1; clear -X1; lia).
+box DL7. box DL8. box DL9. box DL10. box D_t_res. box D_n_res. box D_s_res. box D_c_res. box D_c_n. box D_c_s. box D_c_t. box CL5.
+box DT. box DC. box DN. box DSO. box DF.
+word_range sp SPR.
+set (S := size_of_class c) in *. set (AB := aslot_addr L c k) in *. set (UB := AB + rz_size n) in *.
+assert (EAB : AB = aslot_addr L c k) by reflexivity. assert (EUB : UB = AB + rz_size n) by reflexivity. assert (ES : S = size_of_class c) by reflexivity.
+assert (EHM : fhm L c k n = UB - 16) by (unfold fhm; subst AB UB; clear; lia).
+assert (UB16' : UB mod 8 = 0) by (clear -UB16; Z.div_mod_to_equations; lia).
+rewrite EHM in PM.
+destruct (read_chunk L st X m p c k n b1 ctx l1 l2 ALO WF XB (conj (proj1 (proj2 (proj2 (CLS c HC)))) (proj2 (proj2 (proj2 (CLS c HC))))))
+as (_ & _ & UJR & LH & SHA & _ & SHR).
+fold AB in UJR, LH, SHA, SHR. fold UB in UJR, LH, SHR. fold S in UJR, SHR.
+pose proof AQ as AQ0. destruct AQ0 as ([QK MX] & [QC ABL] & [GCQ ABG] & (FL & IAS & IAM) & CP & NUM).
+pose proof NUM as NUM0. destruct NUM0 as (NB1 & NB2 & NF & NC & NM).
+pose proof CP as CP0. destruct CP0 as (LN1 & LN2 & _ & _ & ND2 & BSI & _).
+pose proof (st_enq_bytes st p (CPrim c n) L X Q k24 stj chunks) as SB. cbn [chunk_size] in SB.
+assert (CNT : enq_app st1 (CPrim c n) = None -> 0 < c_count (get_cls st K_BATCH_CLASS)).
+{ intros E. destruct (enq_is_app st) eqn:EA.
+- exfalso. assert (EA1 : enq_is_app st1 = true) by exact EA. destruct (proj1 (enq_is_app_spec st1 (CPrim c n)) EA1) as [s Hs]. congruence.
+- exact (proj2 (proj2 (proj2 (proj2 (proj2 (proj2 (proj2 (NEWF eq_refl)))))))). }
+specialize (SB CNT). fold st1 st2 ek in SB. destruct SB as (SB1 & SB2 & SB3).
+assert (ED0 : 0 <= ek_delta ek n /\ ek_delta ek n <= n + 8192) by (subst ek; unfold ek_of; destruct (enq_is_app st); cbn [ek_delta]; lia).
+assert (EBK : ek_b ek (qlast L (q_loc Q)) = qlast L (q_loc Q) \/ (enq_is_app st = false /\ ek_b ek (qlast L (q_loc Q)) = abatch_addr L k24)).
+{ subst ek. unfold ek_of. destruct (enq_is_app st) eqn:EA; cbn [ek_b]; [left; reflexivity| right; split; reflexivity]. }
+assert (EBB : ek_b ek (qlast L (q_loc Q)) = qlast L (q_loc Q)
+\/ exists kk, ek_b ek (qlast L (q_loc Q)) = abatch_addr L kk /\ 0 <= kk < ndist st K_BATCH_CLASS /\ ~ In kk (map qb_slot (q_loc Q ++ q_glob Q))).
+{ destruct EBK as [E|[EA E]]; [left; exact E| right; exists k24]. destruct (NEWF EA) as (NK & NB & KK & NIB & _). split; [exact E|]. split; [exact KK| exact NIB]. }
+destruct (read_dk (AHQ DI ASEC AFK) L st X Q m RNG (BLive p) c k n b1 ctx l1 l2 ALO ARNG AR AQ XB ltac:(discriminate) (ek_b ek (qlast L (q_loc Q))) (ek_delta ek n) ek
+(proj1 ED0) EBB ltac:(rewrite <- SB1, <- SB2; exact NOREC) eq_refl) as (_ & _ & GL & GLST).
+fold g in GL, GLST.
+set (lst := qlast L (q_loc Q)) in *. set (eb := ek_b ek lst) in *. set (gl := dk_glst g lst) in *. set (gq := shlen (rup n 8)) in *.
+assert (BGEO : forall q, In q (q_loc Q ++ q_glob Q) ->
+aregion L K_BATCH_CLASS <= abatch_addr L (qb_slot q) /\ abatch_addr L (qb_slot q) + 8192 <= aregion L K_BATCH_CLASS + c_allocated_user (get_cls st K_BATCH_CLASS)
+/\ al_res L + 4096 <= abatch_addr L (qb_slot q) /\ abatch_addr L (qb_slot q) + 8192 <= al_res L + 137439023104).
+{ intros q Hq. pose proof (slot_geo L st X K_BATCH_CLASS (qb_slot q) ALO WF (K24) (bslot_range L st X Q WF CP q Hq)) as (_ & _ & _ & Q1 & Q2 & Q3 & Q4 & Q5 & Q6 & _).
+rewrite size_of_class_24 in Q2, Q6. unfold abatch_addr. unfold K_SPACE_SIZE in Q6. change (2^37) with 137438953472 in Q6.
+generalize Q1 Q2 Q5 Q6 RSP; clear; intros. lia. }
+assert (A24 : c_allocated_user (get_cls st K_BATCH_CLASS) <= K_FREEARR_OFF).
+{ destruct WF as (_ & _ & _ & _ & _ & PERC & _). destruct (PERC K_BATCH_CLASS (K24)) as (Q1 & Q2 & _). lia. }
+assert (LSTF : lst = 0 \/ ((exists q, In q (q_loc Q) /\ lst = abatch_addr L (qb_slot q))
+/\ aregion L K_BATCH_CLASS <= lst /\ lst + 8192 <= aregion L K_BATCH_CLASS + c_allocated_user (get_cls st K_BATCH_CLASS)
+/\ al_res L + 4096 <= lst /\ lst + 8192 <= al_res L + 137439023104)).
+{ subst lst. destruct (qlast_cases L (q_loc Q)) as [E0|(q & Hq & Eq)]; [left; exact E0| right].
+assert (INq : In q (q_loc Q ++ q_glob Q)) by (apply in_or_app; left; exact Hq).
+rewrite Eq. split; [exists q; split; [exact Hq| reflexivity]|]. exact (BGEO q INq). }
+assert (GDR : g_drain g = (Q_CACHE <? a_qloc_bytes st + ek_delta ek n)) by reflexivity.
+assert (GLF : (g_drain g = false /\ gl = lst)
+\/ (g_drain g = true /\ gl = qlast L (q_glob Q)
+/\ (gl = 0 \/ ((exists q, In q (q_glob Q) /\ gl = abatch_addr L (qb_slot q))
+/\ aregion L K_BATCH_CLASS <= gl /\ gl + 8192 <= aregion L K_BATCH_CLASS + c_allocated_user (get_cls st K_BATCH_CLASS)
+/\ al_res L + 4096 <= gl /\ gl + 8192 <= al_res L + 137439023104)))).
+{ subst gl. rewrite GLST, GDR. destruct (Q_CACHE <? a_qloc_bytes st + ek_delta ek n); [right| left; split; reflexivity].
+split; [reflexivity|]. split; [reflexivity|].
+destruct (qlast_cases L (q_glob Q)) as [E0|(q & Hq & Eq)]; [left; exact E0| right].
+assert (INq : In q (q_loc Q ++ q_glob Q)) by (apply in_or_app; right; exact Hq).
+rewrite Eq. split; [exists q; split; [exact Hq| reflexivity]|]. exact (BGEO q INq). }
+assert (EBF : eb = 0 \/ (aregion L K_BATCH_CLASS <= eb /\ eb + 8192 <= aregion L K_BATCH_CLASS + c_allocated_user (get_cls st K_BATCH_CLASS)
+/\ al_res L + 4096 <= eb /\ eb + 8192 <= al_res L + 137439023104)).
+{ subst eb. destruct EBK as [E|[EA E]].
+- rewrite E. destruct LSTF as [Z0|(_ & FF)]; [left; exact Z0| right; exact FF].
+- right. rewrite E. destruct (NEWF EA) as (_ & _ & KK & _). pose proof (slot_geo L st X K_BATCH_CLASS k24 ALO WF (K24) KK) as (_ & _ & _ & Q1 & Q2 & Q3 & Q4 & Q5 & Q6 & _).
+rewrite size_of_class_24 in Q2, Q6. unfold abatch_addr. unfold K_SPACE_SIZE in Q6. change (2^37) with 137438953472 in Q6.
+generalize Q1 Q2 Q5 Q6 RSP; clear; intros. lia. }
+destruct PM as (id & t0' & t1' & t2' & a0' & a1' & a2' & a3' & a4' & a5' & a6' & a7' & t3' & t4' & t5' & t6' & m' & sj'
+& -> & MU & WM & MI' & ST' & IDR & HDR' & FC' & SH' & QC' & EKP & DKP & STATS' & LSJ' & UW' & FL' & IAS' & IAM' & DEP').
+fold lst in MU, QC', EKP, DKP, EBK. fold eb in MU, EBK. fold gl in MU. fold gq in MU, SH'.
+replace (UB - 16 + 16) with UB in MU, FC', SH' by (clear; lia).
+assert (ELST : lst = qlast L (q_loc Q)) by reflexivity. assert (EEB : eb = ek_b ek lst) by reflexivity.
+assert (EGL : gl = dk_glst g lst) by reflexivity. assert (EGQ : gq = shlen (rup n 8)) by reflexivity.
+clearbody lst eb gl gq.
+assert (MUn : munch (Wf (bv_unsigned sp) (al_t L) UB gq (al_nodes L) (al_store L) lst eb gl) m m').
+{ eapply munch_weaken; [| exact MU]. solve_sub_fp sp. }
+clear MU.
+assert (EBNZ : 0x10007fff8000 <= eb) by (rewrite EEB; exact (ek_pre_b_hi _ _ _ _ _ _ _ _ EK)).
+assert (KF : kfactsF (bv_unsigned sp) (al_t L) AB S UB gq (al_nodes L) (al_store L) (al_res L) (al_ctx L) lo (shlen (rz_size n)) (shlen S) lst eb gl).
+{ unfold kfactsF. unfold K_SPACE_SIZE in *. change (2^37) with 137438953472 in *.
+assert (GQ1 : 1 <= gq) by (rewrite EGQ, shlen_div; generalize RUP RUP8 N1; clear; intros; Z.div_mod_to_equations; lia).
+generalize CEIL LO OT OC ON OS RES RHI RSP G5 G6 ABUB UBS S8 RUP EUB SHLO SE GR3 GQ1 GFS GE SHHI LSTF EBF GLF EBNZ. clear. intros.
+unfold iclr, AIMG_LO, AIMG_HI in *.
+(destruct LSTF as [Z0|(_ & FF)]; [rewrite (qsz_eq0 lst Z0) | rewrite (qsz_pos lst) by (atop_facts; lia)]);
+(destruct EBF as [Z1|FF1]; [exfalso; atop_facts; lia|]); destruct GLF as [[_ Z2]|(_ & _ & [Z2|(_ & FF2)])];
+repeat match goal with H : _ /\ _ |- _ => destruct H end; repeat split; first [assumption | lia]. }
+pose proof (KF_img _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF) as Kimg.
+pose proof (KF_low _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF) as Klow.
+pose proof (KF_hi _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF) as Khi.
+pose proof (KF_shad _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF) as Kshad.
+pose proof (KF_ctx _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF (unbxF D_c_t) (unbxF D_c_res) (unbxF D_c_n) (unbxF D_c_s)) as Kctx.
+pose proof (KF_t _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF (unbxF D_t_res) (unbxF DL7) (unbxF DL8)) as Kt.
+pose proof (KF_res _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF (unbxF D_t_res) (unbxF D_n_res) (unbxF D_s_res)) as Kres.
+pose proof (KF_obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ KF) as Kobj.
+assert (SC : same_core st1 (st_after st2) /\ a_cinit (st_after st2) = a_cinit st /\ a_live (st_after st2) = delete p (a_live st) /\ a_next (st_after st2) = a_next st
+/\ a_space_beg (st_after st2) = a_space_beg st /\ a_ptr_array (st_after st2) = a_ptr_array st
+/\ (enq_is_app st = true -> a_cls (st_after st2) = a_cls st)
+/\ (enq_is_app st = false -> a_cls (st_after st2) = <[ K_BATCH_CLASS := cls_set_count (c_count (get_cls st K_BATCH_CLASS) - 1) (get_cls st K_BATCH_CLASS) ]> (a_cls st))).
+{ pose proof (st_after_core st2) as [SC2 CL2'].
+assert (SC1 : same_core st1 st2 /\ (enq_is_app st = true -> a_cls st2 = a_cls st) /\ (enq_is_app st = false -> a_cls st2 = <[ K_BATCH_CLASS := cls_set_count (c_count (get_cls st K_BATCH_CLASS) - 1) (get_cls st K_BATCH_CLASS) ]> (a_cls st))).
+{ subst st2. unfold st_enq. destruct (enq_app st1 (CPrim c n)) as [sx|] eqn:EAPP.
+- destruct (enq_app_Some st1 _ sx EAPP) as (l & bl & QL & NFz & ->). split; [repeat split; intros; reflexivity|].
+split; [intros _; reflexivity|]. intros EA. exfalso.
+assert (EA1 : enq_is_app st1 = true) by (apply (proj2 (enq_is_app_spec st1 (CPrim c n))); eexists; exact EAPP).
+change (enq_is_app st1) with (enq_is_app st) in EA1. congruence.
+- pose proof (enq_new_core (CPrim c n) st1) as (C1 & _ & _ & _ & _ & _ & C7). split; [exact C1|].
+split; [| intros _; exact C7]. intros EA. exfalso.
+assert (EA1 : enq_is_app st1 = true) by exact EA. destruct (proj1 (enq_is_app_spec st1 (CPrim c n)) EA1) as [s Hs]. congruence. }
+destruct SC1 as (SC1 & CLa & CLb). pose proof (same_core_trans _ _ _ SC1 SC2) as SC3.
+pose proof SC3 as SC0. destruct SC0 as (F1 & F2 & F3 & F4 & F5 & F6 & F7 & _).
+split; [exact SC3|]. split; [exact F3|]. split; [exact F1|]. split; [exact F2|]. split; [exact F4|]. split; [exact F5|].
+split; [intros EA; rewrite CL2'; exact (CLa EA)| intros EA; rewrite CL2'; exact (CLb EA)]. }
+destruct SC as (SC & ECIN & ELIVE & ENEXT & ESB & EPA & CLa & CLb).
+pose proof SC as SC0. destruct SC0 as (_ & _ & _ & _ & _ & ENRES & ENSEC & GCo & M24a & M24b & M24c & M24d).
+set (st' := st_after st2) in *.
+set (X' := xfree X (enq_is_app st) c k n b1 ctx l1 l2 k24).
+assert (GC24 : get_cls st' K_BATCH_CLASS = (if enq_is_app st then get_cls st K_BATCH_CLASS else cls_set_count (c_count (get_cls st K_BATCH_CLASS) - 1) (get_cls st K_BATCH_CLASS))).
+{ unfold get_cls at 1. destruct (enq_is_app st) eqn:EA; [rewrite (CLa eq_refl); reflexivity| rewrite (CLb eq_refl), lookup_insert_eq; reflexivity]. }
+assert (GCo' : forall c', c' <> K_BATCH_CLASS -> get_cls st' c' = get_cls st c') by (intros c' NE; rewrite (GCo c' NE); reflexivity).
+assert (NDS : forall c', ndist st' c' = ndist st c').
+{ intros c'. unfold ndist. destruct (Z.eq_dec c' K_BATCH_CLASS) as [->|NE]; [rewrite M24b; reflexivity| rewrite (GCo' c' NE); reflexivity]. }
+assert (MC' : forall c', max_count st' c' = max_count st c') by (intros c'; unfold max_count; rewrite ECIN; reflexivity).
+assert (WF1 : awf L st1 (xquar X c k n b1 ctx l1 l2)) by (apply (awf_xquar L st X p c k n b1 ctx l1 l2 XB WF); reflexivity).
+assert (WF' : awf L st' X').
+{ subst X'. unfold xfree. destruct (enq_is_app st) eqn:EA.
+- apply (awf_xquar L st X p c k n b1 ctx l1 l2 XB WF); [exact ESB| exact EPA| exact ECIN| exact (CLa eq_refl)| exact ELIVE| exact ENEXT].
+- destruct (NEWF eq_refl) as (NK & NB & KK & NIB & JK & FSH & CIN & POS).
+apply (awf_xbatch L st1 (xquar X c k n b1 ctx l1 l2) k24 (c_count (get_cls st K_BATCH_CLASS)) WF1 eq_refl POS NK).
++ exact ESB. + exact EPA. + exact ECIN. + rewrite ELIVE; reflexivity. + exact ENEXT.
++ intros c' NE. rewrite (GCo' c' NE). reflexivity.
++ rewrite GC24. reflexivity. }
+assert (RT' : arep_rt L m').
+{ eapply arep_rt_frame; [exact MUn | exact WM | exact RT |]. unfold rt_hulls, ATP88, ATSD.
+repeat (apply Forall_cons; [cbn [fst snd]; first [apply Kimg; clear; unfold AIMG_HI; lia | apply Kctx; clear; lia] |]). apply Forall_nil. }
+assert (INST' : ainstance L st' m').
+{ eapply ainstance_frame; [exact MUn | exact WM | exact INST | exact ENRES | exact ENSEC | | |]; apply Kimg; clear; unfold AINSTANCE, AIMG_HI; lia. }
+assert (HRO' : arelro m') by (eapply arelro_frame; [exact MUn | exact HRO | apply Kimg; clear; unfold ARELRO_LO, ARELRO_HI, AIMG_HI; lia]).
+assert (HRT2' : arep_rt2 m') by (eapply arep_rt2_frame; [exact MUn | exact WM | exact HRT2 | | |]; apply Kimg; clear; unfold AIMG_HI; lia).
+assert (RT3' : arep_rt3 m') by (eapply arep_rt3_frame; [exact MUn | exact WM | exact RT3 |]; unfold rt3_hulls; repeat (apply Forall_cons; [cbn [fst snd]; apply Kimg; clear; unfold AIMG_HI; lia|]); apply Forall_nil).
+assert (THR' : athread L st' X' m').
+{ unfold athread. split; [| split; [| split; [| split; [| split]]]].
+- eapply cells_frame; [exact T0 | exact MUn | exact WM |]. cbn [cells_size csize Nat.add]. apply Kt; clear; lia.
+- eapply cells_frame; [exact T40 | exact MUn | exact WM |]. cbn [cells_size csize Nat.add]. apply Kt; clear; lia.
+- intros c' Hc'. destruct (Z.eq_dec c' K_BATCH_CLASS) as [->|NE].
++ destruct (CACHES K_BATCH_CLASS Hc') as [tail (CR & CH & LCH)]. unfold acache_cells. cbv zeta.
+rewrite GC24, MC', ECIN. subst X'. rewrite xfree_cache, Z.eqb_refl, andb_true_r.
+replace (acache_addr L K_BATCH_CLASS) with (al_t L + 2128) in CR, CH |- * by (unfold acache_addr, K_BATCH_CLASS; clear; lia).
+subst ek. unfold ek_of in EKP. destruct (enq_is_app st) eqn:EA; cbn [ek_post negb] in EKP |- *.
+* destruct EKP as (_ & _ & _ & CR' & _). exists tail. split; [exact CR'|]. split; [| exact LCH].
+eapply u32arr_frame; [exact CH | exact MUn | exact WM |]. rewrite length_app, length_map. apply Kt; clear -LCH; lia.
+* destruct EKP as (CR' & _). destruct (NEWF eq_refl) as (NK & NB & KK & NIB & JK & FSH & CIN & POS).
+cbn [c_count cls_set_count]. exists (Z_to_bv 64 (acompact K_BATCH_CLASS k24) :: tail).
+pose proof (cache24_split L st X k24 (c_count (get_cls st K_BATCH_CLASS)) WF eq_refl POS NK) as [CACHE LRL].
+split; [exact CR'|]. split.
+-- eapply u32arr_frame; [| exact MUn | exact WM |].
+++ rewrite CACHE, map_app in CH. cbn [map] in CH. rewrite <- app_assoc in CH. cbn [app] in CH. exact CH.
+++ rewrite length_app, length_map. cbn [length].
+replace (length (removelast (xc_cache (x_cls X K_BATCH_CLASS))) + Datatypes.S (length tail))%nat with 16%nat
+by (rewrite CACHE, length_app in LCH; cbn [length] in LCH; clear -LCH; lia).
+apply Kt; clear; lia.
+-- cbn [length]. rewrite CACHE, length_app in LCH. cbn [length] in LCH. clear -LCH. lia.
++ eapply acache_cells_frame; [exact MUn | exact WM | exact (CACHES c' Hc') | rewrite (GCo' c' NE); reflexivity | exact ECIN | |].
+* subst X'. rewrite xfree_cache. destruct (Z.eqb_spec c' K_BATCH_CLASS) as [E|_]; [exfalso; exact (NE E)|]. rewrite andb_false_r. reflexivity.
+* unfold acache_addr. unfold K_NUM_CLASSES, K_BATCH_CLASS in *. apply Kt; clear -Hc' NE; lia.
+- apply (junk_merge m' (al_t L + 2768) 16 16); [| | clear; lia | clear; lia].
++ eapply junk_frame; [exact (proj1 (junk_split m (al_t L + 2768) 16 16 CSTATS ltac:(clear; lia) ltac:(clear; lia))) | exact MUn | exact WM | intros _; apply Kt; clear; lia].
++ apply (junk_merge m' (al_t L + 2768 + 16) 8 8); [| | clear; lia | clear; lia].
+* replace (al_t L + 2768 + 16) with (al_t L + 2784) by (clear; lia).
+assert (STJ' : exists w : word, rw_cells bsegs m' (al_t L + 2784) [C8 w]).
+{ subst ek. unfold ek_of in EKP. destruct (enq_is_app st); cbn [ek_post] in EKP.
+- destruct EKP as (_ & _ & _ & _ & STS'). exists stj. exact STS'.
+- destruct EKP as (_ & STS' & _). exact STS'. }
+destruct STJ' as [w STS']. pose proof (junk_of_cells m' _ _ STS') as J. cbn in J. exact J.
+* replace (al_t L + 2768 + 16 + 8) with (al_t L + 2792) by (clear; lia).
+eapply junk_frame; [| exact MUn | exact WM | intros _; apply Kt; clear; lia].
+pose proof (junk_split m (al_t L + 2768) 16 16 CSTATS ltac:(clear; lia) ltac:(clear; lia)) as [_ CSb].
+pose proof (junk_split m (al_t L + 2768 + 16) 8 8 CSb ltac:(clear; lia) ltac:(clear; lia)) as [_ CSc].
+replace (al_t L + 2768 + 16 + 8) with (al_t L + 2792) in CSc by (clear; lia). exact CSc.
+- exists sj'. split; [exact STATS' | exact LSJ'].
+- exact UW'. }
+assert (SEPQ : forall q, In q (q_loc Q ++ q_glob Q) -> AB + S <= abatch_addr L (qb_slot q) \/ abatch_addr L (qb_slot q) + 8192 <= AB).
+{ intros q Hq. destruct (bslot_busy L st X Q CP q Hq) as (yq & Hyq & Syq & Cyq & Kyq).
+pose proof (slots_sep_any L st X c k K_BATCH_CLASS (qb_slot q) ALO WF HC (K24) KR (bslot_range L st X Q WF CP q Hq)
+ltac:(rewrite <- Cyq, <- Kyq; apply (other_key (AHQ DI ASEC AFK) L st X m (BLive p) c k n b1 ctx l1 l2 AR XB); [exact Hyq| rewrite Syq; discriminate])) as D.
+rewrite size_of_class_24 in D. unfold abatch_addr. exact D. }
+assert (SEPK : enq_is_app st = false -> AB + S <= abatch_addr L k24 \/ abatch_addr L k24 + 8192 <= AB).
+{ intros EA. destruct (NEWF EA) as (NK & NB & KK & _).
+pose proof (slots_sep_any L st X c k K_BATCH_CLASS k24 ALO WF HC (K24) KR KK
+ltac:(destruct (Z.eq_dec c K_BATCH_CLASS) as [->|NE]; [right| left; exact NE]; intros ->;
+pose proof (busy_of_X_self L st X p K_BATCH_CLASS k24 n b1 ctx l1 l2 XB WF) as E'; rewrite NB in E'; discriminate)) as D.
+rewrite size_of_class_24 in D. unfold abatch_addr. exact D. }
+assert (SEPL : lst = 0 \/ (AB + S <= lst \/ lst + 8192 <= AB)).
+{ destruct LSTF as [Z0|((q & Hq & Eq) & _)]; [left; exact Z0| right; rewrite Eq; apply SEPQ; apply in_or_app; left; exact Hq]. }
+assert (SEPE : eb = 0 \/ (AB + S <= eb \/ eb + 8192 <= AB)).
+{ subst eb. destruct EBK as [E|[EA E]]; rewrite E; [exact SEPL| right; exact (SEPK EA)]. }
+assert (SEPG : gl = 0 \/ (AB + S <= gl \/ gl + 8192 <= AB)).
+{ destruct GLF as [[_ ->]|(_ & _ & [Z0|((q & Hq & Eq) & _)])]; [exact SEPL| left; exact Z0| right; rewrite Eq; apply SEPQ; apply in_or_app; right; exact Hq]. }
+assert (BDIS : forall q1 q2, In q1 (q_loc Q ++ q_glob Q) -> In q2 (q_loc Q ++ q_glob Q) ->
+abatch_addr L (qb_slot q1) = abatch_addr L (qb_slot q2) \/ abatch_addr L (qb_slot q1) + 8192 <= abatch_addr L (qb_slot q2) \/ abatch_addr L (qb_slot q2) + 8192 <= abatch_addr L (qb_slot q1)).
+{ intros q1 q2 H1 H2. destruct (Z.eq_dec (qb_slot q1) (qb_slot q2)) as [E|NE]; [left; rewrite E; reflexivity| right].
+pose proof (slots_disjoint L K_BATCH_CLASS (qb_slot q1) (qb_slot q2) ltac:(pose proof (bslot_range L st X Q WF CP q1 H1); lia)
+ltac:(pose proof (bslot_range L st X Q WF CP q2 H2); lia) NE ltac:(rewrite size_of_class_24; lia)) as D.
+rewrite size_of_class_24 in D. unfold abatch_addr. exact D. }
+assert (KDIS : forall q, In q (q_loc Q ++ q_glob Q) -> enq_is_app st = false ->
+abatch_addr L k24 + 8192 <= abatch_addr L (qb_slot q) \/ abatch_addr L (qb_slot q) + 8192 <= abatch_addr L k24).
+{ intros q Hq EA. destruct (NEWF EA) as (NK & NB & KK & NIB & _).
+assert (NE : k24 <> qb_slot q) by (intros ->; apply NIB; apply in_map; exact Hq).
+pose proof (slots_disjoint L K_BATCH_CLASS k24 (qb_slot q) ltac:(lia) ltac:(pose proof (bslot_range L st X Q WF CP q Hq); lia) NE ltac:(rewrite size_of_class_24; lia)) as D.
+rewrite size_of_class_24 in D. unfold abatch_addr. exact D. }
+assert (RC : forall c1 c2, c1 < c2 -> aregion L c1 + K_REGION <= aregion L c2) by (intros; apply regions_sep; assumption).
+assert (CLS' : forall c'', 1 <= c'' < K_NUM_CLASSES ->
+aregion_cells L st' m' c'' /\ afreearray L st' X' m' c'' /\ aslots L st' X' m' c'' /\ aslot_shadow L st' X' m' c'').
+{ intros c'' Hc''. destruct (CLS c'' Hc'') as (REG & FARR & SLOTS & SHADOW).
+pose proof WF as WF0. destruct WF0 as (_ & _ & SAL & _ & _ & PERC & _).
+destruct (PERC c'' Hc'') as (Q1 & Q2 & Q3 & Q4 & Q5 & Q6 & Q7 & QLENF & QLENC & QCNTB & QND & QRANGE).
+pose proof (size_of_class_facts c'' Hc'') as [QS QS16].
+pose proof (aregion_mod L c'' SAL) as RM''.
+assert (EC1 : c_num_freed (get_cls st' c'') = c_num_freed (get_cls st c'')) by (destruct (Z.eq_dec c'' K_BATCH_CLASS) as [->|NE]; [exact M24c| rewrite (GCo' c'' NE); reflexivity]).
+assert (EC2 : c_mapped_free_array (get_cls st' c'') = c_mapped_free_array (get_cls st c'')) by (destruct (Z.eq_dec c'' K_BATCH_CLASS) as [->|NE]; [exact M24d| rewrite (GCo' c'' NE); reflexivity]).
+assert (EC3 : c_allocated_user (get_cls st' c'') = c_allocated_user (get_cls st c'')) by (destruct (Z.eq_dec c'' K_BATCH_CLASS) as [->|NE]; [exact M24b| rewrite (GCo' c'' NE); reflexivity]).
+assert (EC4 : c_mapped_user (get_cls st' c'') = c_mapped_user (get_cls st c'')) by (destruct (Z.eq_dec c'' K_BATCH_CLASS) as [->|NE]; [exact M24a| rewrite (GCo' c'' NE); reflexivity]).
+unfold K_NUM_CLASSES in Hc''.
+assert (RI : al_res L <= aregion L c'' /\ aregion L c'' + K_REGION <= al_space_beg L + K_SPACE_SIZE
+/\ al_space_beg L + K_SPACE_SIZE + 4096 <= al_res L + 137439023104 /\ al_res L + 4096 <= aregion L c'').
+{ unfold aregion, K_REGION, K_SPACE_SIZE. change (2^37) with 137438953472. clear -Hc'' RSP. lia. }
+destruct RI as (RI1 & RI2 & RI3 & RI4).
+assert (PC0 : aregion L c <= AB /\ AB + S <= aregion L c + K_FREEARR_OFF /\ AB + S <= aregion L c + c_allocated_user (get_cls st c)) by (clear -G1 G2 G3 G4; lia).
+split; [| split; [| split]].
+- eapply aregion_cells_frame; [exact MUn | exact WM | exact REG | exact EC1 | exact EC2 | exact EC3 | exact EC4 |].
+unfold aregion_info, ARI_STRIDE, K_SPACE_SIZE in *. change (2^37) with 137438953472 in *.
+apply Kres; try (clear -Hc'' RSP G6 S8 EUB; lia).
++ destruct LSTF as [Z0|(_ & F1 & F2 & F3 & F4)]; [rewrite Z0; right; clear -RSP RES RHI Hc''; lia| right].
+clear -F2 A24 Hc''. unfold aregion, K_REGION, K_BATCH_CLASS, K_FREEARR_OFF in *. change (2^32) with 4294967296 in *. lia.
++ destruct EBF as [Z0|(F1 & F2 & F3 & F4)]; [rewrite Z0; right; clear -RSP RES RHI Hc''; lia| right].
+clear -F2 A24 Hc''. unfold aregion, K_REGION, K_BATCH_CLASS, K_FREEARR_OFF in *. change (2^32) with 4294967296 in *. lia.
++ assert (GLR : gl = 0 \/ gl + 8192 <= aregion L K_BATCH_CLASS + c_allocated_user (get_cls st K_BATCH_CLASS)).
+{ destruct GLF as [[_ ->]|(_ & _ & [Z0|(_ & F1 & F2 & _)])]; [| left; exact Z0| right; exact F2].
+destruct LSTF as [Z0|(_ & F1 & F2 & _)]; [left; exact Z0| right; exact F2]. }
+destruct GLR as [Z0|F2]; [rewrite Z0; right; clear -RSP RES RHI Hc''; lia| right].
+clear -F2 A24 Hc''. unfold aregion, K_REGION, K_BATCH_CLASS, K_FREEARR_OFF in *. change (2^32) with 4294967296 in *. lia.
+- eapply afreearray_frame; [exact MUn | exact WM | exact FARR | exact EC1 | exact EC2 | | exact QLENF | exact Q5 | | clear -Q6; lia |].
++ subst X'. apply xfree_free.
++ assert (FA1 : aregion L c'' + K_FREEARR_OFF <= afreearr L c'' /\ afreearr L c'' + c_mapped_free_array (get_cls st c'') <= aregion L c'' + K_REGION).
+{ unfold afreearr, K_FREEARR_OFF, K_FREEARR_MAX, K_REGION in *. clear -Q6. lia. }
+destruct FA1 as [FA1 FA2].
+apply Kres; [clear -RI1 FA1; unfold K_FREEARR_OFF in *; lia | clear -RI2 RI3 FA2; lia | clear -Q5 Q6; lia | | | |].
+* pose proof (farr_vs_user L c'' c _ _ AB S (proj1 PC0) (proj1 (proj2 PC0)) FA1 FA2) as D. clear -D ABUB S8 EUB. lia.
+* destruct LSTF as [Z0|(_ & F1 & F2 & _)]; [rewrite Z0; right; clear -RI4 FA1 RES RHI; unfold K_FREEARR_OFF in *; lia|].
+exact (farr_vs_user L c'' K_BATCH_CLASS _ _ lst 8192 F1 ltac:(clear -F2 A24; lia) FA1 FA2).
+* destruct EBF as [Z0|(F1 & F2 & _)]; [rewrite Z0; right; clear -RI4 FA1 RES RHI; unfold K_FREEARR_OFF in *; lia|].
+exact (farr_vs_user L c'' K_BATCH_CLASS _ _ eb 8192 F1 ltac:(clear -F2 A24; lia) FA1 FA2).
+* assert (GLR : gl = 0 \/ (aregion L K_BATCH_CLASS <= gl /\ gl + 8192 <= aregion L K_BATCH_CLASS + c_allocated_user (get_cls st K_BATCH_CLASS))).
+{ destruct GLF as [[_ ->]|(_ & _ & [Z0|(_ & F1 & F2 & _)])]; [| left; exact Z0| right; split; [exact F1| exact F2]].
+destruct LSTF as [Z0|(_ & F1 & F2 & _)]; [left; exact Z0| right; split; [exact F1| exact F2]]. }
+destruct GLR as [Z0|[F1 F2]]; [rewrite Z0; right; clear -RI4 FA1 RES RHI; unfold K_FREEARR_OFF in *; lia|].
+pose proof (farr_vs_user L c'' K_BATCH_CLASS _ _ gl 8192 F1 ltac:(clear -F2 A24; lia) FA1 FA2) as D. clear -D. lia.
++ assert (FA1 : aregion L c'' + K_FREEARR_OFF <= afreearr L c'' /\ afreearr L c'' + c_mapped_free_array (get_cls st c'') <= aregion L c'' + K_REGION).
+{ unfold afreearr, K_FREEARR_OFF, K_FREEARR_MAX, K_REGION in *. clear -Q6. lia. }
+destruct FA1 as [FA1 FA2].
+apply Kshad.
+* rewrite shad_div. unfold ASHOFF, K_FREEARR_OFF in *. clear -RI1 FA1 RES RHI. Z.div_mod_to_equations. lia.
+* rewrite shad_div, shlen_div. unfold ASHOFF, K_SPACE_SIZE in *. clear -RI2 RI3 FA2 RES RHI. Z.div_mod_to_equations. lia.
+* apply shlen_nonneg. clear -Q5 Q6. lia.
+* pose proof (farr_vs_user L c'' c _ _ UB (rup n 8) ltac:(clear -PC0 ABUB; lia) ltac:(clear -PC0 UBS; lia) FA1 FA2) as D.
+assert (AM : afreearr L c'' mod 8 = 0) by (unfold afreearr, K_FREEARR_OFF; clear -RM''; Z.div_mod_to_equations; lia).
+rewrite EGQ. destruct D as [D|D]; [left; apply shad_sep; [exact D| exact AM] | right; apply shad_sep; [exact D| clear -UB16; Z.div_mod_to_equations; lia]].
+-
+eapply (aslots_update_gen L _ m m' MUn WM st st' X X' c''); [exact SLOTS | apply NDS | exact EC3 | exact EC4 | |].
++ intros k'' Hk''.
+pose proof (slot_geo L st X c'' k'' ALO WF ltac:(unfold K_NUM_CLASSES; clear -Hc''; lia) Hk'') as (T16 & TM16 & TAL & P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8 & _).
+assert (D1 : (c'' = c /\ k'' = k) \/ (c'' <> c \/ k'' <> k)) by (clear; lia). destruct D1 as [[Ec Ek]|NE1].
+*
+subst c'' k''. right.
+subst X'. rewrite (busy_of_xfree L st X p c k n b1 ctx l1 l2 (enq_is_app st) k24 c k XB WF).
+assert (NOK : (negb (enq_is_app st) && (K_BATCH_CLASS =? c) && (k24 =? k)) = false).
+{ destruct (enq_is_app st) eqn:EA; [reflexivity|]. cbn [negb andb].
+destruct (Z.eqb_spec K_BATCH_CLASS c) as [E1'|]; [| reflexivity]. destruct (Z.eqb_spec k24 k) as [E2'|]; [| reflexivity]. exfalso.
+destruct (NEWF eq_refl) as (_ & NB & _). pose proof (busy_of_X_self L st X p c k n b1 ctx l1 l2 XB WF) as E'. rewrite <- E1', <- E2', NB in E'. discriminate. }
+rewrite NOK, !Z.eqb_refl. cbn [andb].
+unfold aslot_busy, bquar. cbn [xb_st xb_class xb_n xb_b1 xb_ctx xb_slot bstate_byte]. unfold xb_user, xb_hdr, xb_alloc. cbn [xb_class xb_slot xb_n].
+rewrite <- EAB. fold S. rewrite <- EUB.
+split; [| split].
+-- intros R16. pose proof (rz_gt16 n (proj1 N0) R16) as R32. destruct (LH R16) as [LC LJ]. split.
+++ eapply cells_frame; [exact LC | exact MUn | exact WM |]. cbn [cells_size csize Nat.add].
+apply Kres; clear -G5 G6 RSP RES RHI S16 EUB R32 S8 SEPL SEPE SEPG; unfold K_SPACE_SIZE in *; lia.
+++ eapply junk_frame; [exact LJ | exact MUn | exact WM |]. intros Hp.
+apply Kres; clear -G5 G6 RSP RES RHI S16 EUB R32 S8 SEPL SEPE SEPG Hp; unfold K_SPACE_SIZE in *; lia.
+-- exists 3. split; [reflexivity|]. exact HDR'.
+-- replace (S - rz_size n) with (8 + (S - rz_size n - 8)) by (clear; lia).
+apply (junk_merge m' UB 8 (S - rz_size n - 8)); [| | clear; lia | clear -S8; lia].
+++ pose proof (junk_of_cells m' _ _ FC') as J. cbn in J. exact J.
+++ eapply junk_frame; [exact UJR | exact MUn | exact WM |]. intros Hp.
+apply Kres; clear -G5 G6 RSP RES RHI S16 EUB ABUB S8 SEPL SEPE SEPG Hp; unfold K_SPACE_SIZE in *; lia.
+*
+assert (T2 : (c =? c'') && (k =? k'') = false).
+{ destruct (Z.eqb_spec c c'') as [E|]; [| reflexivity]. destruct (Z.eqb_spec k k'') as [E'|]; [| reflexivity]. exfalso. clear -NE1 E E'. lia. }
+assert (D2 : (enq_is_app st = false /\ c'' = K_BATCH_CLASS /\ k'' = k24) \/ (enq_is_app st = true \/ c'' <> K_BATCH_CLASS \/ k'' <> k24))
+by (destruct (enq_is_app st); clear; lia).
+destruct D2 as [(EA & E24 & EK24)|NE2].
+--
+subst c'' k''. right.
+subst X'. rewrite (busy_of_xfree L st X p c k n b1 ctx l1 l2 (enq_is_app st) k24 K_BATCH_CLASS k24 XB WF), EA. cbn [negb andb]. rewrite !Z.eqb_refl. cbn [andb].
+unfold aslot_busy, bbatch. cbn [xb_st xb_class xb_slot]. unfold xb_alloc. cbn [xb_class xb_slot]. rewrite size_of_class_24.
+subst ek. unfold ek_of in EKP. rewrite EA in EKP. cbn [ek_post] in EKP. destruct EKP as (_ & _ & BC & BA & [bsb BJ] & _).
+fold (abatch_addr L k24) in BC, BA, BJ |- *. change (aslot_addr L K_BATCH_CLASS k24) with (abatch_addr L k24).
+replace 8192 with (24 + (8 * Z.of_nat (length [Z_to_bv 64 (UB - 16)]) + (8192 - 24 - 8 * 1))) by (cbn; lia).
+apply junk_merge; [| | clear; lia| cbn; clear; lia].
+++ pose proof (junk_of_cells m' _ _ BC) as J. cbn in J. exact J.
+++ apply junk_merge; [apply junk_of_u64arr; exact BA | | cbn; clear; lia | clear; lia].
+cbn [length Z.of_nat Pos.of_succ_nat]. eexists. exact BJ.
+-- assert (T1 : negb (enq_is_app st) && (K_BATCH_CLASS =? c'') && (k24 =? k'') = false).
+{ destruct (enq_is_app st); cbn [negb andb]; [reflexivity|].
+destruct (Z.eqb_spec K_BATCH_CLASS c'') as [E|]; [| reflexivity]. destruct (Z.eqb_spec k24 k'') as [E'|]; [| reflexivity]. exfalso.
+destruct NE2 as [NE|[NE|NE]]; [discriminate| apply NE; symmetry; exact E| apply NE; symmetry; exact E']. }
+assert (BX : busy_of X' c'' k'' = busy_of X c'' k'').
+{ subst X'. rewrite (busy_of_xfree L st X p c k n b1 ctx l1 l2 (enq_is_app st) k24 c'' k'' XB WF), T1, T2. reflexivity. }
+assert (BQ : forall q, In q (q_loc Q ++ q_glob Q) -> c'' = K_BATCH_CLASS -> aslot_addr L c'' k'' = abatch_addr L (qb_slot q) ->
+exists yq, busy_of X c'' k'' = Some yq /\ xb_st yq = BBatch /\ xb_class yq = K_BATCH_CLASS /\ xb_slot yq = k''
+/\ junk_at m (abatch_addr L (qb_slot q)) 8192 /\ k'' = qb_slot q).
+{ intros q Hq -> EQA. destruct (bslot_busy L st X Q CP q Hq) as (yq & Hyq & Syq & Cyq & Kyq).
+assert (EK' : k'' = qb_slot q) by (unfold abatch_addr, aslot_addr in EQA; rewrite size_of_class_24 in EQA; clear -EQA; lia). subst k''.
+exists yq. pose proof (busy_of_In_nodup L st X yq WF Hyq) as BY. rewrite Cyq, Kyq in BY.
+split; [exact BY|]. split; [exact Syq|]. split; [exact Cyq|]. split; [exact Kyq|]. split; [| reflexivity].
+destruct SLOTS as [SLK _]. specialize (SLK (qb_slot q) Hk''). rewrite BY in SLK. unfold aslot_busy in SLK. rewrite Syq in SLK.
+unfold xb_alloc in SLK. rewrite Cyq, Kyq, size_of_class_24 in SLK. exact SLK. }
+assert (D3 : (c'' = K_BATCH_CLASS /\ lst <> 0 /\ aslot_addr L c'' k'' = lst) \/ (c'' <> K_BATCH_CLASS \/ lst = 0 \/ aslot_addr L c'' k'' <> lst)) by (clear; lia).
+destruct D3 as [(E24 & LNZ & EL)|NE3].
+++
+right. rewrite BX. destruct LSTF as [Z0|((q & Hq & Eq) & F1 & F2 & F3 & F4)]; [exfalso; exact (LNZ Z0)|].
+destruct (BQ q ltac:(apply in_or_app; left; exact Hq) E24 ltac:(rewrite EL; exact Eq)) as (yq & BY & Syq & Cyq & Kyq & JQ & EKQ).
+rewrite BY. unfold aslot_busy. rewrite Syq. unfold xb_alloc. rewrite Cyq, Kyq, size_of_class_24, <- E24, EL.
+assert (QNE : a_qloc st <> []) by (intros QL0; apply LNZ; rewrite ELST; replace (q_loc Q) with (@nil qbatchc) by (destruct (q_loc Q); [reflexivity| rewrite QL0 in LN1; cbn in LN1; discriminate]); reflexivity).
+subst ek. unfold ek_of in EKP, EK. destruct (enq_is_app st) eqn:EA; cbn [ek_post ek_pre] in EKP, EK.
+** destruct EKP as (LB' & LA' & [bs LJ'] & _). destruct EK as (_ & _ & CNT' & _ & _ & _ & _ & LEN & _).
+rewrite ELST in LB', LA', LJ' |- *.
+set (cnt := b_count (List.last (a_qloc st) dummy_batch)) in *.
+replace 8192 with (24 + (8 * Z.of_nat (length (map (Z_to_bv 64) (qhdrs L (b_chunks (List.last (a_qloc st) dummy_batch)) (qb_ks (List.last (q_loc Q) dummy_qb))) ++ [Z_to_bv 64 (UB - 16)])) + (8192 - 24 - 8 * (cnt + 1))))
+by (rewrite length_app, LEN; cbn [length]; clear -CNT'; lia).
+apply junk_merge; [| | clear; lia| rewrite length_app, LEN; cbn [length]; clear -CNT'; lia].
++++ pose proof (junk_of_cells m' _ _ LB') as J. cbn in J. exact J.
++++ apply junk_merge; [apply junk_of_u64arr; exact LA' | | rewrite length_app, LEN; cbn [length]; clear -CNT'; lia | clear -CNT'; lia].
+rewrite length_app, LEN. cbn [length]. replace (8 * Z.of_nat (Z.to_nat cnt + 1)) with (8 * (cnt + 1)) by (clear -CNT'; lia). eexists. exact LJ'.
+** destruct (a_qloc st) as [|b0 bs0] eqn:QL0; [exfalso; exact (QNE eq_refl)|]. rewrite <- QL0 in *.
+destruct EKP as (_ & _ & _ & _ & _ & [LB' LA']). destruct EK as ((_ & _ & _ & _ & _ & _ & _ & LEN0 & _) & _).
+rewrite ELST in LB', LA' |- *.
+replace 8192 with (24 + 8 * Z.of_nat (length (map (Z_to_bv 64) (qhdrs L (b_chunks (List.last (a_qloc st) dummy_batch)) (qb_ks (List.last (q_loc Q) dummy_qb))))))
+by (rewrite LEN0; clear; lia).
+apply junk_merge; [| apply junk_of_u64arr; exact LA' | clear; lia| rewrite LEN0; clear; lia].
+pose proof (junk_of_cells m' _ _ LB') as J. cbn in J. exact J.
+++ assert (D4 : (g_drain g = true /\ c'' = K_BATCH_CLASS /\ gl <> 0 /\ aslot_addr L c'' k'' = gl /\ gl <> lst)
+\/ (g_drain g = false \/ c'' <> K_BATCH_CLASS \/ gl = 0 \/ aslot_addr L c'' k'' <> gl \/ gl = lst)) by (destruct (g_drain g); clear; lia).
+destruct D4 as [(GD & E24 & GNZ & EG & GNL)|NE4].
+**
+right. rewrite BX. destruct GLF as [[GD' _]|(_ & GQL & [Z0|((q & Hq & Eq) & F1 & F2 & F3 & F4)])]; [congruence| exfalso; exact (GNZ Z0)|].
+destruct (BQ q ltac:(apply in_or_app; right; exact Hq) E24 ltac:(rewrite EG; exact Eq)) as (yq & BY & Syq & Cyq & Kyq & JQ & EKQ).
+rewrite BY. unfold aslot_busy. rewrite Syq. unfold xb_alloc. rewrite Cyq, Kyq, size_of_class_24, <- E24, EG.
+assert (GNE : a_qglob st <> []) by (intros QG0; destruct (q_glob Q) eqn:QQ0; [destruct Hq| rewrite QG0 in LN2; cbn in LN2; discriminate]).
+unfold dk_post in DKP. rewrite GD in DKP. destruct DKP as (_ & _ & GLN).
+assert (GF : g_full g = true) by (subst g; unfold g_of; cbn [g_full]; destruct (a_qglob st); [exfalso; exact (GNE eq_refl)| reflexivity]).
+rewrite GF, GL, <- GQL in GLN.
+replace 8192 with (8 + 8184) by (clear; lia). apply junk_merge; [| | clear; lia | clear; lia].
++++ pose proof (junk_of_cells m' _ _ GLN) as J. cbn in J. exact J.
++++ rewrite <- Eq in JQ. destruct (junk_split m gl 8 8184 JQ ltac:(clear; lia) ltac:(clear; lia)) as [_ J2].
+eapply junk_frame; [exact J2 | exact MUn | exact WM |]. intros _.
+assert (DL : lst = 0 \/ lst + 8192 <= gl \/ gl + 8192 <= lst).
+{ destruct LSTF as [Z0|((ql & Hql & Eql) & _)]; [left; exact Z0| right]. rewrite Eql, Eq.
+destruct (BDIS ql q ltac:(apply in_or_app; left; exact Hql) ltac:(apply in_or_app; right; exact Hq)) as [E|E]; [| exact E].
+exfalso. apply GNL. rewrite Eq, Eql. symmetry. exact E. }
+assert (DE : eb = lst \/ eb + 8192 <= gl \/ gl + 8192 <= eb).
+{ destruct EBK as [E|[EA E]]; [left; exact E| right]. rewrite E, Eq. exact (KDIS q ltac:(apply in_or_app; right; exact Hq) EA). }
+apply Kres; clear -F3 F4 RES RHI SEPG GNZ DL DE ABUB S8 EUB; lia.
+**
+left. split; [exact BX|]. split.
++++ assert (DW9 : aslot_addr L c'' k'' + size_of_class c'' <= AB \/ AB + S <= aslot_addr L c'' k'').
+{ pose proof (slots_sep_any L st X c'' k'' c k ALO WF ltac:(unfold K_NUM_CLASSES; clear -Hc''; lia) HC Hk'' KR NE1) as D.
+rewrite <- EAB, <- ES in D. exact D. }
+assert (DQ : forall q, In q (q_loc Q ++ q_glob Q) -> (c'' <> K_BATCH_CLASS \/ aslot_addr L c'' k'' <> abatch_addr L (qb_slot q)) ->
+aslot_addr L c'' k'' + size_of_class c'' <= abatch_addr L (qb_slot q) \/ abatch_addr L (qb_slot q) + 8192 <= aslot_addr L c'' k'').
+{ intros q Hq NE. pose proof (slots_sep_any L st X c'' k'' K_BATCH_CLASS (qb_slot q) ALO WF ltac:(unfold K_NUM_CLASSES; clear -Hc''; lia) (K24) Hk''
+(bslot_range L st X Q WF CP q Hq) ltac:(destruct NE as [NE|NE]; [left; exact NE| destruct (Z.eq_dec c'' K_BATCH_CLASS) as [->|NC']; [right| left; exact NC']];
+intros EKK; apply NE; rewrite EKK; reflexivity)) as D.
+rewrite size_of_class_24 in D. unfold abatch_addr. exact D. }
+assert (DW13 : lst = 0 \/ aslot_addr L c'' k'' + size_of_class c'' <= lst \/ lst + 8192 <= aslot_addr L c'' k'').
+{ destruct LSTF as [Z0|((ql & Hql & Eql) & _)]; [left; exact Z0| right]. rewrite Eql. apply DQ; [apply in_or_app; left; exact Hql|].
+destruct NE3 as [NE|[Z0|NE]]; [left; exact NE| exfalso| right; rewrite <- Eql; exact NE].
+rewrite Eql in Z0. destruct (BGEO ql ltac:(apply in_or_app; left; exact Hql)) as (_ & _ & B3 & _). clear -Z0 B3 RES RHI. lia. }
+assert (DW14 : eb = lst \/ aslot_addr L c'' k'' + size_of_class c'' <= eb \/ eb + 8192 <= aslot_addr L c'' k'').
+{ destruct EBK as [E|[EA E]]; [left; exact E| right]. rewrite E. destruct (NEWF EA) as (_ & _ & KK & _).
+pose proof (slots_sep_any L st X c'' k'' K_BATCH_CLASS k24 ALO WF ltac:(unfold K_NUM_CLASSES; clear -Hc''; lia) (K24) Hk'' KK
+ltac:(destruct NE2 as [NE|[NE|NE]]; [rewrite EA in NE; discriminate| left; exact NE| right; exact NE])) as D.
+rewrite size_of_class_24 in D. unfold abatch_addr. exact D. }
+assert (DW15 : gl = lst \/ gl = 0 \/ aslot_addr L c'' k'' + size_of_class c'' <= gl \/ gl + 8192 <= aslot_addr L c'' k'').
+{ destruct GLF as [[_ E]|(GD & GQL & [Z0|((q & Hq & Eq) & _)])]; [left; exact E| right; left; exact Z0| right; right].
+rewrite Eq. apply DQ; [apply in_or_app; right; exact Hq|].
+destruct NE4 as [NE|[NE|[NE|[NE|NE]]]]; [congruence| left; exact NE| | right; rewrite <- Eq; exact NE| ].
+- exfalso. rewrite Eq in NE. destruct (BGEO q ltac:(apply in_or_app; right; exact Hq)) as (_ & _ & B3 & _). clear -NE B3 RES RHI. lia.
+- rewrite NE in *. destruct NE3 as [NE'|[Z0|NE']]; [left; exact NE'| exfalso| right; rewrite <- Eq; exact NE'].
+rewrite Eq in Z0. destruct (BGEO q ltac:(apply in_or_app; right; exact Hq)) as (_ & _ & B3 & _). clear -Z0 B3 RES RHI. lia. }
+apply Kres; [clear -P5 RSP; lia | clear -P6 RSP; unfold K_SPACE_SIZE in *; lia | clear -T16; lia | clear -DW9 ABUB S8 EUB; lia
+| clear -DW13 P5 RSP RES RHI; lia | clear -DW14 DW13 P5 RSP RES RHI; lia | clear -DW15 DW13 P5 RSP RES RHI; lia].
++++ intros b Hb. destruct (busy_of_Some_facts X c'' k'' b Hb) as (IB & CB' & KB'). split; [exact CB'|]. split; [exact KB'|]. exact (awf_fits L st X b WF IB).
++ intros POS''.
+set (AU := aregion L c'' + c_allocated_user (get_cls st c'')) in *.
+assert (U0 : aregion L c'' <= AU /\ AU + (c_mapped_user (get_cls st c'') - c_allocated_user (get_cls st c'')) <= aregion L c'' + K_FREEARR_OFF) by (subst AU; clear -Q1 Q2; lia).
+destruct U0 as [U0 U0'].
+assert (U1 : c'' = c -> aregion L c + c_allocated_user (get_cls st c) <= AU) by (intros E; subst AU; rewrite <- E; clear; lia).
+assert (U2 : c'' = K_BATCH_CLASS -> aregion L K_BATCH_CLASS + c_allocated_user (get_cls st K_BATCH_CLASS) <= AU) by (intros E; subst AU; rewrite <- E; clear; lia).
+idtac "UND1".
+apply Kres; [clear -RI4 Q1 U0; lia | subst AU; clear -Q1 Q2 RI2 RI3; unfold K_FREEARR_OFF, K_REGION, K_SPACE_SIZE in *; lia | clear -POS''; lia | | | |].
+* pose proof (undist_vs_user L c'' c _ _ AB S (c_allocated_user (get_cls st c)) (proj1 PC0) (proj2 (proj2 PC0)) ltac:(clear -G3 G4; lia) U1 U0 U0') as D.
+clear -D ABUB S8 EUB. lia.
+* destruct LSTF as [Z0|(_ & F1 & F2 & _)]; [rewrite Z0; right; clear -RI4 RES RHI Q1 U0; lia|].
+exact (undist_vs_user L c'' K_BATCH_CLASS _ _ lst 8192 _ F1 F2 A24 U2 U0 U0').
+* destruct EBF as [Z0|(F1 & F2 & _)]; [rewrite Z0; right; clear -RI4 RES RHI Q1 U0; lia|].
+exact (undist_vs_user L c'' K_BATCH_CLASS _ _ eb 8192 _ F1 F2 A24 U2 U0 U0').
+* assert (GLR : gl = 0 \/ (aregion L K_BATCH_CLASS <= gl /\ gl + 8192 <= aregion L K_BATCH_CLASS + c_allocated_user (get_cls st K_BATCH_CLASS))).
+{ destruct GLF as [[_ ->]|(_ & _ & [Z0|(_ & F1 & F2 & _)])]; [| left; exact Z0| right; split; [exact F1| exact F2]].
+destruct LSTF as [Z0|(_ & F1 & F2 & _)]; [left; exact Z0| right; split; [exact F1| exact F2]]. }
+destruct GLR as [Z0|[F1 F2]]; [rewrite Z0; right; clear -RI4 RES RHI Q1 U0; lia|].
+pose proof (undist_vs_user L c'' K_BATCH_CLASS _ _ gl 8192 _ F1 F2 A24 U2 U0 U0') as D. clear -D. lia.
+-
+eapply (aslot_shadow_update_gen L _ m m' MUn WM st st' X X' c''); [exact SHADOW | apply NDS | exact EC3 | exact EC4 | | | apply shlen_nonneg; clear -QS; lia].
++ intros k'' Hk''.
+pose proof (slot_geo L st X c'' k'' ALO WF ltac:(unfold K_NUM_CLASSES; clear -Hc''; lia) Hk'') as (T16 & TM16 & TAL & P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8 & _).
+assert (D1 : (c'' = c /\ k'' = k) \/ (c'' <> c \/ k'' <> k)) by (clear; lia). destruct D1 as [[Ec Ek]|NE1].
+*
+subst c'' k''. right.
+subst X'. rewrite (busy_of_xfree L st X p c k n b1 ctx l1 l2 (enq_is_app st) k24 c k XB WF).
+assert (NOK : (negb (enq_is_app st) && (K_BATCH_CLASS =? c) && (k24 =? k)) = false).
+{ destruct (enq_is_app st) eqn:EA; [reflexivity|]. cbn [negb andb].
+destruct (Z.eqb_spec K_BATCH_CLASS c) as [E1'|]; [| reflexivity]. destruct (Z.eqb_spec k24 k) as [E2'|]; [| reflexivity]. exfalso.
+destruct (NEWF eq_refl) as (_ & NB & _). pose proof (busy_of_X_self L st X p c k n b1 ctx l1 l2 XB WF) as E'. rewrite <- E1', <- E2', NB in E'. discriminate. }
+rewrite NOK, !Z.eqb_refl. cbn [andb].
+unfold slot_shadow_bytes, bquar. cbn [xb_n xb_st]. rewrite <- EAB. fold S.
+eapply cells_frame in SHA; [| exact MUn | exact WM | cbn [cells_size csize Nat.add]; rewrite Nat.add_0_r, Z2Nat.id by (clear -GR3; lia);
+apply Kshad; [clear -SHLO; lia| clear -SHHI GR3 GFS SE G0 GE; lia| clear -GR3; lia| left; clear -SE; lia]].
+eapply cells_frame in SHR; [| exact MUn | exact WM | cbn [cells_size csize Nat.add]; rewrite Nat.add_0_r, Z2Nat.id by (clear -GFS GE GR3; unfold granules in *; lia);
+apply Kshad; [clear -SHLO SE GR3 G0 EGQ; lia| clear -SHHI GR3 GFS SE G0 GE EGQ; lia| clear -GFS GE GR3; unfold granules in *; lia| right; clear -EGQ; lia]].
+rewrite EGQ in SH'.
+replace (shad UB) with (shad AB + Z.of_nat (Z.to_nat (shlen (rz_size n)))) in SH' by (clear -SE GR3; lia).
+rewrite EGQ in SHR, G0.
+replace (shad UB + shlen (rup n 8)) with (shad AB + Z.of_nat (Z.to_nat (shlen (rz_size n))) + Z.of_nat (Z.to_nat (shlen (rup n 8)))) in SHR by (clear -SE GR3 G0; lia).
+pose proof (cb_app m' _ _ _ _ _ SHA (cb_app m' _ _ _ _ _ SH' SHR)) as FIN.
+assert (GE' : shlen (rup n 8) = granules n) by (rewrite <- EGQ; exact GE). rewrite <- GE'.
+replace (Z.to_nat (shlen (rz_size n)) + (Z.to_nat (shlen (rup n 8)) + Z.to_nat (shlen S - shlen (rz_size n) - shlen (rup n 8))))%nat with (Z.to_nat (shlen S)) in FIN
+by (clear -GR3 G0 GE' GFS; unfold granules in *; lia).
+rewrite <- ?app_assoc in FIN. rewrite <- ?app_assoc. exact FIN.
+* left.
+assert (T2 : (c =? c'') && (k =? k'') = false).
+{ destruct (Z.eqb_spec c c'') as [E|]; [| reflexivity]. destruct (Z.eqb_spec k k'') as [E'|]; [| reflexivity]. exfalso. clear -NE1 E E'. lia. }
+split.
+-- subst X'. rewrite (busy_of_xfree L st X p c k n b1 ctx l1 l2 (enq_is_app st) k24 c'' k'' XB WF), T2.
+destruct (negb (enq_is_app st) && (K_BATCH_CLASS =? c'') && (k24 =? k'')) eqn:T1; [| reflexivity].
+destruct (enq_is_app st) eqn:EA; [cbn in T1; discriminate|]. cbn [negb andb] in T1.
+destruct (Z.eqb_spec K_BATCH_CLASS c'') as [<-|]; [| discriminate]. destruct (Z.eqb_spec k24 k'') as [<-|]; [| discriminate].
+destruct (NEWF eq_refl) as (_ & NB & _). rewrite NB. rewrite size_of_class_24. rewrite slot_shadow_bbatch by (clear; change (shlen 8192) with 1024; lia).
+reflexivity.
+-- assert (DW : aslot_addr L c'' k'' + size_of_class c'' <= AB \/ AB + S <= aslot_addr L c'' k'').
+{ pose proof (slots_sep_any L st X c'' k'' c k ALO WF ltac:(unfold K_NUM_CLASSES; clear -Hc''; lia) HC Hk'' KR NE1) as D.
+rewrite <- EAB, <- ES in D. exact D. }
+pose proof (slot_aligned L c'' k'' SAL ltac:(unfold K_NUM_CLASSES; clear -Hc''; lia)) as AL''.
+apply Kshad.
+++ rewrite shad_div. unfold ASHOFF. clear -P7 RES RHI. Z.div_mod_to_equations. lia.
+++ rewrite shad_div, shlen_div. unfold ASHOFF in *. clear -P8 T16. Z.div_mod_to_equations. lia.
+++ apply shlen_nonneg. clear -T16; lia.
+++ rewrite EGQ. destruct DW as [D|D].
+** left. eapply Z.le_trans; [apply shad_sep; [exact D| clear -AL''; Z.div_mod_to_equations; lia]|]. clear -SE GR3; lia.
+** right. apply shad_sep; [clear -D UBS; lia| exact UB16'].
++ intros POS''.
+set (AU := aregion L c'' + c_allocated_user (get_cls st c'')) in *.
+assert (U0 : aregion L c'' <= AU /\ AU + (c_mapped_user (get_cls st c'') - c_allocated_user (get_cls st c'')) <= aregion L c'' + K_FREEARR_OFF) by (subst AU; clear -Q1 Q2; lia).
+destruct U0 as [U0 U0'].
+assert (U1 : c'' = c -> aregion L c + c_allocated_user (get_cls st c) <= AU) by (intros E; subst AU; rewrite <- E; clear; lia).
+pose proof (undist_vs_user L c'' c _ _ UB (rup n 8) (c_allocated_user (get_cls st c)) ltac:(clear -PC0 ABUB; lia) ltac:(clear -PC0 UBS; lia) ltac:(clear -G3 G4; lia) U1 U0 U0') as D.
+assert (AM : AU mod 8 = 0) by (subst AU; pose proof (mod16_of_class _ _ Q3 QS16 ltac:(clear -QS; lia)) as AM; clear -AM RM''; Z.div_mod_to_equations; lia).
+apply Kshad.
+* rewrite shad_div. unfold ASHOFF. clear -U0 RI4 RES RHI. Z.div_mod_to_equations. lia.
+* rewrite shad_div, shlen_div. unfold ASHOFF, K_FREEARR_OFF, K_REGION, K_SPACE_SIZE in *. clear -U0' RI2 RI3 RES RHI. Z.div_mod_to_equations. lia.
+* clear -POS''; lia.
+* rewrite EGQ. destruct D as [D|D]; [left; apply shad_sep; [exact D| exact AM] | right; apply shad_sep; [exact D| exact UB16']].
+}
+assert (AVL' : forall c'', 1 <= c'' < K_NUM_CLASSES -> ashadow_avail L st' m' c'').
+{ intros c'' Hc''. pose proof WF as WF0. destruct WF0 as (_ & _ & SAL & _ & _ & PERC & _).
+destruct (PERC c'' Hc'') as (Q1 & Q2 & Q3 & Q4 & Q5 & Q6 & Q7 & _).
+pose proof (size_of_class_facts c'' Hc'') as [QS QS16]. pose proof (aregion_mod L c'' SAL) as RM''.
+assert (EC2 : c_mapped_free_array (get_cls st' c'') = c_mapped_free_array (get_cls st c'')) by (destruct (Z.eq_dec c'' K_BATCH_CLASS) as [->|NE]; [exact M24d| rewrite (GCo' c'' NE); reflexivity]).
+assert (EC4 : c_mapped_user (get_cls st' c'') = c_mapped_user (get_cls st c'')) by (destruct (Z.eq_dec c'' K_BATCH_CLASS) as [->|NE]; [exact M24a| rewrite (GCo' c'' NE); reflexivity]).
+unfold K_NUM_CLASSES in Hc''.
+assert (RI : al_res L + 4096 <= aregion L c'' /\ aregion L c'' + K_REGION <= al_space_beg L + K_SPACE_SIZE /\ al_space_beg L + K_SPACE_SIZE + 4096 <= al_res L + 137439023104).
+{ unfold aregion, K_REGION, K_SPACE_SIZE. change (2^37) with 137438953472. clear -Hc'' RSP. lia. }
+destruct RI as (RI1 & RI2 & RI3).
+assert (PC0 : aregion L c <= AB /\ AB + S <= aregion L c + K_FREEARR_OFF /\ AB + S <= aregion L c + c_allocated_user (get_cls st c)) by (clear -G1 G2 G3 G4; lia).
+eapply ashadow_avail_frame; [exact MUn | exact WM | exact (AVL c'' ltac:(unfold K_NUM_CLASSES; exact Hc'')) | exact EC4 | exact EC2 | |].
+- intros POS''. set (AU := aregion L c'' + c_mapped_user (get_cls st c'')) in *.
+assert (U0 : aregion L c'' <= AU /\ AU + (K_FREEARR_OFF - c_mapped_user (get_cls st c'')) <= aregion L c'' + K_FREEARR_OFF) by (subst AU; clear -Q1 Q2; lia).
+destruct U0 as [U0 U0'].
+assert (U1 : c'' = c -> aregion L c + c_mapped_user (get_cls st c) <= AU) by (intros E; subst AU; rewrite <- E; clear; lia).
+pose proof (undist_vs_user L c'' c _ _ UB (rup n 8) (c_mapped_user (get_cls st c)) ltac:(clear -PC0 ABUB; lia) ltac:(clear -PC0 UBS G3; lia) G4 U1 U0 U0') as D.
+assert (AM : AU mod 8 = 0) by (subst AU; generalize Q4 RM''; clear; unfold K_USER_MAP; intros; Z.div_mod_to_equations; lia).
+apply Kshad.
++ rewrite shad_div. unfold ASHOFF. clear -U0 RI1 RES RHI. Z.div_mod_to_equations. lia.
++ rewrite shad_div, shlen_div. unfold ASHOFF, K_FREEARR_OFF, K_REGION, K_SPACE_SIZE in *. clear -U0' RI2 RI3 RES RHI. Z.div_mod_to_equations. lia.
++ clear -POS''; lia.
++ rewrite EGQ. destruct D as [D|D]; [left; apply shad_sep; [exact D| exact AM] | right; apply shad_sep; [exact D| exact UB16']].
+- intros POS''. set (AU := afreearr L c'' + c_mapped_free_array (get_cls st c'')) in *.
+assert (FA : aregion L c'' + K_FREEARR_OFF <= AU /\ AU + (K_FREEARR_MAX - c_mapped_free_array (get_cls st c'')) <= aregion L c'' + K_REGION).
+{ subst AU. unfold afreearr, K_FREEARR_OFF, K_FREEARR_MAX, K_REGION in *. clear -Q5 Q6. lia. }
+destruct FA as [FA1 FA2].
+pose proof (farr_vs_user L c'' c _ _ UB (rup n 8) ltac:(clear -PC0 ABUB; lia) ltac:(clear -PC0 UBS; lia) FA1 FA2) as D.
+assert (AM : AU mod 8 = 0) by (subst AU; generalize Q7 RM''; clear; unfold afreearr, K_FREEARR_OFF, K_FREEARR_MAP; intros; Z.div_mod_to_equations; lia).
+apply Kshad.
++ rewrite shad_div. unfold ASHOFF, K_FREEARR_OFF in *. clear -FA1 RI1 RES RHI. Z.div_mod_to_equations. lia.
++ rewrite shad_div, shlen_div. unfold ASHOFF, K_SPACE_SIZE in *. clear -FA2 RI2 RI3 RES RHI. Z.div_mod_to_equations. lia.
++ clear -POS''; lia.
++ rewrite EGQ. destruct D as [D|D]; [left; apply shad_sep; [exact D| exact AM] | right; apply shad_sep; [exact D| exact UB16']]. }
+assert (HS' : ASEC L st' X' m').
+{ eapply (hs_frame _ HL L st st' X X' m m'); [exact HS | exact MUn | exact WM | |].
+- unfold sec_untouched, aknown. unfold AINSTANCE, K_SPACE_SIZE in *. change (2^37) with 137438953472 in *.
+assert (SHB : 2201439137792 <= shad UB /\ shad UB + gq <= 17594333495296) by (clear -SHLO SHHI SE GR3 GFS GE EGQ G0; lia).
+assert (SHB1 : shad (al_space_beg L) + 536870912 <= shad (aregion L c)).
+{ rewrite !shad_div. unfold aregion, K_REGION, K_NUM_CLASSES in *. change (2^32) with 4294967296 in *. clear -HC. Z.div_mod_to_equations. lia. }
+assert (SHB2 : shad (aregion L c) + shlen (c_mapped_user (get_cls st c)) <= shad (al_space_beg L) + 17179869184).
+{ pose proof (alayout_space L ALO) as (_ & _ & SPal & _). rewrite !shad_div, shlen_div. unfold aregion, K_REGION, K_ALIGN, K_FREEARR_OFF, K_NUM_CLASSES in *. change (2^32) with 4294967296 in *.
+clear -HC G4 SPal. Z.div_mod_to_equations. lia. }
+apply Forall_cons; [cbn [fst snd]; intros a Ha; do 4 right; left; clear -Ha CEIL LO; lia |].
+do 4 (apply Forall_cons; [cbn [fst snd]; intros a Ha; left; left; clear -Ha; unfold AIMG_HI, AINSTANCE; lia |]).
+do 4 (apply Forall_cons; [cbn [fst snd]; intros a Ha; do 5 right; left; clear -Ha OT TBND TIMG; lia |]).
+apply Forall_cons; [cbn [fst snd]; intros a Ha; do 7 right; left; clear -Ha G5 G6 ABUB S8 EUB RSP; lia |].
+apply Forall_cons; [cbn [fst snd]; intros a Ha; right; left; clear -Ha SE GR3 GFS GE EGQ G0 SHM1 SHM2 SHB1 SHB2; lia |].
+apply Forall_cons; [cbn [fst snd]; intros a Ha; do 8 right; left; clear -Ha; lia |].
+apply Forall_cons; [cbn [fst snd]; intros a Ha; do 9 right; left; clear -Ha; lia |].
+apply Forall_cons; [cbn [fst snd]; intros a Ha; clear -Ha RES RHI RSP LSTF; destruct LSTF as [Z0|(_ & _ & _ & F3 & F4)]; [rewrite Z0, qsz_0 in Ha; left; left; unfold AIMG_HI, AINSTANCE; lia| pose proof (qsz_bound lst); do 7 right; left; lia] |].
+apply Forall_cons; [cbn [fst snd]; intros a Ha; clear -Ha RES RHI RSP EBF EBNZ; destruct EBF as [Z1|(_ & _ & E3 & E4)]; [exfalso; lia| do 7 right; left; lia] |].
+apply Forall_cons; [cbn [fst snd]; intros a Ha; clear -Ha RES RHI RSP LSTF GLF; destruct GLF as [[_ Z2]|(_ & _ & [Z2|(_ & _ & _ & H3 & H4)])];
+[ subst gl; destruct LSTF as [Z0|(_ & _ & _ & F3 & F4)]; [left; left; unfold AIMG_HI, AINSTANCE; lia| do 7 right; left; lia] | left; left; unfold AIMG_HI, AINSTANCE; lia | do 7 right; left; lia] |].
+apply Forall_nil.
+- eapply (sec_same_free st p c n); [exact LIVE| exact SC| exact (st_after_enq_qfilt is_sec st1 (CPrim c n) eq_refl)]. }
+assert (BL' : ablocks L st' X' (lb_remove p LB)).
+{ subst X'. unfold xfree. destruct (enq_is_app st); [apply (ablocks_xquar L st X p c k n b1 ctx l1 l2 XB LB st' ELIVE BL)| apply (ablocks_xbatch L st X p c k n b1 ctx l1 l2 XB LB st' k24 ELIVE BL)]. }
+assert (FKD : forall cls FA sz, In (mkABlock (ABFake cls) FA sz) LB -> al_fake L <= FA /\ 0 <= sz /\ FA + sz <= al_fake L + 11571200)
+by (intros cls FA sz Hin; exact (proj1 (proj2 BL) cls FA sz Hin)).
+pose proof (ao_fake L ALO) as FKO. pose proof (aobj_int _ _ FKO ltac:(clear; lia)) as (FKi & FKa & [kF FBND]). unfold aobj in FKO.
+pose proof (ad_t_fake L ALO) as D_t_f. pose proof (ad_fake_res L ALO) as D_f_res. pose proof (ad_nodes_fake L ALO) as D_n_f. pose proof (ad_store_fake L ALO) as D_s_f.
+unfold adisj in D_t_f, D_f_res, D_n_f, D_s_f. box D_t_f. box D_f_res. box D_n_f. box D_s_f.
+assert (HFK' : AFK L (lb_remove p LB) m').
+{ eapply (hf_blocks _ HL L LB); [eapply (hf_frame _ HL L LB m m'); [exact HFK | exact MUn | exact WM |] |].
+- pose proof (ao_dtls L ALO) as DTO. pose proof (aobj4_int _ DTO) as (_ & _ & [kD DBND] & [jD DIMG]). unfold aobj in DTO.
+pose proof (ad_t_dtls L ALO) as D1. pose proof (ad_dtls_res L ALO) as D2. pose proof (ad_nodes_dtls L ALO) as D3. pose proof (ad_store_dtls L ALO) as D4.
+unfold adisj in D1, D2, D3, D4.
+unfold fake_untouched. unfold K_SPACE_SIZE in *. change (2^37) with 137438953472 in *.
+assert (SHF : (shad (al_fake L) + shlen 11571200 <= shad UB \/ shad UB + gq <= shad (al_fake L))
+/\ 0x800b6e00 <= shad (al_fake L) /\ shad (al_fake L) + shlen 11571200 <= 17594333495296).
+{ split; [| rewrite shad_div, shlen_div; unfold ASHOFF; pose proof atop_range as AR8; clear -FKO FKi FBND AR8; Z.div_mod_to_equations; lia].
+pose proof D_f_res as DFR. unbox DFR. rewrite EGQ. destruct DFR as [D|D].
+- left. apply shad_sep; [| clear -FKO FKi FBND; Z.div_mod_to_equations; lia]. clear -D RSP G5 ABUB. lia.
+- right. apply shad_sep; [| exact UB16']. clear -D RSP G6 UBS. lia. }
+destruct SHF as (SHF1 & SHF2 & SHF3).
+assert (SHB : 2201439137792 <= shad UB /\ shad UB + gq <= 17594333495296) by (clear -SHLO SHHI SE GR3 GFS GE EGQ G0; lia).
+pose proof D_t_f as DTF; unbox DTF. pose proof D_f_res as DFR; unbox DFR. pose proof D_n_f as DNF; unbox DNF. pose proof D_s_f as DSF; unbox DSF.
+assert (LSTR : (lst = 0 /\ qsz lst = 8) \/ (al_res L + 4096 <= lst /\ lst + 8192 <= al_res L + 137439023104 /\ qsz lst = 8192))
+by (destruct LSTF as [Z0|(_ & _ & _ & F3 & F4)]; [left; split; [exact Z0| apply qsz_eq0; exact Z0]| right; split; [exact F3| split; [exact F4| apply qsz_pos; clear -F3 RES; lia]]]).
+assert (EBR : al_res L + 4096 <= eb /\ eb + 8192 <= al_res L + 137439023104) by (destruct EBF as [Z0|(_ & _ & F3 & F4)]; [exfalso; clear -Z0 EBNZ; lia| split; assumption]).
+assert (GLRR : gl = lst \/ gl = 0 \/ (al_res L + 4096 <= gl /\ gl + 8192 <= al_res L + 137439023104))
+by (destruct GLF as [[_ Z2]|(_ & _ & [Z2|(_ & _ & _ & H3 & H4)])]; [left; exact Z2| right; left; exact Z2| right; right; split; assumption]).
+do 16 (apply Forall_cons; [cbn [fst snd]; unfold AIMG_HI in *;
+first [ solve [clear -CEIL LO OT TBND TIMG RES RHI FKO FKi FBND DTO DBND DIMG SHF2 SHF3; repeat (split; [lia|]); lia]
+| solve [clear -OT TBND TIMG FKO FKi FBND DTO DBND DIMG DTF D1 SHF2 SHF3; repeat (split; [lia|]); lia]
+| solve [clear -ON NBND Ni OS SBND Si FKO FKi FBND DTO DBND DIMG DNF DSF D3 D4 SHF2 SHF3; repeat (split; [lia|]); lia]
+| solve [clear -SHB SHF1 SHF2 SHF3 FKO FKi FBND DTO DBND DIMG; repeat (split; [lia|]); lia]
+| solve [clear -RES RHI RSP G5 G6 ABUB S8 EUB DFR D2 FKO FKi FBND DTO DBND DIMG SHF2 SHF3; repeat (split; [lia|]); lia]
+| solve [clear -RES RHI DFR D2 FKO FKi FBND DTO DBND DIMG SHF2 SHF3 LSTR; repeat (split; [lia|]); lia]
+| solve [clear -RES RHI DFR D2 FKO FKi FBND DTO DBND DIMG SHF2 SHF3 EBR; repeat (split; [lia|]); lia]
+| solve [clear -RES RHI DFR D2 FKO FKi FBND DTO DBND DIMG SHF2 SHF3 LSTR GLRR; repeat (split; [lia|]); lia]
+| match goal with |- ?G => idtac "FAKELEFT" G end ] |]).
+apply Forall_nil.
+- intros cls FA sz. rewrite (In_lb_remove p LB). cbn. split; [intros [Hin _]; exact Hin| intros Hin; split; [exact Hin| discriminate]]. }
+assert (GNB : g_nb g = Z.of_nat (length (a_qglob st))) by reflexivity.
+assert (GFST : g_fst g = qfirst L (q_glob Q)) by reflexivity.
+assert (GQB : g_qb g = a_qglob_bytes st) by reflexivity.
+assert (GFU : g_full g = match a_qglob st with [] => false | _ :: _ => true end) by reflexivity.
+destruct DKP as [MX' DKP'].
+pose proof (qnum_free st p (CPrim c n) NUM ltac:(cbn [chunk_size]; clear -N1; lia) NOREC) as (NUM' & NB2a & NB2b & NB2c & NF2).
+fold st1 st2 st' in NUM', NB2a, NB2b, NB2c, NF2.
+pose proof (st_after_q st2) as [DRN NDR]. fold st' in DRN, NDR.
+assert (QK' : aquar_glob_const m').
+{ split; [| exact MX']. eapply cells_frame; [exact QK | exact MUn | exact WM |]. cbn [cells_size csize Nat.add]. apply Kimg; clear; unfold AQ_MAX, AIMG_HI; lia. }
+assert (IA' : aintal true m').
+{ split; [exact FL'|]. split; [exact IAS'|]. intros _ j Hj. apply IAM'. revert Hj. clear. unfold AIA_MAP1_LEN. cbn. lia. }
+assert (BLST : forall q, In q (q_loc Q ++ q_glob Q) -> abatch_addr L (qb_slot q) <> lst ->
+abatch_addr L (qb_slot q) + 8192 <= lst \/ lst + 8192 <= abatch_addr L (qb_slot q) \/ lst = 0).
+{ intros q Hq NE. destruct LSTF as [Z0|((ql & Hql & Eql) & _)]; [right; right; exact Z0|].
+destruct (BDIS q ql Hq ltac:(apply in_or_app; left; exact Hql)) as [E|E]; [exfalso; apply NE; rewrite Eql; exact E| rewrite Eql].
+destruct E as [E|E]; [left; exact E| right; left; exact E]. }
+assert (BFR : forall q, In q (q_loc Q ++ q_glob Q) -> abatch_addr L (qb_slot q) <> lst -> abatch_addr L (qb_slot q) <> gl ->
+disjoint_from (Wf (bv_unsigned sp) (al_t L) UB gq (al_nodes L) (al_store L) lst eb gl) (abatch_addr L (qb_slot q)) 8192).
+{ intros q Hq NL NG. destruct (BGEO q Hq) as (_ & _ & F3 & F4). pose proof (SEPQ q Hq) as SQ. pose proof (BLST q Hq NL) as DL.
+assert (DE : eb = lst \/ abatch_addr L (qb_slot q) + 8192 <= eb \/ eb + 8192 <= abatch_addr L (qb_slot q)).
+{ destruct EBK as [E|[EA E]]; [left; exact E| right]. rewrite E.
+destruct (KDIS q Hq EA) as [D|D]; [right; exact D| left; exact D]. }
+assert (DG : gl = lst \/ gl = 0 \/ abatch_addr L (qb_slot q) + 8192 <= gl \/ gl + 8192 <= abatch_addr L (qb_slot q)).
+{ destruct GLF as [[_ E]|(_ & _ & [Z0|((qg & Hqg & Eqg) & _)])]; [left; exact E| right; left; exact Z0| right; right].
+destruct (BDIS q qg Hq ltac:(apply in_or_app; right; exact Hqg)) as [E|E]; [exfalso; apply NG; rewrite Eqg; exact E| rewrite Eqg; exact E]. }
+apply Kres; clear -F3 F4 RES RHI SQ DL DE DG ABUB S8 EUB; lia. }
+assert (HQ' : AQUAR L st' X' m').
+{ subst ek. unfold ek_of in EKP, EK, QC', DKP', EEB, SB1, GDR, GL, GLST.
+destruct (enq_is_app st) eqn:EA; cbn [ek_nb ek_fst ek_lst ek_delta ek_b ek_post ek_pre] in EKP, EK, QC', DKP', EEB, SB1, GDR, GL, GLST.
+-
+destruct EKP as (LB' & LA' & [bs LJ'] & _). destruct EK as (_ & _ & CNT' & _ & _ & _ & _ & LEN & _).
+pose proof EA as EA0. unfold enq_is_app in EA0. destruct (rev (a_qloc st)) as [|blr rl] eqn:RV; [discriminate|].
+assert (QL : a_qloc st = rev rl ++ [blr]) by (rewrite <- (rev_involutive (a_qloc st)), RV; reflexivity).
+destruct (Z.eqb_spec (b_count blr) Q_BATCH) as [|NFULL]; [discriminate|]. clear EA0.
+set (l := rev rl) in *. set (bl := blr) in *.
+assert (LQ : (0 < length (q_loc Q))%nat) by (rewrite LN1, QL, length_app; cbn; clear; lia).
+assert (QQ : q_loc Q = removelast (q_loc Q) ++ [List.last (q_loc Q) dummy_qb]) by (apply app_removelast_last; destruct (q_loc Q); [cbn in LQ; clear -LQ; lia| discriminate]).
+set (ql := removelast (q_loc Q)) in *. set (qz := List.last (q_loc Q) dummy_qb) in *.
+assert (LNl : length ql = length l) by (rewrite QQ, QL, !length_app in LN1; cbn in LN1; clear -LN1; lia).
+assert (LST : List.last (a_qloc st) dummy_batch = bl) by (rewrite QL; apply last_app1). rewrite LST in *.
+assert (QLST : lst = abatch_addr L (qb_slot qz)) by (rewrite ELST, QQ; apply qlast_app1).
+set (bl' := mkABatch (b_count bl + 1) (b_size bl + n) (CPrim c n :: b_chunks bl)) in *.
+set (qz' := mkQB (qb_slot qz) (k :: qb_ks qz)) in *.
+assert (EAPP : enq_app st1 (CPrim c n) = Some (set_qloc (l ++ [bl']) (a_qloc_bytes st1 + n) st1)).
+{ unfold enq_app. change (a_qloc st1) with (a_qloc st). rewrite RV. fold bl. replace (b_count bl =? Q_BATCH) with false by (symmetry; apply Z.eqb_neq; exact NFULL).
+cbn [chunk_size]. subst bl'. reflexivity. }
+assert (Q2 : a_qloc st2 = l ++ [bl'] /\ a_qloc_bytes st2 = a_qloc_bytes st + n /\ a_qglob st2 = a_qglob st /\ a_qglob_bytes st2 = a_qglob_bytes st).
+{ subst st2. unfold st_enq. rewrite EAPP. subst st1. cbn. repeat split; reflexivity. }
+destruct Q2 as (QL2 & QB2 & QG2 & QGB2).
+unfold abatches in ABL, ABG. rewrite QL, QQ in ABL. apply abatches_to_app in ABL; [| exact LNl]. destruct ABL as [ABl ABz].
+cbn [abatches_to qaddrs map hd] in ABz. destruct ABz as [(Z1 & Z2 & Z3 & Z4 & Z5 & Z6) _].
+assert (ABl' : abatches_to L m' l ql (hd 0 (qaddrs L [qz']))).
+{ cbn [qaddrs map hd qz' qb_slot]. cbn [qaddrs map hd] in ABl. eapply abatches_to_frame; [exact MUn | exact WM | exact ABl |].
+intros q Hq. assert (INq : In q (q_loc Q ++ q_glob Q)) by (apply in_or_app; left; rewrite QQ; apply in_or_app; left; exact Hq).
+assert (NEq : abatch_addr L (qb_slot q) <> lst).
+{ rewrite QLST. intros E. apply in_split in Hq. destruct Hq as (qs1 & qs2 & EQl).
+apply (bslots_nodup_split L st X Q CP qs1 q qs2 qz (q_glob Q)); [rewrite QQ, EQl; rewrite <- ?app_assoc; cbn [app]; rewrite <- ?app_assoc; reflexivity|].
+pose proof (bslot_range L st X Q WF CP q INq). pose proof (bslot_range L st X Q WF CP qz ltac:(apply in_or_app; left; rewrite QQ; apply in_or_app; right; left; reflexivity)).
+unfold abatch_addr, aslot_addr in E. rewrite size_of_class_24 in E. clear -E. lia. }
+apply BFR; [exact INq | exact NEq |].
+destruct GLF as [[_ E]|(GD & GQL & [Z0|((qg & Hqg & Eqg) & _)])]; [rewrite E; exact NEq| rewrite Z0; destruct (BGEO q INq) as (_ & _ & F3 & _); clear -F3 RES RHI; lia|].
+rewrite Eqg. intros E. apply in_split in Hq. destruct Hq as (qs1 & qs2 & EQl). apply in_split in Hqg. destruct Hqg as (gs1 & gs2 & EQg).
+apply (bslots_nodup_split L st X Q CP qs1 q (qs2 ++ [qz] ++ gs1) qg gs2); [rewrite QQ, EQl, EQg; rewrite <- ?app_assoc; cbn [app]; rewrite <- ?app_assoc; reflexivity|].
+pose proof (bslot_range L st X Q WF CP q INq). pose proof (bslot_range L st X Q WF CP qg ltac:(apply in_or_app; right; rewrite EQg; apply in_or_app; right; left; reflexivity)).
+unfold abatch_addr, aslot_addr in E. rewrite size_of_class_24 in E. clear -E. lia. }
+assert (ABz' : abatch_cells L m' bl' qz' 0).
+{ unfold abatch_cells. cbv zeta. cbn [qb_slot qb_ks b_size b_count b_chunks bl' qz']. rewrite <- QLST. rewrite qhdrs_cons, map_app. cbn [map qhdr]. rewrite <- EAB, <- EUB.
+split; [exact LB'|]. split; [exact LA'|]. split; [| split; [cbn [length]; rewrite Z4; clear; lia| split; [cbn [length]; rewrite Z5; reflexivity| unfold Q_BATCH in *; clear -CNT' Z6; lia]]].
+exists bs. unfold Q_BATCH_BYTES. exact LJ'. }
+assert (ABL' : abatches_to L m' (l ++ [bl']) (ql ++ [qz']) 0).
+{ apply abatches_to_app; [exact LNl|]. split; [exact ABl'|]. cbn. split; [exact ABz'| exact I]. }
+assert (CP2 : qcoupled L st2 X' (mkQConc (ql ++ [qz']) (q_glob Q) true (q_pend Q))).
+{ subst X'. unfold xfree. apply (qcoupled_app L st X Q p c k n b1 ctx l1 l2 XB WF CP st2 l bl ql qz true QL QQ QL2 QG2). }
+subst qz'.
+destruct (Z.lt_ge_cases Q_CACHE (a_qloc_bytes st2)) as [DR|NDRN].
++
+destruct (DRN DR) as (QL3 & QB3 & QG3 & QGB3).
+assert (GD : g_drain g = true) by (rewrite GDR; apply Z.ltb_lt; rewrite <- QB2; exact DR).
+unfold tcache_post in QC'. rewrite GD in DKP', QC'.
+destruct DKP' as [GC' GLN].
+exists (mkQConc [] (q_glob Q ++ (ql ++ [{| qb_slot := qb_slot qz; qb_ks := k :: qb_ks qz |}])) true (q_pend Q)). unfold AQUAR_at. cbn [q_loc q_glob q_ia].
+rewrite QL3, QB3, QG3, QGB3, QL2, QG2, QB2, QGB2.
+split; [exact QK'|]. split; [| split; [| split; [exact IA'| split]]].
+* split; [cbn [length qfirst qlast qaddrs map hd last Z.of_nat]; exact QC'| exact I].
+* split.
+-- rewrite length_app, Nat2Z.inj_add, <- GNB. rewrite length_app. cbn [length].
+replace (Z.of_nat (length l + 1)) with (Z.of_nat (length (a_qloc st))) by (rewrite QL, length_app; cbn; reflexivity).
+rewrite qlast_app by (intros Enil; apply app_eq_nil in Enil; destruct Enil as [_ Enil]; discriminate). rewrite qlast_reslot, <- QQ, <- ELST.
+assert (FE : qfirst L (q_glob Q ++ ql ++ [{| qb_slot := qb_slot qz; qb_ks := k :: qb_ks qz |}]) = (if g_full g then g_fst g else qfirst L (q_loc Q))).
+{ rewrite GFU, GFST. destruct (a_qglob st) eqn:QG0.
+- replace (q_glob Q) with (@nil qbatchc) by (destruct (q_glob Q); [reflexivity| cbn in LN2; discriminate]). cbn [app]. rewrite qfirst_reslot, <- QQ. reflexivity.
+- apply qfirst_app. destruct (q_glob Q); [cbn in LN2; discriminate| discriminate]. }
+rewrite FE, <- GQB. exact GC'.
+-- unfold abatches. apply abatches_to_app; [exact LN2|]. split.
+++
+rewrite hd_qaddrs by (intros Enil; apply app_eq_nil in Enil; destruct Enil as [_ Enil]; discriminate). rewrite qfirst_reslot, <- QQ.
+destruct (a_qglob st) as [|bg0 lg0] eqn:QG0.
+** replace (q_glob Q) with (@nil qbatchc) by (destruct (q_glob Q); [reflexivity| cbn in LN2; discriminate]). exact I.
+** rewrite <- QG0 in *.
+assert (GNE : a_qglob st <> []) by (rewrite QG0; discriminate).
+assert (QG : a_qglob st = removelast (a_qglob st) ++ [List.last (a_qglob st) dummy_batch]) by (apply app_removelast_last; exact GNE).
+assert (LQg : (0 < length (q_glob Q))%nat) by (rewrite LN2, QG0; cbn; clear; lia).
+assert (QQg : q_glob Q = removelast (q_glob Q) ++ [List.last (q_glob Q) dummy_qb]) by (apply app_removelast_last; destruct (q_glob Q); [cbn in LQg; clear -LQg; lia| discriminate]).
+set (lg := removelast (a_qglob st)) in *. set (blg := List.last (a_qglob st) dummy_batch) in *.
+set (qg := removelast (q_glob Q)) in *. set (qgz := List.last (q_glob Q) dummy_qb) in *.
+assert (LNg : length qg = length lg) by (rewrite QQg, QG, !length_app in LN2; cbn in LN2; clear -LN2; lia).
+rewrite QG, QQg in ABG. apply abatches_to_app in ABG; [| exact LNg]. destruct ABG as [ABg ABgz].
+cbn [abatches_to qaddrs map hd] in ABgz. destruct ABgz as [(Y1 & Y2 & Y3 & Y4 & Y5 & Y6) _].
+assert (QGLST : qlast L (q_glob Q) = abatch_addr L (qb_slot qgz)) by (rewrite QQg; apply qlast_app1).
+rewrite GFU in GLN. rewrite ?QG0 in GLN. cbv iota beta in GLN. rewrite GL, QGLST in GLN.
+rewrite QG, QQg. apply abatches_to_app; [exact LNg|]. split.
++++ cbn [qaddrs map hd]. eapply abatches_to_frame; [exact MUn | exact WM | exact ABg |].
+intros q Hq. assert (INq : In q (q_loc Q ++ q_glob Q)) by (apply in_or_app; right; rewrite QQg; apply in_or_app; left; exact Hq).
+assert (NEg : abatch_addr L (qb_slot q) <> abatch_addr L (qb_slot qgz)).
+{ intros E. apply in_split in Hq. destruct Hq as (gs1 & gs2 & EQg).
+apply (bslots_nodup_split L st X Q CP (q_loc Q ++ gs1) q gs2 qgz []); [rewrite QQg, EQg; rewrite <- ?app_assoc; cbn [app]; rewrite <- ?app_assoc; reflexivity|].
+pose proof (bslot_range L st X Q WF CP q INq). pose proof (bslot_range L st X Q WF CP qgz ltac:(apply in_or_app; right; rewrite QQg; apply in_or_app; right; left; reflexivity)).
+unfold abatch_addr, aslot_addr in E. rewrite size_of_class_24 in E. clear -E. lia. }
+apply BFR; [exact INq | | rewrite EGL; unfold dk_glst; rewrite GD, GL, QGLST; exact NEg].
+rewrite QLST. intros E. apply in_split in Hq. destruct Hq as (gs1 & gs2 & EQg).
+apply (bslots_nodup_split L st X Q CP ql qz gs1 q (gs2 ++ [qgz])); [rewrite QQ, QQg, EQg; rewrite <- ?app_assoc; cbn [app]; rewrite <- ?app_assoc; reflexivity|].
+pose proof (bslot_range L st X Q WF CP q INq). pose proof (bslot_range L st X Q WF CP qz ltac:(apply in_or_app; left; rewrite QQ; apply in_or_app; right; left; reflexivity)).
+unfold abatch_addr, aslot_addr in E. rewrite size_of_class_24 in E. clear -E. lia.
++++ cbn [abatches_to]. split; [| exact I].
+unfold abatch_cells. cbv zeta. change (hd (qfirst L (q_loc Q)) (qaddrs L [])) with (qfirst L (q_loc Q)).
+assert (GLS : gl = abatch_addr L (qb_slot qgz)) by (rewrite EGL; unfold dk_glst; rewrite GD, GL, QGLST; reflexivity).
+assert (NGL : abatch_addr L (qb_slot qgz) <> lst).
+{ rewrite QLST. intros E. apply (bslots_nodup_split L st X Q CP ql qz qg qgz []); [rewrite QQ, QQg; rewrite <- ?app_assoc; cbn [app]; reflexivity|].
+pose proof (bslot_range L st X Q WF CP qz ltac:(apply in_or_app; left; rewrite QQ; apply in_or_app; right; left; reflexivity)).
+pose proof (bslot_range L st X Q WF CP qgz ltac:(apply in_or_app; right; rewrite QQg; apply in_or_app; right; left; reflexivity)).
+unfold abatch_addr, aslot_addr in E. rewrite size_of_class_24 in E. clear -E. lia. }
+assert (INgz : In qgz (q_loc Q ++ q_glob Q)) by (apply in_or_app; right; rewrite QQg; apply in_or_app; right; left; reflexivity).
+destruct (BGEO qgz INgz) as (_ & _ & F3 & F4). pose proof (SEPQ qgz INgz) as SQ. pose proof (BLST qgz INgz NGL) as DL.
+assert (DE : eb = lst \/ abatch_addr L (qb_slot qgz) + 8192 <= eb \/ eb + 8192 <= abatch_addr L (qb_slot qgz)).
+{ destruct EBK as [E|[EA' E]]; [left; exact E| discriminate]. }
+assert (D8 : forall A8 kk, abatch_addr L (qb_slot qgz) + 8 <= A8 -> A8 + kk <= abatch_addr L (qb_slot qgz) + 8192 -> 0 <= kk ->
+disjoint_from (Wf (bv_unsigned sp) (al_t L) UB gq (al_nodes L) (al_store L) lst eb gl) A8 kk).
+{ intros A8 kk HA HK KK0. apply Kres; clear -F3 F4 RES RHI SQ DL DE GLS ABUB S8 EUB HA HK KK0; lia. }
+pose proof Y1 as Y1'. rw_split Y1' 1%nat YN YR.
+eapply cells_frame in YR; [| exact MUn | exact WM | cbn [cells_size csize Nat.add]; apply D8; clear; lia].
+rw_join GLN YR YH.
+split; [exact YH|]. split; [| split; [| split; [exact Y4| split; [exact Y5| exact Y6]]]].
+--- eapply u64arr_frame; [exact Y2 | exact MUn | exact WM |]. rewrite length_map, qhdrs_length by exact Y5. rewrite <- Y4.
+apply D8; unfold Q_BATCH in Y6; clear -Y6; lia.
+--- eapply junk_frame; [exact Y3 | exact MUn | exact WM |]. intros Hp. apply D8; unfold Q_BATCH, Q_BATCH_BYTES in *; clear -Y6 Hp; lia.
+++ exact ABL'.
+* exact (qcoupled_drain L st2 st' X' (mkQConc (ql ++ [{| qb_slot := qb_slot qz; qb_ks := k :: qb_ks qz |}]) (q_glob Q) true (q_pend Q)) true CP2 QL3 QG3).
+* exact NUM'.
++
+pose proof (NDR NDRN) as EST.
+assert (GD : g_drain g = false) by (rewrite GDR; apply Z.ltb_ge; rewrite <- QB2; exact NDRN).
+unfold tcache_post in QC'. rewrite GD in DKP', QC'.
+exists (mkQConc (ql ++ [{| qb_slot := qb_slot qz; qb_ks := k :: qb_ks qz |}]) (q_glob Q) true (q_pend Q)). unfold AQUAR_at. cbn [q_loc q_glob q_ia].
+rewrite EST, QL2, QG2, QB2, QGB2.
+split; [exact QK'|]. split; [| split; [| split; [exact IA'| split]]].
+* split; [| exact ABL'].
+rewrite length_app, qfirst_reslot, qlast_reslot, <- QQ, <- ELST. cbn [length].
+replace (Z.of_nat (length l + 1)) with (Z.of_nat (length (a_qloc st))) by (rewrite QL, length_app; cbn; reflexivity). exact QC'.
+* split; [rewrite <- GNB, <- GFST, <- GL, <- GQB; exact DKP'|].
+unfold abatches. eapply abatches_to_frame; [exact MUn | exact WM | exact ABG |].
+intros q Hq. assert (INq : In q (q_loc Q ++ q_glob Q)) by (apply in_or_app; right; exact Hq).
+assert (NEq : abatch_addr L (qb_slot q) <> lst).
+{ rewrite QLST. intros E. apply in_split in Hq. destruct Hq as (gs1 & gs2 & EQg).
+apply (bslots_nodup_split L st X Q CP ql qz gs1 q gs2); [rewrite QQ, EQg; rewrite <- ?app_assoc; cbn [app]; reflexivity|].
+pose proof (bslot_range L st X Q WF CP q INq). pose proof (bslot_range L st X Q WF CP qz ltac:(apply in_or_app; left; rewrite QQ; apply in_or_app; right; left; reflexivity)).
+unfold abatch_addr, aslot_addr in E. rewrite size_of_class_24 in E. clear -E. lia. }
+apply BFR; [exact INq | exact NEq | rewrite EGL; unfold dk_glst; rewrite GD; exact NEq].
+* first [rewrite EST | idtac]. exact CP2.
+* first [rewrite <- EST | idtac]. exact NUM'.
+-
+destruct (NEWF eq_refl) as (NK24 & NB24 & KK24 & NIB & JK & FK & CIN & POS).
+destruct EKP as (C24' & [stj' SJ'] & NBc & NAc & [bs NJc] & OLDc).
+assert (EAPP : enq_app st1 (CPrim c n) = None).
+{ destruct (enq_app st1 (CPrim c n)) as [sx|] eqn:EAPP; [exfalso| reflexivity].
+assert (EA1 : enq_is_app st1 = true) by (apply (proj2 (enq_is_app_spec st1 (CPrim c n))); eexists; exact EAPP).
+change (enq_is_app st1) with (enq_is_app st) in EA1. congruence. }
+set (nbt := mkABatch 1 (n + 8192) [CPrim c n]) in *.
+set (qn := mkQB k24 [k]) in *.
+assert (Q2 : a_qloc st2 = a_qloc st ++ [nbt] /\ a_qloc_bytes st2 = a_qloc_bytes st + (n + 8192) /\ a_qglob st2 = a_qglob st /\ a_qglob_bytes st2 = a_qglob_bytes st).
+{ subst st2. unfold st_enq. rewrite EAPP. pose proof (enq_new_core (CPrim c n) st1) as (_ & E1 & E2 & _ & E3 & E4 & _).
+rewrite E1, E2, E3, E4. subst st1 nbt. cbn [a_qloc a_qloc_bytes a_qglob a_qglob_bytes set_live chunk_size]. unfold Q_BATCH_BYTES.
+split; [reflexivity|]. split; [clear; lia|]. split; reflexivity. }
+destruct Q2 as (QL2 & QB2 & QG2 & QGB2).
+assert (FSTE : (if match a_qloc st with [] => false | _ :: _ => true end then qfirst L (q_loc Q) else abatch_addr L k24) = qfirst L (q_loc Q ++ [qn])).
+{ rewrite qfirst_app_r. subst qn; cbn [qb_slot]. generalize LN1. clear. generalize (a_qloc st) (q_loc Q).
+intros [|x1 r1] [|x2 r2] LL; cbn in LL; first [reflexivity | discriminate]. }
+rewrite FSTE in QC'. rewrite FSTE in DKP'.
+assert (QLST' : qlast L (q_loc Q ++ [qn]) = abatch_addr L k24) by (subst qn; apply qlast_app1).
+assert (GNL : forall q, In q (q_glob Q) -> abatch_addr L (qb_slot q) <> lst).
+{ intros q Hq E. assert (INq : In q (q_loc Q ++ q_glob Q)) by (apply in_or_app; right; exact Hq).
+destruct LSTF as [Z0|((q' & Hq' & Eq') & _)].
+- destruct (BGEO q INq) as (_ & _ & F3 & _). clear -F3 RES RHI E Z0. lia.
+- apply in_split in Hq. destruct Hq as (gs1 & gs2 & EQg). apply in_split in Hq'. destruct Hq' as (qs1 & qs2 & EQl).
+apply (bslots_nodup_split L st X Q CP qs1 q' (qs2 ++ gs1) q gs2); [rewrite EQl, EQg; rewrite <- ?app_assoc; cbn [app]; rewrite <- ?app_assoc; reflexivity|].
+pose proof (bslot_range L st X Q WF CP q INq). pose proof (bslot_range L st X Q WF CP q' ltac:(apply in_or_app; left; rewrite EQl; apply in_or_app; right; left; reflexivity)).
+rewrite Eq' in E. unfold abatch_addr, aslot_addr in E. rewrite size_of_class_24 in E. clear -E. lia. }
+assert (ABO' : abatches_to L m' (a_qloc st) (q_loc Q) (abatch_addr L k24)).
+{ destruct (a_qloc st) as [|b0 l0] eqn:QL0.
+- replace (q_loc Q) with (@nil qbatchc) by (destruct (q_loc Q); [reflexivity| cbn in LN1; discriminate]). exact I.
+- cbv iota beta in OLDc. destruct OLDc as [OLD1 OLD2]. rewrite <- QL0 in *.
+assert (LNE : a_qloc st <> []) by (rewrite QL0; discriminate).
+assert (QL : a_qloc st = removelast (a_qloc st) ++ [List.last (a_qloc st) dummy_batch]) by (apply app_removelast_last; exact LNE).
+assert (LQ : (0 < length (q_loc Q))%nat) by (rewrite LN1, QL0; cbn; clear; lia).
+assert (QQ : q_loc Q = removelast (q_loc Q) ++ [List.last (q_loc Q) dummy_qb]) by (apply app_removelast_last; destruct (q_loc Q); [cbn in LQ; clear -LQ; lia| discriminate]).
+set (l := removelast (a_qloc st)) in *. set (bl := List.last (a_qloc st) dummy_batch) in *.
+set (ql := removelast (q_loc Q)) in *. set (qz := List.last (q_loc Q) dummy_qb) in *.
+assert (LNl : length ql = length l) by (rewrite QQ, QL, !length_app in LN1; cbn in LN1; clear -LN1; lia).
+assert (QLST : lst = abatch_addr L (qb_slot qz)) by (rewrite ELST, QQ; apply qlast_app1).
+assert (FULL : b_count bl = Q_BATCH).
+{ pose proof EA as EA0. unfold enq_is_app in EA0. rewrite QL, rev_unit in EA0. cbv iota beta in EA0.
+revert EA0. destruct (Z.eqb_spec (b_count bl) Q_BATCH) as [E|NE]; intros EA0; [exact E| discriminate]. }
+unfold abatches in ABL. rewrite QL, QQ in ABL. apply abatches_to_app in ABL; [| exact LNl]. destruct ABL as [ABl ABz].
+cbn [abatches_to qaddrs map hd] in ABz. destruct ABz as [(Z1 & Z2 & Z3 & Z4 & Z5 & Z6) _].
+rewrite QL, QQ. apply abatches_to_app; [exact LNl|]. split.
++ cbn [qaddrs map hd]. eapply abatches_to_frame; [exact MUn | exact WM | exact ABl |].
+intros q Hq. assert (INq : In q (q_loc Q ++ q_glob Q)) by (apply in_or_app; left; rewrite QQ; apply in_or_app; left; exact Hq).
+assert (NEq : abatch_addr L (qb_slot q) <> lst).
+{ rewrite QLST. intros E. apply in_split in Hq. destruct Hq as (qs1 & qs2 & EQl).
+apply (bslots_nodup_split L st X Q CP qs1 q qs2 qz (q_glob Q)); [rewrite QQ, EQl; rewrite <- ?app_assoc; cbn [app]; rewrite <- ?app_assoc; reflexivity|].
+pose proof (bslot_range L st X Q WF CP q INq). pose proof (bslot_range L st X Q WF CP qz ltac:(apply in_or_app; left; rewrite QQ; apply in_or_app; right; left; reflexivity)).
+unfold abatch_addr, aslot_addr in E. rewrite size_of_class_24 in E. clear -E. lia. }
+apply BFR; [exact INq | exact NEq |].
+destruct GLF as [[_ E]|(GD & GQL & [Z0|((qg & Hqg & Eqg) & _)])]; [rewrite E; exact NEq| rewrite Z0; destruct (BGEO q INq) as (_ & _ & F3 & _); clear -F3 RES RHI; lia|].
+rewrite Eqg. intros E. apply in_split in Hq. destruct Hq as (qs1 & qs2 & EQl). apply in_split in Hqg. destruct Hqg as (gs1 & gs2 & EQg).
+apply (bslots_nodup_split L st X Q CP qs1 q (qs2 ++ [qz] ++ gs1) qg gs2); [rewrite QQ, EQl, EQg; rewrite <- ?app_assoc; cbn [app]; rewrite <- ?app_assoc; reflexivity|].
+pose proof (bslot_range L st X Q WF CP q INq). pose proof (bslot_range L st X Q WF CP qg ltac:(apply in_or_app; right; rewrite EQg; apply in_or_app; right; left; reflexivity)).
+unfold abatch_addr, aslot_addr in E. rewrite size_of_class_24 in E. clear -E. lia.
++ cbn [abatches_to]. split; [| exact I].
+unfold abatch_cells. cbv zeta. change (hd (abatch_addr L k24) (qaddrs L [])) with (abatch_addr L k24). rewrite <- QLST.
+split; [rewrite FULL; exact OLD1|]. split; [exact OLD2|]. split; [| split; [exact Z4| split; [exact Z5| exact Z6]]].
+rewrite FULL. replace (Q_BATCH_BYTES - 24 - 8 * Q_BATCH) with 0 by reflexivity. unfold Q_BATCH. apply junk_nil; (destruct LSTF as [Z0|(_ & _ & _ & F3 & F4)]; [clear -Z0; lia | atop_facts; clear -F3 F4 RES RHI; lia]). }
+assert (ABN' : abatch_cells L m' nbt qn 0).
+{ unfold abatch_cells. cbv zeta. subst nbt qn. cbn [qb_slot qb_ks b_size b_count b_chunks]. rewrite qhdrs_cons. cbn [qhdrs app map qhdr]. rewrite <- EAB, <- EUB.
+split; [exact NBc|]. split; [exact NAc|]. split; [exists bs; unfold Q_BATCH_BYTES; exact NJc|]. split; [reflexivity|]. split; [reflexivity| unfold Q_BATCH; clear; lia]. }
+assert (ABL' : abatches_to L m' (a_qloc st ++ [nbt]) (q_loc Q ++ [qn]) 0).
+{ apply abatches_to_app; [exact LN1|]. split; [cbn [qaddrs map hd]; subst qn; cbn [qb_slot]; exact ABO'|]. cbn [abatches_to]. split; [exact ABN'| exact I]. }
+assert (CP2 : qcoupled L st2 X' (mkQConc (q_loc Q ++ [qn]) (q_glob Q) true (q_pend Q))).
+{ subst X' qn nbt. rewrite ?EA. unfold xfree. cbv iota beta.
+apply (qcoupled_new L st X Q p c k n b1 ctx l1 l2 XB WF CP st2 k24 (c_count (get_cls st K_BATCH_CLASS)) (n + 8192) true eq_refl POS NK24 QL2 QG2). }
+destruct (Z.lt_ge_cases Q_CACHE (a_qloc_bytes st2)) as [DR|NDRN].
++
+destruct (DRN DR) as (QL3 & QB3 & QG3 & QGB3).
+assert (GD : g_drain g = true) by (rewrite GDR; apply Z.ltb_lt; rewrite <- QB2; exact DR).
+unfold tcache_post in QC'. rewrite GD in DKP', QC'.
+destruct DKP' as [GC' GLN].
+exists (mkQConc [] (q_glob Q ++ (q_loc Q ++ [qn])) true (q_pend Q)). unfold AQUAR_at. cbn [q_loc q_glob q_ia].
+rewrite QL3, QB3, QG3, QGB3, QL2, QG2, QB2, QGB2.
+split; [exact QK'|]. split; [| split; [| split; [exact IA'| split]]].
+* split; [cbn [length qfirst qlast qaddrs map hd last Z.of_nat]; exact QC'| exact I].
+* split.
+-- rewrite length_app, Nat2Z.inj_add, <- GNB. rewrite length_app. cbn [length]. rewrite Nat2Z.inj_add. change (Z.of_nat 1) with 1.
+rewrite qlast_app by (intros Enil; apply app_eq_nil in Enil; destruct Enil as [_ Enil]; discriminate). rewrite QLST'.
+assert (FE : qfirst L (q_glob Q ++ q_loc Q ++ [qn]) = (if g_full g then g_fst g else qfirst L (q_loc Q ++ [qn]))).
+{ rewrite GFU, GFST. destruct (a_qglob st) eqn:QG0.
+- replace (q_glob Q) with (@nil qbatchc) by (destruct (q_glob Q); [reflexivity| cbn in LN2; discriminate]). reflexivity.
+- apply qfirst_app. destruct (q_glob Q); [cbn in LN2; discriminate| discriminate]. }
+rewrite FE, <- GQB. exact GC'.
+-- unfold abatches. apply abatches_to_app; [exact LN2|]. split.
+++
+rewrite hd_qaddrs by (intros Enil; apply app_eq_nil in Enil; destruct Enil as [_ Enil]; discriminate).
+destruct (a_qglob st) as [|bg0 lg0] eqn:QG0.
+** replace (q_glob Q) with (@nil qbatchc) by (destruct (q_glob Q); [reflexivity| cbn in LN2; discriminate]). exact I.
+** rewrite <- QG0 in *.
+assert (GNE : a_qglob st <> []) by (rewrite QG0; discriminate).
+assert (QG : a_qglob st = removelast (a_qglob st) ++ [List.last (a_qglob st) dummy_batch]) by (apply app_removelast_last; exact GNE).
+assert (LQg : (0 < length (q_glob Q))%nat) by (rewrite LN2, QG0; cbn; clear; lia).
+assert (QQg : q_glob Q = removelast (q_glob Q) ++ [List.last (q_glob Q) dummy_qb]) by (apply app_removelast_last; destruct (q_glob Q); [cbn in LQg; clear -LQg; lia| discriminate]).
+set (lg := removelast (a_qglob st)) in *. set (blg := List.last (a_qglob st) dummy_batch) in *.
+set (qg := removelast (q_glob Q)) in *. set (qgz := List.last (q_glob Q) dummy_qb) in *.
+assert (LNg : length qg = length lg) by (rewrite QQg, QG, !length_app in LN2; cbn in LN2; clear -LN2; lia).
+rewrite QG, QQg in ABG. apply abatches_to_app in ABG; [| exact LNg]. destruct ABG as [ABg ABgz].
+cbn [abatches_to qaddrs map hd] in ABgz. destruct ABgz as [(Y1 & Y2 & Y3 & Y4 & Y5 & Y6) _].
+assert (QGLST : qlast L (q_glob Q) = abatch_addr L (qb_slot qgz)) by (rewrite QQg; apply qlast_app1).
+rewrite GFU in GLN. rewrite ?QG0 in GLN. cbv iota beta in GLN. rewrite GL, QGLST in GLN.
+rewrite QG, QQg. apply abatches_to_app; [exact LNg|]. split.
++++ cbn [qaddrs map hd]. eapply abatches_to_frame; [exact MUn | exact WM | exact ABg |].
+intros q Hq. assert (INg : In q (q_glob Q)) by (rewrite QQg; apply in_or_app; left; exact Hq).
+assert (INq : In q (q_loc Q ++ q_glob Q)) by (apply in_or_app; right; exact INg).
+assert (NEg : abatch_addr L (qb_slot q) <> abatch_addr L (qb_slot qgz)).
+{ intros E. apply in_split in Hq. destruct Hq as (gs1 & gs2 & EQg).
+apply (bslots_nodup_split L st X Q CP (q_loc Q ++ gs1) q gs2 qgz []); [rewrite QQg, EQg; rewrite <- ?app_assoc; cbn [app]; rewrite <- ?app_assoc; reflexivity|].
+pose proof (bslot_range L st X Q WF CP q INq). pose proof (bslot_range L st X Q WF CP qgz ltac:(apply in_or_app; right; rewrite QQg; apply in_or_app; right; left; reflexivity)).
+unfold abatch_addr, aslot_addr in E. rewrite size_of_class_24 in E. clear -E. lia. }
+apply BFR; [exact INq | exact (GNL q INg) | rewrite EGL; unfold dk_glst; rewrite GD, GL, QGLST; exact NEg].
++++ cbn [abatches_to]. split; [| exact I].
+unfold abatch_cells. cbv zeta. change (hd (qfirst L (q_loc Q ++ [qn])) (qaddrs L [])) with (qfirst L (q_loc Q ++ [qn])).
+assert (GLS : gl = abatch_addr L (qb_slot qgz)) by (rewrite EGL; unfold dk_glst; rewrite GD, GL, QGLST; reflexivity).
+assert (INgzg : In qgz (q_glob Q)) by (rewrite QQg; apply in_or_app; right; left; reflexivity).
+assert (INgz : In qgz (q_loc Q ++ q_glob Q)) by (apply in_or_app; right; exact INgzg).
+pose proof (GNL qgz INgzg) as NGL.
+destruct (BGEO qgz INgz) as (_ & _ & F3 & F4). pose proof (SEPQ qgz INgz) as SQ. pose proof (BLST qgz INgz NGL) as DL.
+pose proof (KDIS qgz INgz eq_refl) as DE.
+assert (D8 : forall A8 kk, abatch_addr L (qb_slot qgz) + 8 <= A8 -> A8 + kk <= abatch_addr L (qb_slot qgz) + 8192 -> 0 <= kk ->
+disjoint_from (Wf (bv_unsigned sp) (al_t L) UB gq (al_nodes L) (al_store L) lst eb gl) A8 kk).
+{ intros A8 kk HA HK KK0. apply Kres; clear -F3 F4 RES RHI SQ DL DE EEB GLS ABUB S8 EUB HA HK KK0; lia. }
+pose proof Y1 as Y1'. rw_split Y1' 1%nat YN YR.
+eapply cells_frame in YR; [| exact MUn | exact WM | cbn [cells_size csize Nat.add]; apply D8; clear; lia].
+rw_join GLN YR YH.
+split; [exact YH|]. split; [| split; [| split; [exact Y4| split; [exact Y5| exact Y6]]]].
+--- eapply u64arr_frame; [exact Y2 | exact MUn | exact WM |]. rewrite length_map, qhdrs_length by exact Y5. rewrite <- Y4.
+apply D8; unfold Q_BATCH in Y6; clear -Y6; lia.
+--- eapply junk_frame; [exact Y3 | exact MUn | exact WM |]. intros Hp. apply D8; unfold Q_BATCH, Q_BATCH_BYTES in *; clear -Y6 Hp; lia.
+++ exact ABL'.
+* exact (qcoupled_drain L st2 st' X' (mkQConc (q_loc Q ++ [qn]) (q_glob Q) true (q_pend Q)) true CP2 QL3 QG3).
+* exact NUM'.
++
+pose proof (NDR NDRN) as EST.
+assert (GD : g_drain g = false) by (rewrite GDR; apply Z.ltb_ge; rewrite <- QB2; exact NDRN).
+unfold tcache_post in QC'. rewrite GD in DKP', QC'.
+exists (mkQConc (q_loc Q ++ [qn]) (q_glob Q) true (q_pend Q)). unfold AQUAR_at. cbn [q_loc q_glob q_ia].
+rewrite EST, QL2, QG2, QB2, QGB2.
+split; [exact QK'|]. split; [| split; [| split; [exact IA'| split]]].
+* split; [| exact ABL'].
+rewrite length_app. cbn [length]. rewrite Nat2Z.inj_add. change (Z.of_nat 1) with 1. rewrite QLST'. exact QC'.
+* split; [rewrite <- GNB, <- GFST, <- GL, <- GQB; exact DKP'|].
+unfold abatches. eapply abatches_to_frame; [exact MUn | exact WM | exact ABG |].
+intros q Hq. assert (INq : In q (q_loc Q ++ q_glob Q)) by (apply in_or_app; right; exact Hq).
+apply BFR; [exact INq | exact (GNL q Hq) | rewrite EGL; unfold dk_glst; rewrite GD; exact (GNL q Hq)].
+* first [rewrite EST | idtac]. exact CP2.
+* first [rewrite <- EST | idtac]. exact NUM'. }
+idtac "CHECKPOINT-E".
+assert (HBK : forall blk, In blk (lb_remove p LB) -> disjoint_from (Wf (bv_unsigned sp) (al_t L) UB gq (al_nodes L) (al_store L) lst eb gl) (ab_addr blk) (ab_size blk)).
+{ intros [[q|cls] A' n'] Hin; cbn [ab_addr ab_size]; apply (proj1 (In_lb_remove p LB _)) in Hin; destruct Hin as [Hin NEp]; cbn [ab_kind] in NEp.
+- destruct (proj1 BL q A' n' Hin) as [(b & Hb & Sb & Ub & Nb)|(mb & msz & Lp & EUA & Gs)].
++ assert (NEq : xb_st b <> BLive p) by (rewrite Sb; intros E; apply NEp; congruence).
+pose proof (other_key (AHQ DI ASEC AFK) L st X m (BLive p) c k n b1 ctx l1 l2 AR XB b Hb NEq) as NE1.
+destruct (busy_slot_range L st X b WF Hb) as [HCb HKb].
+pose proof (awf_fits L st X b WF Hb) as FIT. unfold xb_fits in FIT. rewrite Sb in FIT.
+pose proof (busy_of_In_nodup L st X b WF Hb) as BOF.
+unfold xb_user, xb_alloc in Ub. subst A' n'.
+set (cb := xb_class b) in *. set (kb := xb_slot b) in *.
+pose proof (slot_geo L st X cb kb ALO WF HCb HKb) as (T16 & TM16 & TAL & P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8 & _).
+pose proof (slots_sep_any L st X cb kb c k ALO WF HCb HC HKb KR ltac:(clear -NE1; lia)) as D9. rewrite <- EAB, <- ES in D9.
+assert (DQ : forall q', In q' (q_loc Q ++ q_glob Q) ->
+aslot_addr L cb kb + size_of_class cb <= abatch_addr L (qb_slot q') \/ abatch_addr L (qb_slot q') + 8192 <= aslot_addr L cb kb).
+{ intros q' Hq'. destruct (bslot_busy L st X Q CP q' Hq') as (yq & Hyq & Syq & Cyq & Kyq).
+assert (NE : cb <> K_BATCH_CLASS \/ kb <> qb_slot q').
+{ destruct (Z.eq_dec cb K_BATCH_CLASS) as [E1|NE0]; [| left; exact NE0]. right. intros E2.
+pose proof (busy_of_In_nodup L st X yq WF Hyq) as BY. rewrite Cyq, Kyq, <- E1, <- E2, BOF in BY. injection BY as EE. subst yq. rewrite Sb in Syq. discriminate. }
+pose proof (slots_sep_any L st X cb kb K_BATCH_CLASS (qb_slot q') ALO WF HCb (K24) HKb (bslot_range L st X Q WF CP q' Hq') NE) as D.
+rewrite size_of_class_24 in D. unfold abatch_addr. exact D. }
+assert (DK24 : enq_is_app st = false -> aslot_addr L cb kb + size_of_class cb <= abatch_addr L k24 \/ abatch_addr L k24 + 8192 <= aslot_addr L cb kb).
+{ intros EA. destruct (NEWF EA) as (_ & NB & KK & _).
+assert (NE : cb <> K_BATCH_CLASS \/ kb <> k24).
+{ destruct (Z.eq_dec cb K_BATCH_CLASS) as [E1|NE0]; [| left; exact NE0]. right. intros E2. rewrite <- E1, <- E2, BOF in NB. discriminate. }
+pose proof (slots_sep_any L st X cb kb K_BATCH_CLASS k24 ALO WF HCb (K24) HKb KK NE) as D.
+rewrite size_of_class_24 in D. unfold abatch_addr. exact D. }
+assert (DL : lst = 0 \/ aslot_addr L cb kb + size_of_class cb <= lst \/ lst + 8192 <= aslot_addr L cb kb).
+{ destruct LSTF as [Z0|((q' & Hq' & Eq') & _)]; [left; exact Z0| right]. rewrite Eq'. apply DQ. apply in_or_app; left; exact Hq'. }
+assert (DE : eb = lst \/ aslot_addr L cb kb + size_of_class cb <= eb \/ eb + 8192 <= aslot_addr L cb kb).
+{ destruct EBK as [E|[EA E]]; [left; exact E| right]. rewrite E. exact (DK24 EA). }
+assert (DG : gl = lst \/ gl = 0 \/ aslot_addr L cb kb + size_of_class cb <= gl \/ gl + 8192 <= aslot_addr L cb kb).
+{ destruct GLF as [[_ E]|(_ & _ & [Z0|((q' & Hq' & Eq') & _)])]; [left; exact E| right; left; exact Z0| right; right].
+rewrite Eq'. apply DQ. apply in_or_app; right; exact Hq'. }
+apply Kres; [clear -P5 RSP FIT; lia | clear -P6 RSP FIT; unfold K_SPACE_SIZE in *; lia | clear -FIT; lia
+| clear -D9 FIT ABUB S8 EUB; lia | clear -DL FIT P5 RSP RES RHI; lia | clear -DE DL FIT P5 RSP RES RHI; lia | clear -DG DL FIT P5 RSP RES RHI; lia].
++
+cbn [sec_wf1] in Gs. destruct Gs as (Gs1 & Gs2 & Gs3 & Gs4 & Gs5 & Gs6 & (Ct & Cc & Cr & Cp & Cn & Cs & Cf & Cd)).
+pose proof (sec_facts n' ltac:(clear -Gs5; lia) Gs6) as SF. subst A'. unfold SEC_UOFF, K_HIGH_MEM in *.
+unfold ablk, KLS, AIMG_HI in Gs2.
+apply Kobj; clear -Gs2 Gs3 Gs4 Gs5 SF Ct Cr Cn Cs; lia.
+- destruct (FKD cls A' n' Hin) as (K1 & K2 & K3). atop_facts.
+pose proof D_t_f as DTF; unbox DTF. pose proof D_f_res as DFR; unbox DFR. pose proof D_n_f as DNF; unbox DNF. pose proof D_s_f as DSF; unbox DSF.
+apply Kobj; [clear -K1 K3 FKO FKi FBND; lia | clear -K3 FKO FKi FBND; lia | exact K2 | clear -K1 K3 DTF; lia
+| clear -K1 K3 DFR; lia | clear -K1 K3 DNF; lia | clear -K1 K3 DSF; lia]. }
+assert (HFS : forall cls FA sz, In (mkABlock (ABFake cls) FA sz) (lb_remove p LB) -> forall a', FA <= a' < FA + sz ->
+disjoint_from (Wf (bv_unsigned sp) (al_t L) UB gq (al_nodes L) (al_store L) lst eb gl) (shad a') 1).
+{ intros cls FA sz Hin a' Ha'. apply (proj1 (In_lb_remove p LB _)) in Hin. destruct Hin as [Hin _].
+destruct (FKD cls FA sz Hin) as (K1 & K2 & K3). atop_facts.
+apply Kshad; [rewrite shad_div; unfold ASHOFF; clear -K1 FKO FKi FBND Ha'; Z.div_mod_to_equations; lia
+| rewrite shad_div; unfold ASHOFF; clear -K3 FKO FKi FBND Ha'; Z.div_mod_to_equations; lia | clear; lia |].
+pose proof D_f_res as DFR; unbox DFR. destruct DFR as [D|D].
+- left. rewrite (shad_div a'), (shad_div UB). clear -D Ha' K3 RSP G5 ABUB UB16'. Z.div_mod_to_equations. lia.
+- right. rewrite EGQ, shlen_div, (shad_div a'), (shad_div UB). unfold K_SPACE_SIZE in *. change (2^37) with 137438953472 in *.
+clear -D Ha' K1 RSP G6 UBS RUP8 UB16'. Z.div_mod_to_equations. lia. }
+assert (PSP : shad UB + gq <= shad ATOP).
+{ rewrite EGQ, shlen_div, (shad_div UB), (shad_div ATOP). atop_facts. clear -UBS G8 ABCE CEIL LO RUP8 UB16'. Z.div_mod_to_equations. lia. }
+split; [apply fp_le_refl|].
+exists t0', t1', t2', a0', a1', a2', a3', a4', a5', a6', a7', t3', t4', t5', t6', m'.
+split; [reflexivity|]. split; [exact MI'|]. split; [exact ST'|]. split.
+{ eapply (aheap_pres_free CI); [exact KF | exact CI_OK | exact MUn | exact WM | exact HBK | exact HFS | exact PSP]. }
+split; [exact ALO|].
+split. { apply (arng_core L RNG st1 st' SC).
+- eapply Permutation_trans; [apply (sec_chunks_free st p c n st' LIVE ELIVE (st_after_enq_qfilt is_sec st1 (CPrim c n) eq_refl))|].
+apply Permutation_sym. apply (sec_chunks_free st p c n st1 LIVE eq_refl (Permutation_refl _)).
+- apply (arng_st L RNG st st1); [intros; reflexivity| reflexivity| apply (sec_chunks_free st p c n st1 LIVE eq_refl (Permutation_refl _))| exact ARNG]. }
+split; [| exact HFK'].
+exists X'. split; [| exact BL'].
+split; [exact WF'|]. split; [exact RT'|]. split; [exact INST'|]. split; [exact THR'|]. split; [exact CLS'|].
+split; [exact HQ'|]. split; [exact HS'|]. split; [exact DEP'|]. split; [exact HRO'|]. split; [exact HRT2'|]. split; [exact AVL'| exact RT3'].
+Qed.
+
+(* [comment removed for export] *)
+Definition afree_fastP := afree_fast DI ASEC AFK CI store_free.
+End S.
+End CANSEC1.

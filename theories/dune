@@ -1,0 +1,8 @@
+; OSSVerify.Core: the statement shapes (Shapes.v, and ClassifierShapes.v for
+; the classifier statements), well-formed images (Images.v) and the driver's
+; input format (Driver.v).  Hand-written; changes
+; only in a release.
+(rocq.theory
+ (name OSSVerify.Core)
+ (package rocq-oss-verify-core)
+ (theories Stdlib stdpp Flocq ReadFile LinuxProcessSemantics))

@@ -1,0 +1,1720 @@
+"""change_ledger.py (oft change-ledger): what one change cost, summed from the records that hold it: the tagged agent
+sessions' transcripts (tokens, cost, agent hours), the VM samples (vCPU hours), the time logs of its checks, and git
+(proof lines, function classes, contracts, and each rewritten proof line's class).  A number comes from a source that
+was read; a source that could not be read is written as not measured, never as zero."""
+import contextlib
+import csv
+import datetime
+import io
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import unittest
+import unittest.mock
+
+from oft import __main__ as oft_main
+from oft import change_ledger, keys, paths, prove, release_tree
+from oft.tests.helpers import rules_of, tree
+from oft.tests.test_contracts import ENTRY, LIB, STATE, TABLE, contract_repo, put_row
+from oft.tests.test_keys import UNIT, commit
+
+T0 = datetime.datetime(2026, 10, 31, 10, 0, 0, tzinfo=datetime.timezone.utc)
+
+
+def at(minutes, seconds=0):
+    """The transcript timestamp minutes (and seconds) after T0."""
+    return (T0 + datetime.timedelta(minutes=minutes, seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def usage(inp, out, read, write, cost):
+    return {"input": inp, "output": out, "cacheRead": read, "cacheWrite": write,
+            "totalTokens": inp + out + read + write, "cost": {"total": cost}}
+
+
+def assistant(minutes, use, seconds=0, model=("anthropic", "claude-opus-5-5"), id=None):
+    """An assistant turn; with id, the entry id omp gives it (a resume that copies the history keeps it)."""
+    return dict({"type": "message", "timestamp": at(minutes, seconds),
+                 "message": {"role": "assistant", "provider": model[0], "model": model[1], "usage": use,
+                             "stopReason": "toolUse"}}, **({"id": id} if id else {}))
+
+
+def tool_result(minutes, seconds=0):
+    return {"type": "message", "timestamp": at(minutes, seconds), "message": {"role": "toolResult"}}
+
+
+def user(minutes):
+    return {"type": "message", "timestamp": at(minutes), "message": {"role": "user"}}
+
+
+def side_call(minutes, use):
+    """omp's own call for the session (a task-completion probe): a model_usage entry."""
+    return {"type": "model_usage", "timestamp": at(minutes), "purpose": "task-completion-probe",
+            "provider": "anthropic", "model": "claude-opus-5-5", "usage": use}
+
+
+def write_transcript(path, session, entries, start=0, tail=b""):
+    """A stand-in omp transcript: its session entry at start minutes, then entries, one JSON object per line."""
+    lines = [{"type": "session", "version": 3, "id": session, "timestamp": at(start), "cwd": "/w"},
+             {"type": "session_init", "timestamp": at(start), "resolvedModel": "openai-codex/gpt-5.6-terra:xhigh"}]
+    with open(path, "wb") as f:
+        f.write("".join(json.dumps(e) + "\n" for e in lines + entries).encode())
+        f.write(tail)
+    return path
+
+
+def rows(root, change, name="ledger.tsv"):
+    with open(os.path.join(root, "changes", change, name), encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f, delimiter="\t"))
+
+
+def by_step(root, change):
+    return {r["step"]: r for r in rows(root, change)}
+
+
+def run(*argv):
+    """`oft ARGV`: (exit status, what it printed)."""
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = oft_main.main(list(argv))
+    return rc, out.getvalue()
+
+
+@contextlib.contextmanager
+def scratch():
+    with tempfile.TemporaryDirectory() as d:
+        yield d
+
+
+class Sessions(unittest.TestCase):
+    """The agent columns come only from the tagged transcripts: each usage and each turn counts once, in the one step
+    of the one change its session is tagged in, from its own transcript; what a transcript does not hold (a lost tail,
+    a missing timestamp or usage field) is `+ not measured`, never 0, and gaps.tsv says why."""
+
+    def test_tokens_and_cost_sum_over_tagged_sessions(self):
+        """Each assistant turn's message.usage and each omp side call's usage (a model_usage entry) count, per step
+        and in total; the ledger's columns are the plan's, in its order."""
+        with scratch() as d:
+            one = write_transcript(os.path.join(d, "One.jsonl"), "s-one", [
+                user(0.5), assistant(1, usage(10, 100, 1000, 50, 0.25)), tool_result(1.5),
+                assistant(2, usage(5, 50, 2000, 0, 0.125)), side_call(2.5, usage(1, 2, 3, 4, 0.0625))])
+            two = write_transcript(os.path.join(d, "Two.jsonl"), "s-two", [
+                assistant(11, usage(7, 70, 700, 70, 0.5))], start=10)
+            for step, session, path in (("implement", "s-one", one), ("review", "s-two", two)):
+                rc, out = run("--root", d, "change-ledger", "tag", "c", "--step", step, "--session", session,
+                              "--host", "box", "--transcript", path)
+                self.assertEqual(rc, 0, out)
+            rc, out = run("--root", d, "change-ledger", "sum", "c")
+            self.assertEqual(rc, 0, out)
+            with open(os.path.join(d, "changes", "c", "ledger.tsv"), encoding="utf-8") as f:
+                self.assertEqual(f.readline().rstrip("\n").split("\t"), list(change_ledger.COLUMNS))
+            got = {s: tuple(r[k] for k in ("sessions", "wall_start", "wall_end", "input_tokens", "output_tokens",
+                                           "cache_read", "cache_write", "cost_usd"))
+                   for s, r in by_step(d, "c").items()}
+            self.assertEqual(got, {
+                "implement": ("1", "2026-10-31T10:00:00Z", "2026-10-31T10:02:30Z", "16", "152", "3003", "54",
+                              "0.4375"),
+                "review": ("1", "2026-10-31T10:10:00Z", "2026-10-31T10:11:00Z", "7", "70", "700", "70", "0.5000"),
+                "total": ("2", "2026-10-31T10:00:00Z", "2026-10-31T10:11:00Z", "23", "222", "3703", "124",
+                          "0.9375")})
+            served = {r["session"]: (r["requested"], r["served"]) for r in rows(d, "c", "session-totals.tsv")}
+            self.assertEqual(served, {"s-one": ("openai-codex/gpt-5.6-terra:xhigh", "anthropic/claude-opus-5-5 x2"),
+                                      "s-two": ("openai-codex/gpt-5.6-terra:xhigh", "anthropic/claude-opus-5-5 x1")})
+
+    def test_a_long_turn_counts_as_waiting_not_work(self):
+        """An assistant turn's time runs from the entry before it to its own timestamp; a turn of exactly 10 minutes
+        is work (agent_hours), one of 10 minutes and 1 second is waiting (waiting_hours).  Every turn counts in one
+        of the two, so no turn's time is lost."""
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "A.jsonl"), "s-a", [
+                user(1), assistant(3, usage(1, 1, 0, 0, 0.01)), tool_result(4),
+                assistant(14, usage(1, 1, 0, 0, 0.01)), tool_result(15),
+                assistant(25, usage(1, 1, 0, 0, 0.01), seconds=1)])
+            change_ledger.tag(d, "c", "implement", "s-a", "box", path)
+            change_ledger.summarize(d, "c")
+            got = {s: (r["agent_hours"], r["waiting_hours"]) for s, r in by_step(d, "c").items()}
+            self.assertEqual(got, {"implement": ("0.20", "0.17"), "total": ("0.20", "0.17")})
+            totals = rows(d, "c", "session-totals.tsv")
+            self.assertEqual([(r["agent_hours"], r["waiting_hours"]) for r in totals], [("0.20", "0.17")])
+
+    def test_tool_hours_count_each_turn_s_calls_once(self):
+        """A tool call's time runs from the turn that asked for it to the last result of that turn's calls: results
+        that came back together count once, a turn's own time and its tool calls never hold the same second, and a
+        turn that asked for nothing adds no tool time."""
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "T.jsonl"), "s-t", [
+                user(1), assistant(2, usage(1, 1, 0, 0, 0.01)),            # turn: 1 minute
+                tool_result(8), tool_result(20),                           # two calls together: 18 minutes
+                assistant(23, usage(1, 1, 0, 0, 0.01)),                    # turn: 3 minutes
+                user(30), assistant(33, usage(1, 1, 0, 0, 0.01))])         # turn: 3 minutes, no call
+            change_ledger.tag(d, "c", "implement", "s-t", "box", path)
+            change_ledger.summarize(d, "c")
+            row = by_step(d, "c")["total"]
+            self.assertEqual((row["agent_hours"], row["waiting_hours"], row["tool_hours"]), ("0.12", "0.00", "0.30"))
+
+    def test_a_turn_and_its_tool_calls_never_hold_the_same_second(self):
+        """omp writes a background call's result when it arrives, so an entry written after it can be older, and a
+        turn's time can then run over a tool interval.  tool_hours is the time with a call outstanding and no turn
+        running, so agent_hours + waiting_hours + tool_hours stays inside the session's own life."""
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "B.jsonl"), "s-b", [
+                user(1), assistant(2, usage(1, 1, 0, 0, 0.01)),   # turn: 1 minute; it asks for the long call
+                tool_result(50),                                  # the call comes back at minute 50
+                user(10),                                         # written after it, timed before it
+                assistant(55, usage(1, 1, 0, 0, 0.01))])          # turn: 45 minutes, so it is waiting
+            change_ledger.tag(d, "c", "implement", "s-b", "box", path)
+            change_ledger.summarize(d, "c")
+            row = by_step(d, "c")["total"]
+            # the tool interval is minute 2 to 50; the turns hold 1-2 and 10-55, so only 2-10 is tool time
+            self.assertEqual((row["agent_hours"], row["waiting_hours"], row["tool_hours"]),
+                             ("0.02", "0.75", "0.13"))
+            start, end = (datetime.datetime.strptime(row[c], "%Y-%m-%dT%H:%M:%SZ")
+                          for c in ("wall_start", "wall_end"))
+            life = (end - start).total_seconds() / 3600
+            self.assertLessEqual(sum(float(row[c]) for c in ("agent_hours", "waiting_hours", "tool_hours")), life)
+
+    def test_a_wait_two_sessions_share_counts_once_in_the_row(self):
+        """tool_hours adds up what each session spent waiting, so two sessions of one step that wait at the same
+        time count that time twice.  waiting_clock_hours is the step's own clock: the time with at least one of its
+        sessions waiting, so a wait they share counts once."""
+        with scratch() as d:
+            for name, sid in (("P.jsonl", "s-p"), ("Q.jsonl", "s-q")):
+                path = write_transcript(os.path.join(d, name), sid, [
+                    user(1), assistant(2, usage(1, 1, 0, 0, 0.01)),   # each asks for a call at minute 2
+                    tool_result(32), assistant(33, usage(1, 1, 0, 0, 0.01))])
+                change_ledger.tag(d, "c", "implement", sid, "box", path)
+            change_ledger.summarize(d, "c")
+            row = by_step(d, "c")["implement"]
+            # each session waited 30 minutes, over the same half hour
+            self.assertEqual((row["sessions"], row["tool_hours"], row["waiting_clock_hours"]), ("2", "1.00", "0.50"))
+
+    def test_a_turn_with_no_usage_still_has_its_time_measured(self):
+        """A turn with no usage leaves the token columns and cost_usd unmeasured, and nothing else: its time comes
+        from the timestamps, so agent_hours and waiting_hours are read in full."""
+        no_usage = assistant(3, None)
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "N.jsonl"), "s-n", [
+                user(1), assistant(2, usage(1, 1, 0, 0, 0.01)), no_usage])
+            change_ledger.tag(d, "c", "implement", "s-n", "box", path)
+            change_ledger.summarize(d, "c")
+            row = by_step(d, "c")["total"]
+            self.assertEqual((row["agent_hours"], row["waiting_hours"]), ("0.03", "0.00"))
+            self.assertEqual(row["input_tokens"], "1 + not measured")
+            self.assertEqual([g["column"] for g in rows(d, "c", "gaps.tsv") if g["column"] in
+                              ("agent_hours", "waiting_hours")], [])
+
+    def test_the_tool_time_of_an_untimed_turn_is_not_measured(self):
+        """The tool calls of a turn with no timestamp have no start, so their time is not measured and gaps.tsv
+        says so.  It is never read as 0."""
+        untimed_turn = assistant(9, usage(1, 1, 0, 0, 0.01))
+        del untimed_turn["timestamp"]
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "V.jsonl"), "s-v", [
+                user(1), untimed_turn, tool_result(20), assistant(21, usage(1, 1, 0, 0, 0.01))])
+            change_ledger.tag(d, "c", "implement", "s-v", "box", path)
+            change_ledger.summarize(d, "c")
+            self.assertEqual(by_step(d, "c")["total"]["tool_hours"], "0.00 + not measured")
+            whats = [g["what"] for g in rows(d, "c", "gaps.tsv") if g["column"] == "tool_hours"]
+            self.assertEqual(len(whats), 1, whats)
+            self.assertIn("has no timestamp: the time of its tool calls has no start", whats[0])
+
+    def test_a_window_does_not_hide_an_untimed_tool_result(self):
+        """With a window, an entry with no timestamp is outside it, so the tool result below is never counted.  It
+        is reported the same way as without a window: not measured, with its reason."""
+        untimed = {"type": "message", "message": {"role": "toolResult"}}
+        entries = [user(1), assistant(2, usage(1, 1, 0, 0, 0.01)), untimed,
+                   assistant(9, usage(1, 1, 0, 0, 0.01)), tool_result(12)]
+        for window in ({}, {"since": at(0), "until": at(30)}):
+            with self.subTest(window=bool(window)), scratch() as d:
+                path = write_transcript(os.path.join(d, "W.jsonl"), "s-w", entries)
+                change_ledger.tag(d, "c", "implement", "s-w", "box", path, **window)
+                change_ledger.summarize(d, "c")
+                self.assertIn(change_ledger.NOT_MEASURED, by_step(d, "c")["total"]["tool_hours"])
+                whats = [g["what"] for g in rows(d, "c", "gaps.tsv") if g["column"] == "tool_hours"]
+                self.assertTrue(any("has no timestamp" in w for w in whats), whats)
+
+    def test_two_turns_never_hold_the_same_second(self):
+        """An entry before a turn can be older than a turn already counted, since omp writes a background call's
+        result when it arrives.  A turn therefore starts no earlier than the end of the last turn counted, so
+        agent_hours + waiting_hours + tool_hours stays inside the session's own life."""
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "O.jsonl"), "s-o", [
+                user(1), assistant(2, usage(1, 1, 0, 0, 0.01)),    # turn: minute 1 to 2
+                tool_result(50), assistant(52, usage(1, 1, 0, 0, 0.01)),   # turn: minute 50 to 52
+                user(10),                                          # written after, timed before
+                assistant(55, usage(1, 1, 0, 0, 0.01))])           # starts at 52, not at 10
+            change_ledger.tag(d, "c", "implement", "s-o", "box", path)
+            change_ledger.summarize(d, "c")
+            row = by_step(d, "c")["total"]
+            start, end = (datetime.datetime.strptime(row[c], "%Y-%m-%dT%H:%M:%SZ")
+                          for c in ("wall_start", "wall_end"))
+            hours = sum(float(row[c]) for c in ("agent_hours", "waiting_hours", "tool_hours"))
+            self.assertLessEqual(hours, (end - start).total_seconds() / 3600)
+
+    def test_a_call_no_tag_counts_says_why_it_is_not_measured(self):
+        """A tool call whose turn is outside the tag's window is counted by no tag: tool_hours says it was read in
+        part, and gaps.tsv says the turn is not this tag's, not that a timestamp is missing."""
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "S.jsonl"), "s-s", [
+                user(1), assistant(2, usage(1, 1, 0, 0, 0.01)),   # the call starts inside the first window
+                tool_result(10), assistant(12, usage(1, 1, 0, 0, 0.01))])
+            change_ledger.tag(d, "c", "implement", "s-s", "box", path, since=at(0), until=at(5))
+            change_ledger.tag(d, "c", "review", "s-s", "box", path, since=at(5), until=at(30))
+            change_ledger.summarize(d, "c")
+            self.assertIn(change_ledger.NOT_MEASURED, by_step(d, "c")["review"]["tool_hours"])
+            whats = [g["what"] for g in rows(d, "c", "gaps.tsv")
+                     if g["column"] == "tool_hours" and g["step"] == "review"]
+            self.assertEqual(len(whats), 1, whats)
+            self.assertIn("answers a turn this tag does not count", whats[0])
+            self.assertNotIn("no timestamp", whats[0])
+
+    def test_a_turn_timed_before_the_turn_counted_before_it_is_not_measured(self):
+        """A turn whose own timestamp is older than the turn counted before it cannot be timed: its seconds would
+        be seconds that turn already holds.  It is not measured, and gaps.tsv says so, rather than counting 0."""
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "R.jsonl"), "s-r", [
+                user(1), assistant(2, usage(1, 1, 0, 0, 0.01)),            # turn: minute 1 to 2
+                tool_result(8), assistant(10, usage(1, 1, 0, 0, 0.01)),    # turn: minute 8 to 10
+                tool_result(4), assistant(6, usage(1, 1, 0, 0, 0.01))])    # ends before minute 10
+            change_ledger.tag(d, "c", "implement", "s-r", "box", path)
+            change_ledger.summarize(d, "c")
+            row = by_step(d, "c")["total"]
+            self.assertEqual(row["agent_hours"], "0.05 + not measured")   # 1 minute and 2 minutes
+            for column in ("agent_hours", "waiting_hours", "tool_hours"):
+                whats = [g["what"] for g in rows(d, "c", "gaps.tsv") if g["column"] == column]
+                self.assertTrue(any("is timed before the turn counted before it" in w for w in whats),
+                                (column, whats))
+
+    def test_a_session_in_the_change_s_window_that_no_tag_claims_is_named(self):
+        """A cost is complete only when each session that worked in the change's window is counted or named.  sum
+        looks over each folder that holds a tagged transcript, and below it, and names in gaps.tsv every session file
+        that ran inside the window and that no tag of this change claims, with the change that does tag it, if any.
+        A file outside the window is not named, and neither is a tagged one."""
+        def at_most(path, sid, start, *minutes):
+            return write_transcript(path, sid, [user(m) if i % 2 == 0 else assistant(m, usage(1, 1, 0, 0, 0.01))
+                                                for i, m in enumerate(minutes)], start=start)
+        with scratch() as d:
+            os.makedirs(os.path.join(d, "Sub"))
+            mine = at_most(os.path.join(d, "Mine.jsonl"), "s-mine", 0, 1, 2, 30, 31)
+            at_most(os.path.join(d, "Stray.jsonl"), "s-stray", 5, 6, 7)
+            other = at_most(os.path.join(d, "Other.jsonl"), "s-other", 10, 11, 12)
+            at_most(os.path.join(d, "Sub", "Deep.jsonl"), "s-deep", 20, 21, 22)
+            at_most(os.path.join(d, "Later.jsonl"), "s-later", 100, 101, 102)
+            change_ledger.tag(d, "c", "implement", "s-mine", "box", mine)
+            change_ledger.tag(d, "elsewhere", "review", "s-other", "box", other)
+            change_ledger.summarize(d, "c")
+            named = {g["what"].split(" ran from ")[0]: g["what"] for g in rows(d, "c", "gaps.tsv")
+                     if g["column"] == "sessions"}
+            self.assertEqual(sorted(os.path.basename(p) for p in named),
+                             ["Deep.jsonl", "Other.jsonl", "Stray.jsonl"])
+            by_name = {os.path.basename(p): w for p, w in named.items()}
+            self.assertTrue(by_name["Stray.jsonl"].endswith("tagged to no change"), by_name["Stray.jsonl"])
+            self.assertTrue(by_name["Other.jsonl"].endswith("tagged to elsewhere (step review)"),
+                            by_name["Other.jsonl"])
+
+    def test_a_session_whose_last_entry_is_long_is_still_named(self):
+        """sum reads each line of an untagged file whole: a session whose last entry is longer than 64 KiB, and that
+        started before the change's window, is named by the time of that entry, the same as the control with a short
+        last entry."""
+        with scratch() as d:
+            mine = write_transcript(os.path.join(d, "Mine.jsonl"), "s-mine", [
+                user(11), assistant(12, usage(1, 1, 0, 0, 0.01)), user(29), assistant(30, usage(1, 1, 0, 0, 0.01))],
+                start=10)
+            for name, size in (("Long.jsonl", 70_000), ("Short.jsonl", 10)):
+                last = assistant(20, usage(1, 1, 0, 0, 0.01))
+                last["message"]["content"] = "x" * size
+                write_transcript(os.path.join(d, name), "s-" + name, [user(1), last])
+            change_ledger.tag(d, "c", "implement", "s-mine", "box", mine)
+            change_ledger.summarize(d, "c")
+            named = sorted(os.path.basename(g["what"].split(" ran from ")[0]) for g in rows(d, "c", "gaps.tsv")
+                           if g["column"] == "sessions")
+            self.assertEqual(named, ["Long.jsonl", "Short.jsonl"])
+
+    def test_a_session_whose_entries_are_out_of_time_order_is_named_by_its_latest(self):
+        """Entries are not in time order (a background call's result is written after a later entry), so a file's
+        span is its earliest and latest timestamp, not its first and last line.  A session from 10:00 whose 10:20
+        entry comes before a 10:05 one ran inside a 10:10-10:30 window and is named, as the control with the same
+        entries in order is."""
+        with scratch() as d:
+            mine = write_transcript(os.path.join(d, "Mine.jsonl"), "s-mine", [
+                user(11), assistant(12, usage(1, 1, 0, 0, 0.01)), user(29), assistant(30, usage(1, 1, 0, 0, 0.01))],
+                start=10)
+            write_transcript(os.path.join(d, "Unordered.jsonl"), "s-unordered", [
+                user(1), assistant(20, usage(1, 1, 0, 0, 0.01)), user(5)])
+            write_transcript(os.path.join(d, "Ordered.jsonl"), "s-ordered", [
+                user(1), user(5), assistant(20, usage(1, 1, 0, 0, 0.01))])
+            change_ledger.tag(d, "c", "implement", "s-mine", "box", mine)
+            change_ledger.summarize(d, "c")
+            named = {os.path.basename(g["what"].split(" ran from ")[0]): g["what"] for g in rows(d, "c", "gaps.tsv")
+                     if g["column"] == "sessions"}
+            self.assertEqual(sorted(named), ["Ordered.jsonl", "Unordered.jsonl"])
+            self.assertIn(f" ran from {at(0)[:19]}Z to {at(20)[:19]}Z,", named["Unordered.jsonl"])
+
+    def test_a_file_whose_times_cannot_be_read_is_named_not_dropped(self):
+        """A file whose span cannot be read may have run inside the window, so it is named with the reason and never
+        left out: an empty file, one that cannot be opened, and one whose only entry has no readable timestamp.  A
+        readable file outside the window is the control, and is not named."""
+        with scratch() as d:
+            mine = write_transcript(os.path.join(d, "Mine.jsonl"), "s-mine", [
+                user(11), assistant(12, usage(1, 1, 0, 0, 0.01))], start=10)
+            open(os.path.join(d, "Empty.jsonl"), "w").close()
+            locked = write_transcript(os.path.join(d, "Locked.jsonl"), "s-locked", [user(11)], start=10)
+            with open(os.path.join(d, "Undated.jsonl"), "w", encoding="utf-8") as f:
+                f.write(json.dumps({"type": "session", "id": "s-undated", "timestamp": "not a time"}) + "\n")
+            write_transcript(os.path.join(d, "Later.jsonl"), "s-later", [user(101)], start=100)
+            change_ledger.tag(d, "c", "implement", "s-mine", "box", mine)
+            os.chmod(locked, 0)
+            try:
+                if os.access(locked, os.R_OK):
+                    self.skipTest("this user reads a file of mode 000")
+                change_ledger.summarize(d, "c")
+            finally:
+                os.chmod(locked, 0o600)
+            whats = {os.path.basename(g["what"].split(": ")[0]): g["what"] for g in rows(d, "c", "gaps.tsv")
+                     if g["column"] == "sessions"}
+            self.assertEqual(sorted(whats), ["Empty.jsonl", "Locked.jsonl", "Undated.jsonl"])
+            self.assertIn(": it is empty, so whether it ran inside this change's window is not known",
+                          whats["Empty.jsonl"])
+            self.assertIn(": it cannot be read: ", whats["Locked.jsonl"])
+            self.assertIn(": it holds no entry with a readable timestamp", whats["Undated.jsonl"])
+            for what in whats.values():
+                self.assertTrue(what.endswith("tagged to no change"), what)
+
+    def test_a_file_with_a_line_it_cannot_date_is_named_as_uncertain(self):
+        """A line that cannot be read or dated may hold any time, so a file with one is named with an uncertain
+        span even when its dated entries fall outside the window: malformed JSON in the middle, an assistant message
+        with no timestamp, a timestamp that is no time, and an entry of a kind omp is not known to write untimed.
+        The control is the same entries, all dated, with omp's untimed `title` entry beside them, which is not
+        named."""
+        with scratch() as d:
+            mine = write_transcript(os.path.join(d, "Mine.jsonl"), "s-mine", [
+                user(11), assistant(12, usage(1, 1, 0, 0, 0.01))], start=10)
+            title = {"type": "title", "title": "a session"}
+            write_transcript(os.path.join(d, "Malformed.jsonl"), "s-malformed", [user(1)], tail=b"{not json\n")
+            untimed = assistant(2, usage(1, 1, 0, 0, 0.01))
+            del untimed["timestamp"]
+            write_transcript(os.path.join(d, "Untimed.jsonl"), "s-untimed", [user(1), untimed])
+            bad = dict(user(1), timestamp="not a time")
+            write_transcript(os.path.join(d, "BadTime.jsonl"), "s-badtime", [user(1), bad])
+            write_transcript(os.path.join(d, "Unknown.jsonl"), "s-unknown", [user(1), {"type": "other_untimed"}])
+            write_transcript(os.path.join(d, "Clean.jsonl"), "s-clean", [title, user(1), user(2)])
+            change_ledger.tag(d, "c", "implement", "s-mine", "box", mine)
+            change_ledger.summarize(d, "c")
+            whats = {os.path.basename(g["what"].split(": ")[0]): g["what"] for g in rows(d, "c", "gaps.tsv")
+                     if g["column"] == "sessions"}
+            self.assertEqual(sorted(whats), ["BadTime.jsonl", "Malformed.jsonl", "Unknown.jsonl", "Untimed.jsonl"])
+            for what in whats.values():
+                self.assertIn(": 1 line(s) of it cannot be read or carry no readable timestamp, so its span is "
+                              "uncertain", what)
+
+    def test_a_folder_that_cannot_be_listed_is_named_not_dropped(self):
+        """A folder under the change's transcripts that cannot be listed may hold a session that ran inside the
+        window, so it is named; the control is a readable folder whose only file ran outside the window, which is
+        not named."""
+        with scratch() as d:
+            mine = write_transcript(os.path.join(d, "Mine.jsonl"), "s-mine", [
+                user(11), assistant(12, usage(1, 1, 0, 0, 0.01))], start=10)
+            for sub, start in (("Locked", 11), ("Open", 100)):
+                os.makedirs(os.path.join(d, sub))
+                write_transcript(os.path.join(d, sub, "In.jsonl"), "s-" + sub, [user(start + 1)], start=start)
+            change_ledger.tag(d, "c", "implement", "s-mine", "box", mine)
+            locked = os.path.join(d, "Locked")
+            os.chmod(locked, 0)
+            try:
+                if os.access(locked, os.R_OK):
+                    self.skipTest("this user lists a folder of mode 000")
+                change_ledger.summarize(d, "c")
+            finally:
+                os.chmod(locked, 0o700)
+            whats = [g["what"] for g in rows(d, "c", "gaps.tsv") if g["column"] == "sessions"]
+            self.assertEqual(len(whats), 1, whats)
+            self.assertIn("Locked: the folder cannot be listed (", whats[0])
+            self.assertIn("may have run inside this change's window", whats[0])
+
+    def test_a_tool_result_with_no_usable_time_is_not_measured(self):
+        """A tool result with no timestamp, or one timed before the turn that asked for it, is not measured: it adds
+        nothing to tool_hours, which then says it was read in part, and gaps.tsv says why for each."""
+        untimed = {"type": "message", "message": {"role": "toolResult"}}
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "U.jsonl"), "s-u", [
+                user(1), assistant(2, usage(1, 1, 0, 0, 0.01)), untimed,
+                assistant(9, usage(1, 1, 0, 0, 0.01)), tool_result(4)])
+            change_ledger.tag(d, "c", "implement", "s-u", "box", path)
+            change_ledger.summarize(d, "c")
+            self.assertEqual(by_step(d, "c")["total"]["tool_hours"], "0.00 + not measured")
+            whats = [g["what"] for g in rows(d, "c", "gaps.tsv") if g["column"] == "tool_hours"]
+            self.assertEqual(len(whats), 2, whats)
+
+    def test_a_turn_whose_timestamps_are_missing_is_not_measured(self):
+        """A turn's time needs its own timestamp and that of the entry just before it: when either is missing, or the
+        turn is timed before that entry, the turn is not measured (never 0, and never measured from an older entry),
+        and gaps.tsv says so."""
+        untimed_result = {"type": "message", "message": {"role": "toolResult"}}
+        untimed_turn = assistant(9, usage(1, 1, 0, 0, 0.01))
+        del untimed_turn["timestamp"]
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "T.jsonl"), "s-t", [
+                user(1), assistant(2, usage(1, 1, 0, 0, 0.01)), untimed_result,
+                assistant(4, usage(1, 1, 0, 0, 0.01)), tool_result(5), untimed_turn, tool_result(20),
+                assistant(19, usage(1, 1, 0, 0, 0.01))])
+            change_ledger.tag(d, "c", "implement", "s-t", "box", path)
+            change_ledger.summarize(d, "c")
+            # only the turn at minute 2 is measured: 1 minute
+            self.assertEqual(by_step(d, "c")["total"]["agent_hours"], "0.02 + not measured")
+            whats = [g["what"] for g in rows(d, "c", "gaps.tsv") if g["column"] == "agent_hours"]
+            self.assertEqual(len(whats), 3, whats)
+
+    def test_a_missing_transcript_is_a_named_error(self):
+        """A tagged transcript that is gone stops the sum with its path named, and writes no ledger: its tokens are
+        not zero.  Tagging a transcript that does not exist is refused too."""
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "Gone.jsonl"), "s-gone", [assistant(1, usage(1, 1, 1, 1, 1.0))])
+            change_ledger.tag(d, "c", "implement", "s-gone", "box", path)
+            os.remove(path)
+            with self.assertRaises(change_ledger.LedgerError) as e:
+                change_ledger.summarize(d, "c")
+            self.assertIn(path, str(e.exception))
+            self.assertIn("transcript", str(e.exception))
+            self.assertFalse(os.path.exists(os.path.join(d, "changes", "c", "ledger.tsv")))
+            rc, out = run("--root", d, "change-ledger", "sum", "c")
+            self.assertEqual((rc, out.startswith("FAIL oft change-ledger: "), path in out), (1, True, True))
+            with self.assertRaises(change_ledger.LedgerError) as e:
+                change_ledger.tag(d, "c", "review", "s-other", "box", os.path.join(d, "Never.jsonl"))
+            self.assertIn(os.path.join(d, "Never.jsonl"), str(e.exception))
+
+    def test_a_transcript_cut_by_a_crash_counts_what_it_holds_and_names_what_it_lost(self):
+        """A machine that crashes leaves a transcript whose tail is zero bytes or half a line: the lines before it
+        count, each agent column says the rest is not measured, and gaps.tsv names the transcript.  A broken line
+        anywhere else is an error."""
+        for tail in (b"\0" * 482, b'{"type":"message","timestamp":"2026-10-31T10:0'):
+            with self.subTest(tail=tail[:8]), scratch() as d:
+                path = write_transcript(os.path.join(d, "Cut.jsonl"), "s-cut",
+                                        [assistant(1, usage(3, 4, 5, 6, 0.5))], tail=tail)
+                change_ledger.tag(d, "c", "implement", "s-cut", "box", path)
+                change_ledger.summarize(d, "c")
+                row = by_step(d, "c")["implement"]
+                self.assertEqual((row["input_tokens"], row["cost_usd"], row["agent_hours"]),
+                                 ("3 + not measured", "0.5000 + not measured", "0.02 + not measured"))
+                gaps = [(g["session"], g["column"]) for g in rows(d, "c", "gaps.tsv")]
+                self.assertIn(("s-cut", "input_tokens"), gaps)
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "Bad.jsonl"), "s-bad", [assistant(1, usage(1, 1, 1, 1, 1.0))])
+            change_ledger.tag(d, "c", "implement", "s-bad", "box", path)
+            with open(path, "a") as f:
+                f.write("{broken\n" + json.dumps(assistant(2, usage(1, 1, 1, 1, 1.0))) + "\n")
+            with self.assertRaises(change_ledger.LedgerError) as e:
+                change_ledger.summarize(d, "c")
+            self.assertIn("%s:4" % path, str(e.exception))
+
+    def test_the_records_write_the_home_folder_as_a_tilde(self):
+        """No file the ledger writes names the home folder: a transcript, a check log and a sample file under it are
+        recorded as ~/..., in gaps.tsv too."""
+        with scratch() as d, unittest.mock.patch.dict(os.environ, {"HOME": d}):
+            path = write_transcript(os.path.join(d, "Cut.jsonl"), "s-cut", [assistant(1, {"input": 1})],
+                                    tail=b"\0" * 8)
+            log = os.path.join(d, "check.time")
+            with open(log, "w") as f:
+                f.write(ELAPSED % "1:00")
+            samples = os.path.join(d, "samples.tsv")
+            with open(samples, "w") as f:
+                f.write(SAMPLES)
+            root = os.path.join(d, "repo")
+            change_ledger.tag(root, "c", "implement", "s-cut", "box", path)
+            change_ledger.check(root, "c", "implement", log)
+            change_ledger.summarize(root, "c", samples=[samples])
+            folder = os.path.join(root, "changes", "c")
+            for name in sorted(os.listdir(folder)):
+                with self.subTest(name=name), open(os.path.join(folder, name), encoding="utf-8") as f:
+                    self.assertNotIn(d, f.read())
+            self.assertIn("~/Cut.jsonl", " ".join(g["what"] for g in rows(root, "c", "gaps.tsv")))
+
+    def test_a_session_is_tagged_once_and_only_with_its_own_transcript(self):
+        """A session counts in one step of one change, so its cost is never summed twice; the transcript must be the
+        session's own."""
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "S.jsonl"), "s-1", [assistant(1, usage(1, 1, 1, 1, 1.0))])
+            change_ledger.tag(d, "a", "implement", "s-1", "box", path)
+            for change, step in (("a", "implement"), ("a", "review"), ("b", "implement")):
+                with self.subTest(change=change, step=step), self.assertRaises(change_ledger.LedgerError) as e:
+                    change_ledger.tag(d, change, step, "s-1", "box", path)
+                self.assertIn("s-1 is already tagged", str(e.exception))
+            with self.assertRaises(change_ledger.LedgerError) as e:
+                change_ledger.tag(d, "b", "implement", "s-2", "box", path)
+            self.assertIn("s-1", str(e.exception))
+            self.assertEqual(len(rows(d, "a", "sessions.tsv")), 1)
+
+    def test_the_sum_checks_each_tag_again(self):
+        """A transcript may be replaced, and a sessions.tsv edited, after tag: the sum checks again that each
+        transcript is its session's own and that each session counts in one step of one change."""
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "A.jsonl"), "s-a", [assistant(1, usage(1, 1, 1, 1, 1.0))])
+            change_ledger.tag(d, "x", "implement", "s-a", "box", path)
+            write_transcript(path, "s-other", [assistant(1, usage(1, 1, 1, 1, 1.0))])
+            with self.assertRaises(change_ledger.LedgerError) as e:
+                change_ledger.summarize(d, "x")
+            self.assertIn("is the transcript of session s-other, not of s-a", str(e.exception))
+        with scratch() as d:
+            path = write_transcript(os.path.join(d, "A.jsonl"), "s-a", [assistant(1, usage(1, 1, 1, 1, 1.0))])
+            change_ledger.tag(d, "x", "implement", "s-a", "box", path)
+            os.makedirs(os.path.join(d, "changes", "y"))
+            with open(os.path.join(d, "changes", "x", "sessions.tsv")) as f, \
+                    open(os.path.join(d, "changes", "y", "sessions.tsv"), "w") as g:
+                g.write(f.read())
+            for change in ("x", "y"):
+                with self.subTest(change=change), self.assertRaises(change_ledger.LedgerError) as e:
+                    change_ledger.summarize(d, change)
+                self.assertIn("s-a is already tagged", str(e.exception))
+
+    def test_the_fragments_of_one_session_are_one_session(self):
+        """A resumed agent writes a second transcript, X-2.jsonl beside X.jsonl, under a new session id or its first
+        one: the fragments are one session.  Tag takes the second fragment in the same step and refuses it in another;
+        the sum counts it once in `sessions`, and each entry once by its id, so a resume that copies the history
+        before it adds nothing twice."""
+        with scratch() as d:
+            first = write_transcript(os.path.join(d, "X.jsonl"), "s-x", [
+                user(0), assistant(6, usage(1, 10, 0, 0, 0.5), id="a1")])
+            second = write_transcript(os.path.join(d, "X-2.jsonl"), "s-x2", [
+                user(21), assistant(27, usage(2, 20, 0, 0, 0.25), id="a2")], start=20)
+            change_ledger.tag(d, "c", "implement", "s-x", "box", first)
+            with self.assertRaises(change_ledger.LedgerError) as e:
+                change_ledger.tag(d, "c", "review", "s-x2", "box", second)
+            self.assertIn("fragment", str(e.exception))
+            change_ledger.tag(d, "c", "implement", "s-x2", "box", second)
+            change_ledger.summarize(d, "c")
+            row = by_step(d, "c")["implement"]
+            self.assertEqual((row["sessions"], row["input_tokens"], row["output_tokens"], row["cost_usd"],
+                              row["agent_hours"]), ("1", "3", "30", "0.7500", "0.20"))
+        with scratch() as d:
+            history = [user(0), assistant(6, usage(1, 10, 0, 0, 0.5), id="a1")]
+            first = write_transcript(os.path.join(d, "X.jsonl"), "s-x", history)
+            second = write_transcript(os.path.join(d, "X-2.jsonl"), "s-x", history + [
+                user(21), assistant(27, usage(2, 20, 0, 0, 0.25), id="a2")], start=20)
+            change_ledger.tag(d, "c", "implement", "s-x", "box", first)
+            change_ledger.tag(d, "c", "implement", "s-x", "box", second)
+            change_ledger.summarize(d, "c")
+            row = by_step(d, "c")["implement"]
+            self.assertEqual((row["sessions"], row["input_tokens"], row["output_tokens"], row["cost_usd"],
+                              row["agent_hours"]), ("1", "3", "30", "0.7500", "0.20"))
+
+
+def walk(d):
+    """A session that walked two upstream commits: turns at minutes 1 and 3 for the first, 11 and 13 for the second;
+    the path of its transcript."""
+    return write_transcript(os.path.join(d, "Walk.jsonl"), "s-walk", [
+        user(0), assistant(1, usage(1, 10, 0, 0, 0.5)), tool_result(2), assistant(3, usage(2, 20, 0, 0, 0.25)),
+        user(10), assistant(11, usage(4, 40, 0, 0, 0.125)), tool_result(12), assistant(13, usage(8, 80, 0, 0, 0.0625))])
+
+
+class Windows(unittest.TestCase):
+    """A session that worked on several steps or changes is tagged once for each, each tag with a window, no two of
+    one session overlapping: each transcript entry counts in the one tag whose window holds it, so the tags' figures
+    add up to the session's, never more; a tag that could count an entry twice is refused."""
+
+    def test_a_session_tagged_to_two_changes_counts_each_entry_once(self):
+        """Tagged to change a until 10:05 and to change b from 10:05, each change sums only its window's turns, with
+        its window's wall time, and the two sum to the whole session's figures; session-totals.tsv shows each tag's
+        window."""
+        with scratch() as d:
+            path = walk(d)
+            for change, window in (("a", ["--until", at(5)]), ("b", ["--from", "2026-10-31T11:05:00+01:00"])):
+                rc, out = run("--root", d, "change-ledger", "tag", change, "--step", "walk", "--session", "s-walk",
+                              "--host", "box", "--transcript", path, *window)
+                self.assertEqual(rc, 0, out)
+                change_ledger.summarize(d, change)
+            got = {c: tuple(by_step(d, c)["total"][k] for k in ("sessions", "wall_start", "wall_end", "input_tokens",
+                                                                 "output_tokens", "cost_usd", "agent_hours"))
+                   for c in ("a", "b")}
+            self.assertEqual(got, {"a": ("1", "2026-10-31T10:00:00Z", "2026-10-31T10:03:00Z", "3", "30", "0.7500",
+                                         "0.03"),
+                                   "b": ("1", "2026-10-31T10:10:00Z", "2026-10-31T10:13:00Z", "12", "120", "0.1875",
+                                         "0.03")})
+            self.assertEqual([(r["from"], r["until"]) for c in ("a", "b") for r in rows(d, c, "session-totals.tsv")],
+                             [("-", "2026-10-31T10:05:00Z"), ("2026-10-31T10:05:00Z", "-")])
+            self.assertEqual([r for c in ("a", "b") for r in rows(d, c, "gaps.tsv") if r["session"] != "-"], [])
+
+    def test_a_session_tagged_to_two_steps_of_one_change_counts_once_in_the_total(self):
+        """The same transcript tagged in two steps of one change, with windows apart: each step sums its window, and
+        the total counts the session once and each entry once."""
+        with scratch() as d:
+            path = walk(d)
+            change_ledger.tag(d, "c", "one", "s-walk", "box", path, until=at(5))
+            change_ledger.tag(d, "c", "two", "s-walk", "box", path, since=at(5))
+            change_ledger.summarize(d, "c")
+            got = {s: (r["sessions"], r["input_tokens"], r["cost_usd"]) for s, r in by_step(d, "c").items()}
+            self.assertEqual(got, {"one": ("1", "3", "0.7500"), "two": ("1", "12", "0.1875"),
+                                   "total": ("1", "15", "0.9375")})
+
+    def test_a_tag_that_could_count_an_entry_twice_is_refused(self):
+        """With no window beside another tag of the session, with windows that overlap, or with a window that holds
+        no moment or no entry, tag refuses and says how to share a session; the sum checks the windows again."""
+        with scratch() as d:
+            path = walk(d)
+            change_ledger.tag(d, "a", "walk", "s-walk", "box", path, until=at(5))
+            refused = {"no window": dict(), "overlapping": dict(since=at(4)), "until before from":
+                       dict(since=at(12), until=at(11)), "holds no entry": dict(since=at(20)),
+                       "no time zone": dict(since="2026-10-31T10:06:00")}
+            for what, window in refused.items():
+                with self.subTest(what), self.assertRaises(change_ledger.LedgerError) as e:
+                    change_ledger.tag(d, "b", "walk", "s-walk", "box", path, **window)
+                if what in ("no window", "overlapping"):
+                    self.assertIn("s-walk is already tagged", str(e.exception))
+                    self.assertIn("--from, --until", str(e.exception))
+            self.assertFalse(os.path.exists(os.path.join(d, "changes", "b", "sessions.tsv")))
+            change_ledger.tag(d, "b", "walk", "s-walk", "box", path, since=at(5))
+            sessions = os.path.join(d, "changes", "b", "sessions.tsv")
+            with open(sessions) as f:
+                text = f.read()
+            with open(sessions, "w") as f:
+                f.write(text.replace("2026-10-31T10:05:00Z", "2026-10-31T10:04:00Z"))
+            for change in ("a", "b"):
+                with self.subTest(change=change), self.assertRaises(change_ledger.LedgerError) as e:
+                    change_ledger.summarize(d, change)
+                self.assertIn("s-walk is already tagged", str(e.exception))
+
+    def test_with_a_window_a_usage_with_no_timestamp_is_not_measured(self):
+        """No window can be said to hold a usage with no timestamp: in a tag with a window it makes each agent
+        figure `+ not measured`, and gaps.tsv says why, rather than counting it in every window or in none."""
+        with scratch() as d:
+            lost = assistant(2, usage(100, 100, 0, 0, 9.0))
+            del lost["timestamp"]
+            path = write_transcript(os.path.join(d, "L.jsonl"), "s-l", [
+                user(0), assistant(1, usage(1, 10, 0, 0, 0.5)), lost])
+            change_ledger.tag(d, "c", "walk", "s-l", "box", path, until=at(5))
+            change_ledger.summarize(d, "c")
+            row = by_step(d, "c")["walk"]
+            self.assertEqual((row["input_tokens"], row["cost_usd"]), ("1 + not measured", "0.5000 + not measured"))
+            self.assertIn("a usage in %s has no timestamp: no window can be said to hold it" % path,
+                          [g["what"] for g in rows(d, "c", "gaps.tsv")])
+
+
+SAMPLES = ("time\tvm\tzone\ttype\tload15\tcontainers\n"
+           + "".join("2026-10-31T%s:00Z\tossv-x\tus-central1-a\tn2-highmem-32\t1.0\t1\n" % hm
+                     for hm in ("10:00", "10:10", "10:20", "10:30", "10:40", "10:50", "11:00", "11:50")))
+IDLE_HEADER = ("run_ts\tvm\tzone\tmachine_type\tcreated\tlast_start\towner\tlast_container_end\tload15\tverdict\t"
+               "reason\n")
+
+
+def idle_row(at, start, vm="ossv-x", kind="n2-highmem-32"):
+    """A row of notes/idle-stop.tsv: a sample at `at` of vm, whose life began at `start` (HH:MM, or HH:MM:SS for the
+    start, of 2026-10-31)."""
+    start += "" if start.count(":") == 2 else ":00"
+    return "2026-10-31T%s:00Z\t%s\tus-central1-a\t%s\t2026-10-31T%sZ\t2026-10-31T%sZ\tsomeone\tnever\t1.0\t" \
+           "keep\t-\n" % (at, vm, kind, start, start)
+
+
+def write_samples(d, header, lines, name="samples.tsv"):
+    """A VM sample file under d with header and lines; its path."""
+    path = os.path.join(d, name)
+    with open(path, "w") as f:
+        f.write(header + "".join(lines))
+    return path
+
+
+class Machines(unittest.TestCase):
+    """vcpu_hours comes only from VM samples (and recorded deletions) inside the sessions' spans: every interval it
+    counts is one a machine ran in one life, and every part of a span in which a machine may have run without a
+    measurement is named in gaps.tsv and makes the figure `+ not measured`, or `not measured` when nothing was."""
+
+    def test_vcpu_hours_come_from_the_samples_of_each_machine_in_the_session_span(self):
+        """vCPU hours: the samples of the session's host and of each VM it names, between consecutive samples under
+        45 minutes apart (as bin/ossv-stream-numbers counts them), times the vCPUs of the machine type, inside the
+        session's span.  A machine with no sample there is not measured, and gaps.tsv names it; with no sample file
+        nothing is measured."""
+        with scratch() as d:
+            samples = os.path.join(d, "compute-ledger.tsv")
+            with open(samples, "w") as f:
+                f.write(SAMPLES)
+            # the session spans 10:15 to 10:45: 30 minutes of a 32-vCPU VM
+            path = write_transcript(os.path.join(d, "V.jsonl"), "s-v", [assistant(45, usage(1, 1, 1, 1, 0.1))],
+                                    start=15)
+            change_ledger.tag(d, "vm", "implement", "s-v", "box", path, vms=["ossv-x"])
+            change_ledger.summarize(d, "vm", samples=[samples])
+            self.assertEqual(by_step(d, "vm")["implement"]["vcpu_hours"], "16.00 + not measured")
+            self.assertIn(("vcpu_hours", "box"), [(g["column"], g["what"].split(":")[0])
+                                                  for g in rows(d, "vm", "gaps.tsv")])
+            self.assertEqual([(r["input"], os.path.expanduser(r["value"])) for r in rows(d, "vm", "inputs.tsv")
+                              if r["input"] in ("unit", "vm_samples")], [("unit", "-"), ("vm_samples", samples)])
+            path2 = write_transcript(os.path.join(d, "W.jsonl"), "s-w", [assistant(45, usage(1, 1, 1, 1, 0.1))],
+                                     start=15)
+            change_ledger.tag(d, "host", "implement", "s-w", "ossv-x", path2)
+            change_ledger.summarize(d, "host", samples=[samples])
+            self.assertEqual(by_step(d, "host")["total"]["vcpu_hours"], "16.00")
+            change_ledger.summarize(d, "host")
+            self.assertEqual(by_step(d, "host")["total"]["vcpu_hours"], "not measured")
+
+    def test_a_vm_deleted_and_made_again_is_two_lives(self):
+        """notes/idle-stop.tsv gives each sample its VM's creation and last start (GCE's): two samples of different
+        lives never make an interval, even under 45 minutes apart (the VM was gone between them), and a life counts
+        from its last start, not from its first sample.  The time after each life's last sample is not measured."""
+        with scratch() as d:
+            samples = write_samples(d, IDLE_HEADER, [idle_row("10:10", "10:02"), idle_row("10:20", "10:02"),
+                                                     idle_row("10:45", "10:40"), idle_row("10:55", "10:40")])
+            path = write_transcript(os.path.join(d, "L.jsonl"), "s-l", [assistant(60, usage(1, 1, 1, 1, 0.1))])
+            change_ledger.tag(d, "c", "implement", "s-l", "ossv-x", path)
+            change_ledger.summarize(d, "c", samples=[samples])
+            # 10:02 to 10:20, then 10:40 to 10:55: 33 minutes of 32 vCPUs
+            self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], "17.60 + not measured")
+
+    def test_a_sample_of_no_known_life_never_joins_two_lives(self):
+        """A compute-ledger.tsv sample names no life: it takes the life of the latest start at or before it (from
+        idle-stop.tsv), so it never makes an interval across the start of another life, and inside a life it is one
+        more sample of that life."""
+        with scratch() as d:
+            idle = write_samples(d, IDLE_HEADER, [idle_row("10:10", "10:02"), idle_row("10:45", "10:40")],
+                                 name="idle-stop.tsv")
+            ledger = write_samples(d, SAMPLES.split("\n")[0] + "\n",
+                                   ["2026-10-31T10:30:00Z\tossv-x\tus-central1-a\tn2-highmem-32\t1.0\t1\n"],
+                                   name="compute-ledger.tsv")
+            path = write_transcript(os.path.join(d, "R.jsonl"), "s-r", [assistant(60, usage(1, 1, 1, 1, 0.1))])
+            change_ledger.tag(d, "c", "implement", "s-r", "ossv-x", path)
+            change_ledger.summarize(d, "c", samples=[ledger, idle])
+            # life A from 10:02 to its last sample at 10:30 (the compute-ledger one), life B from 10:40 to 10:45
+            self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], "17.60 + not measured")
+            self.assertIn("ossv-x: not measured from 2026-10-31T10:30:00Z to 2026-10-31T10:40:00Z: after its last "
+                          "sample, and no deletion record after it",
+                          [g["what"] for g in rows(d, "c", "gaps.tsv")])
+        with scratch() as d:
+            idle = write_samples(d, IDLE_HEADER, [idle_row("10:10", "10:02"), idle_row("10:40", "10:02")],
+                                 name="idle-stop.tsv")
+            ledger = write_samples(d, SAMPLES.split("\n")[0] + "\n",
+                                   ["2026-10-31T10:30:00Z\tossv-x\tus-central1-a\tn2-highmem-32\t1.0\t1\n"],
+                                   name="compute-ledger.tsv")
+            path = write_transcript(os.path.join(d, "I.jsonl"), "s-i", [assistant(40, usage(1, 1, 1, 1, 0.1))])
+            change_ledger.tag(d, "c", "implement", "s-i", "ossv-x", path)
+            change_ledger.summarize(d, "c", samples=[ledger, idle])
+            # one life from 10:02 to 10:40, with no gap at the compute-ledger sample: 38 minutes of 32 vCPUs
+            self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], "20.27")
+
+    def test_a_resumed_fragment_spans_only_its_own_entries(self):
+        """A resumed fragment that copies the history before it spans only its own new entries: the copied ones (omp
+        gives every entry an id), which count in no sum, widen neither its wall time nor the span of its machines."""
+        with scratch() as d:
+            samples = write_samples(d, SAMPLES.split("\n")[0] + "\n", [
+                "2026-10-31T%s:00Z\tossv-b\tus-central1-a\tn2-highmem-32\t1.0\t1\n" % hm
+                for hm in ("10:00", "10:10", "10:20", "10:30", "10:40")])
+            history = [dict(user(0), id="u1"), assistant(6, usage(1, 10, 0, 0, 0.5), id="a1")]
+            first = write_transcript(os.path.join(d, "X.jsonl"), "s-x", history)
+            second = write_transcript(os.path.join(d, "X-2.jsonl"), "s-x2", history + [
+                user(21), assistant(30, usage(2, 20, 0, 0, 0.25), id="a2")], start=20)
+            change_ledger.tag(d, "c", "implement", "s-x", "box-a", first)
+            change_ledger.tag(d, "c", "implement", "s-x2", "ossv-b", second)
+            change_ledger.summarize(d, "c", samples=[samples])
+            # ossv-b ran for the second fragment from 10:20 to 10:30 only; box-a has no sample
+            self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], "5.33 + not measured")
+            spans = {r["session"]: (r["wall_start"], r["wall_end"]) for r in rows(d, "c", "session-totals.tsv")}
+            self.assertEqual(spans, {"s-x": ("2026-10-31T10:00:00Z", "2026-10-31T10:06:00Z"),
+                                     "s-x2": ("2026-10-31T10:20:00Z", "2026-10-31T10:30:00Z")})
+
+    def test_vm_time_with_no_measurement_is_named_and_a_recorded_deletion_ends_a_life(self):
+        """Each part of a session's span in which a machine may have run with no measurement is named in gaps.tsv,
+        and the measured subtotal stays: a gap of 45 minutes or more between samples, the time after a life's last
+        sample, an interval whose machine type names no vCPU count.  A deletion that the compute inventory records
+        (gone=, from bin/ossv-vm) ends a life: less than 45 minutes after its last sample, the tail up to it counts;
+        later, the tail up to it is not measured, and after it the VM is gone."""
+        def vm_gaps(d):
+            return [g["what"] for g in rows(d, "c", "gaps.tsv") if g["column"] == "vcpu_hours" and g["step"] == "total"]
+        with scratch() as d:
+            samples = write_samples(d, IDLE_HEADER, [idle_row("10:10", "10:00"), idle_row("10:20", "10:00")])
+            path = write_transcript(os.path.join(d, "D.jsonl"), "s-d", [assistant(60, usage(1, 1, 1, 1, 0.1))])
+            change_ledger.tag(d, "c", "implement", "s-d", "ossv-x", path)
+            change_ledger.summarize(d, "c", samples=[samples])
+            # 10:00 to 10:20 measured; 10:20 to 11:00 the VM may have run on
+            self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], "10.67 + not measured")
+            self.assertEqual(vm_gaps(d), ["ossv-x: not measured from 2026-10-31T10:20:00Z to 2026-10-31T11:00:00Z: "
+                                          "after its last sample, and no deletion record after it"])
+            inventory = os.path.join(d, "compute-inventory.csv")
+            with open(inventory, "w") as f:
+                f.write('example-project,ossv-x,us-central1-a,n2-highmem-32,DELETED,10-31T10:00Z,'
+                        '"owner=someone,gone=10-31T10:28Z"\n')
+            change_ledger.summarize(d, "c", samples=[samples], deletions=[inventory])
+            # 10:00 to the deletion at 10:28: 28 minutes of 32 vCPUs
+            self.assertEqual((by_step(d, "c")["total"]["vcpu_hours"], vm_gaps(d)), ("14.93", []))
+            self.assertIn(("vm_deletions", inventory), [(r["input"], os.path.expanduser(r["value"]))
+                                                        for r in rows(d, "c", "inputs.tsv")])
+        with scratch() as d:
+            samples = write_samples(d, IDLE_HEADER, [idle_row("10:10", "10:00"), idle_row("10:20", "10:00")])
+            inventory = os.path.join(d, "compute-inventory.csv")
+            with open(inventory, "w") as f:
+                f.write('example-project,ossv-x,us-central1-a,n2-highmem-32,DELETED,10-31T10:00Z,'
+                        '"owner=someone,gone=10-31T11:10Z"\n')
+            path = write_transcript(os.path.join(d, "E.jsonl"), "s-e", [assistant(90, usage(1, 1, 1, 1, 0.1))])
+            change_ledger.tag(d, "c", "implement", "s-e", "ossv-x", path)
+            change_ledger.summarize(d, "c", samples=[samples], deletions=[inventory])
+            # deleted 50 minutes after the last sample: up to 11:10 not measured, then gone until the span's end
+            self.assertEqual((by_step(d, "c")["total"]["vcpu_hours"], vm_gaps(d)),
+                             ("10.67 + not measured", ["ossv-x: not measured from 2026-10-31T10:20:00Z to "
+                                                       "2026-10-31T11:10:00Z: after its last sample, until its "
+                                                       "recorded deletion"]))
+        for kinds, end, want, why in (
+                (("n2-highmem-32",) * 2 + (None,) * 4 + ("n2-highmem-32",), 60, "5.33 + not measured",
+                 "from 2026-10-31T10:10:00Z to 2026-10-31T11:00:00Z: no sample for 50 minutes"),
+                (("n2-highmem-32", "e2-medium", "n2-highmem-32"), 20, "5.33 + not measured",
+                 "from 2026-10-31T10:10:00Z to 2026-10-31T10:20:00Z: its machine type e2-medium names no vCPU count")):
+            with self.subTest(why=why), scratch() as d:
+                times = ("10:00", "10:10", "10:20", "10:30", "10:40", "10:50", "11:00")
+                samples = write_samples(d, SAMPLES.split("\n")[0] + "\n", [
+                    "2026-10-31T%s:00Z\tossv-x\tus-central1-a\t%s\t1.0\t1\n" % (hm, kind)
+                    for hm, kind in zip(times, kinds) if kind])
+                path = write_transcript(os.path.join(d, "G.jsonl"), "s-g", [assistant(end, usage(1, 1, 1, 1, 0.1))])
+                change_ledger.tag(d, "c", "implement", "s-g", "ossv-x", path)
+                change_ledger.summarize(d, "c", samples=[samples])
+                self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], want)
+                self.assertEqual(vm_gaps(d), ["ossv-x: not measured " + why])
+
+    def test_a_recorded_deletion_is_a_boundary(self):
+        """A deletion ends the life it falls in: a compute-ledger sample after it does not take that life, no
+        interval crosses it, and the time from it to that sample is not measured (a life of no known start began
+        then).  Samples of that later life measure the time between them, as any compute-ledger samples do."""
+        def vm_gaps(d):
+            return [g["what"] for g in rows(d, "c", "gaps.tsv") if g["column"] == "vcpu_hours" and g["step"] == "total"]
+        for later, want, gaps in (
+                (("10:20",), "8.00 + not measured",
+                 ["from 2026-10-31T10:15:00Z to 2026-10-31T10:20:00Z: after its recorded deletion, before its next "
+                  "sample", "from 2026-10-31T10:20:00Z to 2026-10-31T10:30:00Z: after its last sample, and no "
+                  "deletion record after it"]),
+                (("10:20", "10:25"), "10.67 + not measured",
+                 ["from 2026-10-31T10:15:00Z to 2026-10-31T10:20:00Z: after its recorded deletion, before its next "
+                  "sample", "from 2026-10-31T10:25:00Z to 2026-10-31T10:30:00Z: after its last sample, and no "
+                  "deletion record after it"])):
+            with self.subTest(later=later), scratch() as d:
+                idle = write_samples(d, IDLE_HEADER, [idle_row("10:00", "10:00"), idle_row("10:10", "10:00")],
+                                     name="idle-stop.tsv")
+                ledger = write_samples(d, SAMPLES.split("\n")[0] + "\n", [
+                    "2026-10-31T%s:00Z\tossv-x\tus-central1-a\tn2-highmem-32\t1.0\t1\n" % hm for hm in later],
+                    name="compute-ledger.tsv")
+                inventory = os.path.join(d, "compute-inventory.csv")
+                with open(inventory, "w") as f:
+                    f.write('example-project,ossv-x,us-central1-a,n2-highmem-32,DELETED,10-31T10:00Z,'
+                            '"owner=someone,gone=10-31T10:15Z"\n')
+                path = write_transcript(os.path.join(d, "B.jsonl"), "s-b", [assistant(30, usage(1, 1, 1, 1, 0.1))])
+                change_ledger.tag(d, "c", "implement", "s-b", "ossv-x", path)
+                change_ledger.summarize(d, "c", samples=[idle, ledger], deletions=[inventory])
+                # the known life from 10:00 to its deletion at 10:15: 15 minutes of 32 vCPUs (and 10:20-10:25)
+                self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], want)
+                self.assertEqual(vm_gaps(d), ["ossv-x: not measured " + g for g in gaps])
+
+    def test_every_stretch_no_record_measures_is_named_and_never_reads_0(self):
+        """Between two recorded deletions with no start or sample between them a life no sample shows ran: that
+        stretch is not measured.  A span that holds no measured interval reads `not measured`, never 0.00, and
+        gaps.tsv says why, even where the records show the VM gone."""
+        def vm_gaps(d):
+            return [g["what"] for g in rows(d, "c", "gaps.tsv") if g["column"] == "vcpu_hours" and g["step"] == "total"]
+        for start, end, want, gaps in (
+                (16, 17, "not measured",
+                 ["from 2026-10-31T10:16:00Z to 2026-10-31T10:17:00Z: between two recorded deletions, a life no "
+                  "sample shows"]),
+                (0, 30, "8.00 + not measured",
+                 ["from 2026-10-31T10:15:00Z to 2026-10-31T10:18:00Z: between two recorded deletions, a life no "
+                  "sample shows",
+                  "from 2026-10-31T10:18:00Z to 2026-10-31T10:20:00Z: after its recorded deletion, before its next "
+                  "sample",
+                  "from 2026-10-31T10:20:00Z to 2026-10-31T10:30:00Z: after its last sample, and no deletion record "
+                  "after it"])):
+            with self.subTest(span=(start, end)), scratch() as d:
+                idle = write_samples(d, IDLE_HEADER, [idle_row("10:00", "10:00"), idle_row("10:10", "10:00")],
+                                     name="idle-stop.tsv")
+                ledger = write_samples(d, SAMPLES.split("\n")[0] + "\n",
+                                       ["2026-10-31T10:20:00Z\tossv-x\tus-central1-a\tn2-highmem-32\t1.0\t1\n"],
+                                       name="compute-ledger.tsv")
+                inventory = os.path.join(d, "compute-inventory.csv")
+                with open(inventory, "w") as f:
+                    f.write('example-project,ossv-x,us-central1-a,n2-highmem-32,DELETED,10-31T10:00Z,'
+                            '"owner=someone,gone=10-31T10:15Z,gone=10-31T10:18Z"\n')
+                path = write_transcript(os.path.join(d, "S.jsonl"), "s-s", [assistant(end, usage(1, 1, 1, 1, 0.1))],
+                                        start=start)
+                change_ledger.tag(d, "c", "implement", "s-s", "ossv-x", path)
+                change_ledger.summarize(d, "c", samples=[idle, ledger], deletions=[inventory])
+                self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], want)
+                self.assertEqual(vm_gaps(d), ["ossv-x: not measured " + g for g in gaps])
+        with scratch() as d:
+            idle = write_samples(d, IDLE_HEADER, [idle_row("10:00", "10:00"), idle_row("10:10", "10:00")])
+            inventory = os.path.join(d, "compute-inventory.csv")
+            with open(inventory, "w") as f:
+                f.write('example-project,ossv-x,us-central1-a,n2-highmem-32,DELETED,10-31T10:00Z,'
+                        '"owner=someone,gone=10-31T10:15Z"\n')
+            path = write_transcript(os.path.join(d, "G.jsonl"), "s-g", [assistant(30, usage(1, 1, 1, 1, 0.1))],
+                                    start=20)
+            change_ledger.tag(d, "c", "implement", "s-g", "ossv-x", path)
+            change_ledger.summarize(d, "c", samples=[idle], deletions=[inventory])
+            # deleted at 10:15, before the span: no record shows it running, so nothing is measured, never 0.00
+            self.assertEqual((by_step(d, "c")["total"]["vcpu_hours"], vm_gaps(d)),
+                             ("not measured", ["ossv-x: not measured from 2026-10-31T10:20:00Z to "
+                                               "2026-10-31T10:30:00Z: no record shows it running then"]))
+
+    def test_a_deletion_cut_to_the_minute_ends_its_own_life(self):
+        """A deletion mark is cut to the minute, so a sample less than a minute after it may still be of the life it
+        ends; the start of a life begun after the mark is not, and the mark stays a boundary before it."""
+        with scratch() as d:
+            idle = write_samples(d, IDLE_HEADER, [idle_row("19:20", "19:10"), idle_row("19:30", "19:10"),
+                                                  idle_row("19:45", "19:37:30")])
+            inventory = os.path.join(d, "compute-inventory.csv")
+            with open(inventory, "w") as f:
+                f.write('example-project,ossv-x,us-central1-a,n2-highmem-32,DELETED,10-31T19:10Z,'
+                        '"owner=someone,gone=10-31T19:37Z"\n')
+            path = write_transcript(os.path.join(d, "M.jsonl"), "s-m", [assistant(590, usage(1, 1, 1, 1, 0.1))],
+                                    start=550)
+            change_ledger.tag(d, "c", "implement", "s-m", "ossv-x", path)
+            change_ledger.summarize(d, "c", samples=[idle], deletions=[inventory])
+            # 19:10 to the deletion at 19:37, then the next life from 19:37:30 to 19:45: 34.5 minutes of 32 vCPUs
+            self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], "18.40 + not measured")
+            self.assertEqual([g["what"] for g in rows(d, "c", "gaps.tsv") if g["step"] == "total"
+                              and g["column"] == "vcpu_hours"],
+                             ["ossv-x: not measured from 2026-10-31T19:45:00Z to 2026-10-31T19:50:00Z: after its last "
+                              "sample, and no deletion record after it"])
+
+    def test_a_deletion_a_later_sample_of_the_life_contradicts_is_not_its_end(self):
+        """A deletion mark of the same name that a later sample of a running life contradicts (another VM of that
+        name was deleted) is no boundary of that life."""
+        with scratch() as d:
+            idle = write_samples(d, IDLE_HEADER, [idle_row(hm, "10:00") for hm in ("10:10", "10:20", "10:30")])
+            inventory = os.path.join(d, "compute-inventory.csv")
+            with open(inventory, "w") as f:
+                f.write('example-project,ossv-x,us-west1-b,n2-highmem-32,DELETED,10-31T09:00Z,'
+                        '"owner=someone,gone=10-31T10:15Z"\n')
+            path = write_transcript(os.path.join(d, "K.jsonl"), "s-k", [assistant(30, usage(1, 1, 1, 1, 0.1))])
+            change_ledger.tag(d, "c", "implement", "s-k", "ossv-x", path)
+            change_ledger.summarize(d, "c", samples=[idle], deletions=[inventory])
+            # one life from 10:00 to 10:30: 30 minutes of 32 vCPUs
+            self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], "16.00")
+
+    def test_a_machine_type_names_its_vcpus_or_none(self):
+        """A machine type names its vCPUs as <series>-<class>-<vcpus>, <series>-custom-<vcpus>-<memory MB>[-ext] or,
+        for N1, custom-<vcpus>-<memory MB>; any other form (a shared core, a GPU count, a suffix) names none, so its
+        time is not measured, never read as its last number."""
+        for kind, vcpus in (("n2-highmem-32", 32), ("n2d-standard-64", 64), ("e2-highcpu-8", 8),
+                            ("n2-custom-8-32768", 8), ("n2d-custom-16-65536-ext", 16), ("custom-4-16384", 4),
+                            ("e2-medium", None), ("a2-highgpu-1g", None), ("c3-standard-4-lssd", None), ("-", None)):
+            with self.subTest(kind=kind):
+                self.assertEqual(change_ledger.vcpus_of(kind), vcpus)
+        with scratch() as d:
+            samples = os.path.join(d, "compute-ledger.tsv")
+            with open(samples, "w") as f:
+                f.write(SAMPLES.replace("n2-highmem-32", "n2-custom-8-32768"))
+            path = write_transcript(os.path.join(d, "C.jsonl"), "s-c", [assistant(45, usage(1, 1, 1, 1, 0.1))],
+                                    start=15)
+            change_ledger.tag(d, "c", "implement", "s-c", "ossv-x", path)
+            change_ledger.summarize(d, "c", samples=[samples])
+            # 30 minutes of 8 vCPUs, not of 32768
+            self.assertEqual(by_step(d, "c")["total"]["vcpu_hours"], "4.00")
+
+
+ELAPSED = "\tCommand being timed: \"oft check\"\n\tElapsed (wall clock) time (h:mm:ss or m:ss): %s\n\tExit status: 0\n"
+
+
+class Checks(unittest.TestCase):
+    """check_seconds comes only from GNU time -v logs recorded with `oft change-ledger check`; a step with none is not
+    measured, never 0."""
+
+    def test_check_seconds_come_from_the_time_logs_of_the_checks(self):
+        """A check is recorded by its GNU time -v log; its seconds are the log's elapsed wall clock time.  A log that
+        holds none is refused; a step with no check log is not measured."""
+        with scratch() as d:
+            logs = []
+            for name, elapsed in (("a.time", "2:15:51"), ("b.time", "1:54.99")):
+                logs.append(os.path.join(d, name))
+                with open(logs[-1], "w") as f:
+                    f.write(ELAPSED % elapsed)
+            path = write_transcript(os.path.join(d, "C.jsonl"), "s-c", [assistant(1, usage(1, 1, 1, 1, 0.1))])
+            change_ledger.tag(d, "c", "implement", "s-c", "box", path)
+            for log in logs:
+                change_ledger.check(d, "c", "implement", log)
+            change_ledger.summarize(d, "c")
+            self.assertEqual(by_step(d, "c")["implement"]["check_seconds"], "8265.99")
+            empty = os.path.join(d, "empty.time")
+            with open(empty, "w") as f:
+                f.write("nothing timed\n")
+            with self.assertRaises(change_ledger.LedgerError) as e:
+                change_ledger.check(d, "c", "implement", empty)
+            self.assertIn(empty, str(e.exception))
+            path2 = write_transcript(os.path.join(d, "R.jsonl"), "s-r", [assistant(1, usage(1, 1, 1, 1, 0.1))])
+            change_ledger.tag(d, "c", "review", "s-r", "box", path2)
+            change_ledger.summarize(d, "c")
+            got = by_step(d, "c")
+            self.assertEqual((got["review"]["check_seconds"], got["total"]["check_seconds"]),
+                             ("not measured", "8265.99 + not measured"))
+
+    PROVED = ("projects/z/h/proofs/a_halts: proves z/h/a_halts; assumptions: 15 axioms, all allowed\n"
+              "  | projects/z/h/proofs/b_halts: proves z/h/b_halts; assumptions: 15 axioms, all allowed\n"
+              "projects/z/h/proofs/b_halts: proves z/h/b_halts; assumptions: 15 axioms, all allowed\n")
+
+    def farm_run(self, d, name, log, exit_code=0, seconds=9067):
+        """A farm run's directory as `ossv-job fetch` writes it."""
+        run_dir = os.path.join(d, name)
+        os.makedirs(run_dir)
+        with open(os.path.join(run_dir, "result.json"), "w") as f:
+            json.dump({"exit_code": exit_code, "duration_s": seconds}, f)
+        with open(os.path.join(run_dir, "job.log"), "w") as f:
+            f.write(log)
+        return run_dir
+
+    def test_a_farm_run_is_recorded_with_its_seconds_and_its_verdict(self):
+        """A check of record runs on the farm, which writes no time -v log: it is recorded by the directory `ossv-job
+        fetch` wrote.  Its seconds are its record's duration_s, and check-results.tsv says what it found, read from
+        its own output, so a passing exit status alone never reads as a pass."""
+        with scratch() as d:
+            cases = {
+                "pass": (self.PROVED + "oft check: 3 step(s) passed, 0 failed; work files in /tmp/x\n", 0,
+                         "passed: 2 statement(s) proved, 3 step(s) passed, 0 failed, exit 0"),
+                "fail": (self.PROVED + "oft check: 2 step(s) passed, 1 failed; work files in /tmp/x\n", 1,
+                         "failed: 2 statement(s) proved, 2 step(s) passed, 1 failed, exit 1"),
+                # exit 0, but the only proof line is quoted from a process it ran: a whole, valid claim, so only its
+                # quote prefix keeps it out
+                "quoted": (("  | projects/z/h/proofs/a_halts: proves z/h/a_halts; assumptions: 1 axioms, all allowed\n"
+                            "oft check: 1 step(s) passed, 0 failed; work files in /tmp/x\n"), 0,
+                           "failed: 0 statement(s) proved, 1 step(s) passed, 0 failed, exit 0"),
+                "cut": (self.PROVED, 0, "not read: no `oft check:` summary line"),
+                # exit 0, but the summary says a step failed
+                "step-failed": (self.PROVED + "oft check: 2 step(s) passed, 1 failed; work files in /tmp/x\n", 0,
+                                "failed: 2 statement(s) proved, 2 step(s) passed, 1 failed, exit 0"),
+                # each line check.proof_claim reads as a pass: the old layout, a bound, a refutation
+                "old-layout": (("proofs/z/h/a_halts: proves z/h/a_halts; assumptions: 3 axioms, all allowed\n"
+                                "oft check: 1 step(s) passed, 0 failed; work files in /tmp/x\n"), 0,
+                               "passed: 1 statement(s) proved, 1 step(s) passed, 0 failed, exit 0"),
+                "bound": (("projects/z/h/proofs/a_halts: proves z/h/a_halts (1 # 2); assumptions: 3 axioms, all "
+                           "allowed\noft check: 1 step(s) passed, 0 failed; work files in /tmp/x\n"), 0,
+                          "passed: 1 statement(s) proved, 1 step(s) passed, 0 failed, exit 0"),
+                "refutes": (("projects/z/h/proofs/a_halts: refutes z/h/a_halts; assumptions: 3 axioms, all allowed\n"
+                             "oft check: 1 step(s) passed, 0 failed; work files in /tmp/x\n"), 0,
+                            "passed: 0 statement(s) proved, 1 refuted, 1 step(s) passed, 0 failed, exit 0"),
+            }
+            for step, (log, code, _want) in cases.items():
+                rc, out = run("--root", d, "change-ledger", "check", "c", "--step", step,
+                              "--farm-run", self.farm_run(d, step, log, code))
+                self.assertEqual(rc, 0, out)
+            change_ledger.summarize(d, "c")
+            got = {r["step"]: (r["seconds"], r["result"]) for r in rows(d, "c", "check-results.tsv")}
+            self.assertEqual(got, {step: ("9067.00", want) for step, (_l, _c, want) in cases.items()})
+            self.assertEqual(by_step(d, "c")["pass"]["check_seconds"], "9067.00")
+
+    def test_a_sum_with_no_check_left_keeps_no_earlier_verdict(self):
+        """check-results.tsv says what the recorded checks found: when none is recorded any more, the sum removes
+        the file an earlier sum wrote, rather than leave its verdicts standing."""
+        with scratch() as d:
+            rc, out = run("--root", d, "change-ledger", "check", "c", "--step", "s", "--farm-run",
+                          self.farm_run(d, "run", self.PROVED + "oft check: 3 step(s) passed, 0 failed\n"))
+            self.assertEqual(rc, 0, out)
+            change_ledger.summarize(d, "c")
+            results = os.path.join(d, "changes", "c", "check-results.tsv")
+            self.assertEqual(len(rows(d, "c", "check-results.tsv")), 1)
+            with open(os.path.join(d, "changes", "c", "checks.tsv"), "w") as f:
+                f.write("step\tlog\n")
+            change_ledger.summarize(d, "c")
+            self.assertFalse(os.path.exists(results))
+
+    def test_each_source_is_refused_as_the_other(self):
+        """--farm-run takes only a farm run's directory and --time-log only a file, so a time log named as a farm run
+        (or the reverse) is refused and nothing is recorded, never read as the kind it is not."""
+        with scratch() as d:
+            log = os.path.join(d, "a.time")
+            with open(log, "w") as f:
+                f.write(self.PROVED + "oft check: 3 step(s) passed, 0 failed\n" + ELAPSED % "1:00"
+                        + "\tExit status: 0\n")
+            farm = self.farm_run(d, "run", self.PROVED + "oft check: 3 step(s) passed, 0 failed\n")
+            for option, path in (("--farm-run", log), ("--time-log", farm)):
+                rc, out = run("--root", d, "change-ledger", "check", "c", "--step", "s", option, path)
+                self.assertEqual(rc, 1, (option, out))
+                self.assertFalse(os.path.exists(os.path.join(d, "changes", "c", "checks.tsv")), option)
+            for option, path in (("--time-log", log), ("--farm-run", farm)):
+                rc, out = run("--root", d, "change-ledger", "check", "c", "--step", option.strip("-"), option, path)
+                self.assertEqual(rc, 0, (option, out))
+
+    def test_a_time_log_s_verdict_is_read_from_the_check_s_own_lines(self):
+        """A check run on a VM under time -v holds the check's output and time's lines in one log: its verdict reads
+        the same `oft check:` and proof lines, and its exit status from time's `Exit status` line."""
+        with scratch() as d:
+            log = os.path.join(d, "a.time")
+            with open(log, "w") as f:
+                f.write(self.PROVED + "oft check: 3 step(s) passed, 0 failed; work files in /tmp/x\n"
+                        + ELAPSED % "1:00" + "\tExit status: 0\n")
+            change_ledger.check(d, "c", "implement", log)
+            change_ledger.summarize(d, "c")
+            self.assertEqual([(r["seconds"], r["result"]) for r in rows(d, "c", "check-results.tsv")],
+                             [("60.00", "passed: 2 statement(s) proved, 3 step(s) passed, 0 failed, exit 0")])
+
+    def test_a_farm_run_without_its_record_is_refused(self):
+        """A directory with no result.json is not a farm run: it is refused when recorded, so no step reads 0 from
+        it."""
+        with scratch() as d:
+            os.makedirs(os.path.join(d, "empty"))
+            rc, out = run("--root", d, "change-ledger", "check", "c", "--step", "s", "--farm-run",
+                          os.path.join(d, "empty"))
+            self.assertEqual(rc, 1, out)
+            self.assertFalse(os.path.exists(os.path.join(d, "changes", "c", "checks.tsv")))
+
+
+class NoWork(unittest.TestCase):
+    """0 is written only where a record says so: a step recorded as needing no work (`oft change-ledger no-work`)
+    reads 0 and gaps.tsv names nothing for it, while a step with no record still reads `not measured`; a step that
+    needed no work has no session and no check log."""
+
+    def test_a_step_that_needed_no_work_reads_0_and_is_no_gap(self):
+        """The upstream commits of a change that change no binary need no proof run: recorded so, the step's and the
+        total's agent, VM and check figures are 0, its wall time does not apply, and gaps.tsv is empty, with or
+        without VM samples."""
+        with scratch() as d:
+            rc, out = run("--root", d, "change-ledger", "no-work", "c", "--step", "walk-1",
+                          "--why", "oft prove finds no function changed")
+            self.assertEqual(rc, 0, out)
+            self.assertEqual(rows(d, "c", "no-work.tsv"), [{"step": "walk-1",
+                                                            "why": "oft prove finds no function changed"}])
+            samples = write_samples(d, SAMPLES, [])
+            for given in ([], [samples]):
+                with self.subTest(samples=given):
+                    change_ledger.summarize(d, "c", samples=given)
+                    zero = {"sessions": "0", "wall_start": "-", "wall_end": "-", "agent_hours": "0.00",
+                            "input_tokens": "0", "output_tokens": "0", "cache_read": "0", "cache_write": "0",
+                            "cost_usd": "0.0000", "vcpu_hours": "0.00", "check_seconds": "0.00"}
+                    self.assertEqual({s: {k: r[k] for k in zero} for s, r in by_step(d, "c").items()},
+                                     {"walk-1": zero, "total": zero})
+                    self.assertEqual(rows(d, "c", "gaps.tsv"), [])
+
+    def test_a_step_with_no_record_still_reads_not_measured(self):
+        """Beside a step that needed no work, a step that has only a check log is not measured in its agent and VM
+        figures, and so is the total's; a step that did work and one that needed none sum to the first's figures,
+        with no `+ not measured` for the step that needed none.  A change with no record reads not measured."""
+        with scratch() as d:
+            log = os.path.join(d, "a.time")
+            with open(log, "w") as f:
+                f.write(ELAPSED % "0:10")
+            change_ledger.no_work(d, "c", "walk-1", "no binary changed")
+            change_ledger.check(d, "c", "walk-2", log)
+            change_ledger.summarize(d, "c")
+            got = {s: (r["agent_hours"], r["cost_usd"], r["vcpu_hours"], r["check_seconds"])
+                   for s, r in by_step(d, "c").items()}
+            self.assertEqual(got, {"walk-1": ("0.00", "0.0000", "0.00", "0.00"),
+                                   "walk-2": ("not measured", "not measured", "not measured", "10.00"),
+                                   "total": ("not measured", "not measured", "not measured", "10.00")})
+            self.assertEqual({g["step"] for g in rows(d, "c", "gaps.tsv")}, {"walk-2", "total"})
+        with scratch() as d:
+            log = os.path.join(d, "a.time")
+            with open(log, "w") as f:
+                f.write(ELAPSED % "0:10")
+            path = write_transcript(os.path.join(d, "W.jsonl"), "s-w", [user(0), assistant(1, usage(1, 1, 0, 0, 0.5))])
+            change_ledger.tag(d, "c", "walk-2", "s-w", "box", path)
+            change_ledger.check(d, "c", "walk-2", log)
+            change_ledger.no_work(d, "c", "walk-1", "no binary changed")
+            change_ledger.summarize(d, "c")
+            total = by_step(d, "c")["total"]
+            self.assertEqual((total["sessions"], total["cost_usd"], total["check_seconds"]), ("1", "0.5000", "10.00"))
+        with scratch() as d:
+            change_ledger.summarize(d, "c")
+            total = by_step(d, "c")["total"]
+            self.assertEqual((total["cost_usd"], total["vcpu_hours"], total["check_seconds"]),
+                             (change_ledger.NOT_MEASURED,) * 3)
+
+    def test_a_step_that_needed_no_work_has_no_session_and_no_check_log(self):
+        """no-work refuses a step with a tagged session or a check log, one recorded already, and a reason that is
+        empty or more than one line; tag and check refuse a step recorded as needing no work; and the sum checks a
+        no-work.tsv edited after them again."""
+        with scratch() as d:
+            log = os.path.join(d, "a.time")
+            with open(log, "w") as f:
+                f.write(ELAPSED % "0:10")
+            path = write_transcript(os.path.join(d, "S.jsonl"), "s-1", [assistant(1, usage(1, 1, 1, 1, 1.0))])
+            change_ledger.tag(d, "c", "worked", "s-1", "box", path)
+            change_ledger.check(d, "c", "checked", log)
+            change_ledger.no_work(d, "c", "idle", "no binary changed")
+            refused = {"a tagged step": lambda: change_ledger.no_work(d, "c", "worked", "x"),
+                       "a checked step": lambda: change_ledger.no_work(d, "c", "checked", "x"),
+                       "a step recorded already": lambda: change_ledger.no_work(d, "c", "idle", "x"),
+                       "no reason": lambda: change_ledger.no_work(d, "c", "other", " "),
+                       "two lines": lambda: change_ledger.no_work(d, "c", "other", "a\nb"),
+                       "a tag": lambda: change_ledger.tag(d, "c", "idle", "s-2", "box", write_transcript(
+                           os.path.join(d, "T.jsonl"), "s-2", [assistant(1, usage(1, 1, 1, 1, 1.0))])),
+                       "a check": lambda: change_ledger.check(d, "c", "idle", log)}
+            for what, call in refused.items():
+                with self.subTest(what), self.assertRaises(change_ledger.LedgerError):
+                    call()
+            self.assertEqual(rows(d, "c", "no-work.tsv"), [{"step": "idle", "why": "no binary changed"}])
+            with open(os.path.join(d, "changes", "c", "no-work.tsv"), "a") as f:
+                f.write("worked\tedited by hand\n")
+            with self.assertRaises(change_ledger.LedgerError) as e:
+                change_ledger.summarize(d, "c")
+            self.assertIn("step worked of c is recorded as needing no work", str(e.exception))
+
+
+class Journal(unittest.TestCase):
+    """journal.md is made from its template once and then belongs to its writers; changes/ is internal maintainers'
+    work, and the ledger is not the checker."""
+
+    def test_the_journal_is_made_once_with_every_section(self):
+        with scratch() as d:
+            change_ledger.summarize(d, "c")
+            journal = os.path.join(d, "changes", "c", "journal.md")
+            with open(journal, encoding="utf-8") as f:
+                text = f.read()
+            self.assertEqual([line[3:] for line in text.split("\n") if line.startswith("## ")],
+                             list(change_ledger.JOURNAL_SECTIONS))
+            with open(journal, "a") as f:
+                f.write("Kept.\n")
+            change_ledger.summarize(d, "c")
+            with open(journal, encoding="utf-8") as f:
+                self.assertTrue(f.read().endswith("Kept.\n"))
+
+    def test_changes_are_internal_hand_files(self):
+        """changes/ is maintainers' work, and only this repository has it: a release leaves it out."""
+        self.assertEqual([c for c, _p, _b in paths.classify("changes/libreac-35/ledger.tsv")], ["hand"])
+        self.assertIn("changes/", release_tree.INTERNAL)
+
+    def test_the_change_ledger_is_not_the_checker(self):
+        """keys.NOT_THE_CHECKER names change_ledger.py and the journal's template, so a change to them re-checks no
+        fuzz target; that holds only while a check opens them not, so oft.check, with oft.facts and oft.fetch, does
+        not import it."""
+        self.assertTrue(keys.not_the_checker("tools/oft/change_ledger.py"))
+        self.assertTrue(keys.not_the_checker("tools/oft/templates/journal.md.tmpl"))
+        tools = os.path.dirname(os.path.dirname(os.path.abspath(change_ledger.__file__)))
+        done = subprocess.run([sys.executable, "-c", "import sys, oft.check, oft.facts, oft.fetch; "
+                               "print('oft.change_ledger' in sys.modules)"],
+                              capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=tools))
+        self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "False\n", ""))
+
+
+class Git(unittest.TestCase):
+    """The fixture: test_contracts.contract_repo, with a proof file of zlib/checksum_fuzzer's proof library."""
+
+    WALK = LIB + "/Lib/Walk.v"
+
+    def test_edits_are_split_into_address_layout_and_content(self):
+        """Each rewritten line pair of the unit's proofs (a hunk's removed and added lines, in order) is an address
+        edit when it is equal with its hex literals masked, a layout edit when equal with every number masked, else
+        a content edit; the proof lines added and removed are git's numstat; the function classes are oft prove's.
+        A Rocq bullet at the start of a line (`--`) is a line like any other."""
+        with tree() as t:
+            t.write(self.WALK, "Definition A := 0x11000.\nDefinition B := 4096.\nDefinition C := 0x10 + 3.\n"
+                               "Lemma l : True. Proof. exact I. Qed.\n-- exact I.\n")
+            base = contract_repo(t)
+            t.write(self.WALK, "Definition A := 0x11008.\nDefinition B := 4104.\nDefinition C := 0x18 + 4.\n"
+                               "Lemma l : True. Proof. trivial. Qed.\n-- exact (I).\nDefinition D := 1.\n")
+            head = commit(t)
+            change_ledger.summarize(t.root, "c", unit=UNIT, base="HEAD~1", head="HEAD")
+            inputs = {r["input"]: r["value"] for r in rows(t.root, "c", "inputs.tsv")}
+            self.assertEqual({k: inputs[k] for k in ("unit", "base", "head")}, {"unit": UNIT, "base": base,
+                                                                                "head": head})
+            total = by_step(t.root, "c")["total"]
+            self.assertEqual({k: total[k] for k in ("proof_lines_added", "proof_lines_removed", "edits_address",
+                                                    "edits_layout", "edits_content", "contracts_changed")},
+                             {"proof_lines_added": "6", "proof_lines_removed": "5", "edits_address": "1",
+                              "edits_layout": "2", "edits_content": "2", "contracts_changed": "0"})
+            counts = prove.report(t.root, UNIT, base, head).counts
+            self.assertEqual({k: total[k] for k in counts}, {k: str(v) for k, v in counts.items()})
+            self.assertEqual(total["contracts_needing_work"], "not measured")
+
+    def test_predicted_work_is_compared_with_the_contracts_edited(self):
+        """With the oft prove --json saved when the change was made (changes/<change>/prove.json), contracts.tsv
+        holds each contract's predicted state against whether its file was edited, and contracts_needing_work is
+        the prediction's count: the work key's precision is a measured number."""
+        with tree() as t:
+            base = contract_repo(t)
+            put_row(t, "LLVMFuzzerTestOneInput", exact="1e" * 32, masked="2d" * 32)
+            predicted = commit(t)
+            os.makedirs(t.path("changes", "c"))
+            with open(t.path("changes", "c", "prove.json"), "w") as f:
+                json.dump(prove.as_json(prove.report(t.root, UNIT, base, predicted)), f)
+            for rel in (ENTRY, TABLE):
+                t.write(rel, t.read(rel) + "(* edited *)\n")
+            head = commit(t)
+            change_ledger.summarize(t.root, "c", unit=UNIT, base=base, head=head)
+            got = {r["contract"]: (r["predicted"], r["edited"]) for r in rows(t.root, "c", "contracts.tsv")}
+            self.assertEqual({k: got[k] for k in (ENTRY, TABLE, STATE)},
+                             {ENTRY: ("needs work", "yes"), TABLE: ("unchanged", "yes"), STATE: ("unchanged", "no")})
+            total = by_step(t.root, "c")["total"]
+            self.assertEqual((total["contracts_needing_work"], total["contracts_changed"]), ("1", "2"))
+            with open(t.path("changes", "c", "prove.json"), "w") as f:
+                json.dump(prove.as_json(prove.report(t.root, UNIT, predicted, head)), f)
+            with self.assertRaises(change_ledger.LedgerError) as e:
+                change_ledger.summarize(t.root, "c", unit=UNIT, base=base, head=head)
+            self.assertIn("prove.json", str(e.exception))
+
+
+TARGET = UNIT
+# the fuzz target's folder under changes/, as rows() and by_step() take a change's name
+TARGET_LEDGER = "targets/" + TARGET
+
+
+def known_target(root):
+    """Give root the fuzz target: projects/<project>/<harness>/harness.yaml is what --target is checked against."""
+    folder = os.path.join(root, "projects", *TARGET.split("/"))
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, "harness.yaml"), "w", encoding="utf-8") as f:
+        f.write("name: %s\n" % TARGET.split("/")[1])
+
+
+def target_folder(root):
+    return os.path.join(root, "changes", "targets", *TARGET.split("/"))
+
+
+def written(folder, names):
+    """The bytes of each of folder's files, to compare one ledger with another."""
+    out = {}
+    for name in names:
+        with open(os.path.join(folder, name), "rb") as f:
+            out[name] = f.read()
+    return out
+
+
+# what a sum writes that two ledgers of the same sessions must hold alike, byte for byte.  inputs.tsv is left out,
+# since it records the moment of the sum; gaps.tsv is left out because its check_seconds row names the command
+# that would record a check log, and `oft change-ledger check` takes a CHANGE
+SUMMED = ("ledger.tsv", "session-totals.tsv")
+
+
+class Targets(unittest.TestCase):
+    """A fuzz target's ledger, changes/targets/<project>/<harness>/ (`oft change-ledger tag|sum --target`): the same
+    records and the same columns as a change's, so that what a target cost is read from the sessions that settled
+    it.  A target this repository does not have is refused; so is a sum of a target with no tagged session, since an
+    empty ledger read as 0 hours would make a settled target look free.  A target's tag is idempotent, and says
+    which of the three things it did in its exit status and on one line."""
+
+    def tag(self, root, session, path, step="prove", target=TARGET, host="box", vms=(), since=None, until=None):
+        window = [w for k, v in (("--from", since), ("--until", until)) if v for w in (k, v)]
+        return run("--root", root, "change-ledger", "tag", "--target", target, "--step", step,
+                   "--session", session, "--host", host, "--transcript", path,
+                   *[w for vm in vms for w in ("--vm", vm)], *window)
+
+    def two_sessions(self, d):
+        """Two stand-in transcripts, which both a change and a fuzz target can be tagged with."""
+        one = write_transcript(os.path.join(d, "One.jsonl"), "s-one", [
+            user(0.5), assistant(1, usage(10, 100, 1000, 50, 0.25)), tool_result(1.5),
+            assistant(2, usage(5, 50, 2000, 0, 0.125))])
+        two = write_transcript(os.path.join(d, "Two.jsonl"), "s-two", [
+            assistant(11, usage(7, 70, 700, 70, 0.5))], start=10)
+        return one, two
+
+    def test_tagging_a_target_writes_its_sessions_file(self):
+        """The row goes to changes/targets/<project>/<harness>/sessions.tsv, with SESSION_COLUMNS as its header:
+        the same file a change's tag writes, in the target's own folder."""
+        with scratch() as d:
+            known_target(d)
+            one, _two = self.two_sessions(d)
+            rc, out = self.tag(d, "s-one", one)
+            self.assertEqual((rc, out), (0, "oft change-ledger: tagged now: session s-one as step prove of target "
+                                            "%s\n" % TARGET))
+            path = os.path.join(target_folder(d), "sessions.tsv")
+            with open(path, encoding="utf-8") as f:
+                self.assertEqual(f.readline().rstrip("\n").split("\t"), list(change_ledger.SESSION_COLUMNS))
+            rows_ = rows(d, TARGET_LEDGER, "sessions.tsv")
+            self.assertEqual([(r["step"], r["session"], r["host"], r["vms"], r["from"], r["until"]) for r in rows_],
+                             [("prove", "s-one", "box", "-", "-", "-")])
+            self.assertTrue(rows_[0]["transcript"].endswith("One.jsonl"), rows_[0]["transcript"])
+
+    def test_summing_a_target_reproduces_the_session_totals(self):
+        """The same sessions summed as a change and as a fuzz target give the same ledger.tsv and
+        session-totals.tsv, byte for byte: a target's sum is the change's sum over the target's own records.  Only
+        the check_seconds row of gaps.tsv differs, because `oft change-ledger check` takes a CHANGE and it would
+        be wrong to send a target's reader to it."""
+        with scratch() as d:
+            one, two = self.two_sessions(d)
+            as_change, as_target = os.path.join(d, "c-root"), os.path.join(d, "t-root")
+            os.makedirs(as_change)
+            known_target(as_target)
+            for step, session, path in (("prove", "s-one", one), ("review", "s-two", two)):
+                rc, out = run("--root", as_change, "change-ledger", "tag", "c", "--step", step, "--session",
+                              session, "--host", "box", "--transcript", path)
+                self.assertEqual(rc, 0, out)
+                rc, out = self.tag(as_target, session, path, step=step)
+                self.assertEqual(rc, 0, out)
+            rc, out = run("--root", as_change, "change-ledger", "sum", "c")
+            self.assertEqual(rc, 0, out)
+            rc, out = run("--root", as_target, "change-ledger", "sum", "--target", TARGET)
+            self.assertEqual(rc, 0, out)
+            self.assertEqual(out, "oft change-ledger: wrote ledger.tsv, session-totals.tsv, gaps.tsv, inputs.tsv, "
+                                  "journal.md in changes/targets/%s/ (2 sessions, 0 check logs, 6 gaps)\n" % TARGET)
+            self.assertEqual(written(target_folder(as_target), SUMMED),
+                             written(os.path.join(as_change, "changes", "c"), SUMMED))
+            said = {k: [g["what"] for g in rows(r, n, "gaps.tsv") if g["column"] == "check_seconds"]
+                    for k, r, n in (("target", as_target, TARGET_LEDGER), ("change", as_change, "c"))}
+            self.assertEqual(said["change"], ["no check log is recorded (oft change-ledger check)"] * 3)
+            self.assertEqual(said["target"], ["no check log is recorded (a fuzz target's ledger records only its "
+                                              "sessions: oft change-ledger check takes a CHANGE)"] * 3)
+            self.assertEqual([g for g in rows(as_target, TARGET_LEDGER, "gaps.tsv") if g["column"] != "check_seconds"],
+                             [g for g in rows(as_change, "c", "gaps.tsv") if g["column"] != "check_seconds"])
+            total = by_step(as_target, TARGET_LEDGER)["total"]
+            self.assertEqual((total["sessions"], total["input_tokens"], total["cost_usd"], total["check_seconds"]),
+                             ("2", "22", "0.8750", "not measured"))
+
+    def test_a_target_s_sum_names_the_sessions_in_its_window_no_tag_of_it_claims(self):
+        """A fuzz target's sum names the untagged sessions in its window as a change's does, in a target's words:
+        one tagged to another fuzz target names that target and step, and one tagged only on the change axis, which
+        is a separate axis, is tagged to no fuzz target.  The target's own session is not named."""
+        other = TARGET.split("/")[0] + "/other_fuzzer"
+        with scratch() as d:
+            known_target(d)
+            os.makedirs(os.path.join(d, "projects", *other.split("/")))
+            with open(os.path.join(d, "projects", *other.split("/"), "harness.yaml"), "w", encoding="utf-8") as f:
+                f.write("name: other_fuzzer\n")
+            t = os.path.join(d, "t")
+            os.makedirs(t)
+            mine = write_transcript(os.path.join(t, "Mine.jsonl"), "s-Mine", [
+                user(1), assistant(9, usage(1, 1, 0, 0, 0.01))])
+            files = {name: write_transcript(os.path.join(t, name + ".jsonl"), "s-" + name, [
+                user(start + 1), assistant(start + 2, usage(1, 1, 0, 0, 0.01))], start=start)
+                for name, start in (("Rival", 3), ("ChangeOnly", 4), ("Stray", 5))}
+            for session, path, target in (("s-Mine", mine, TARGET), ("s-Rival", files["Rival"], other)):
+                rc, out = self.tag(d, session, path, target=target)
+                self.assertEqual(rc, 0, out)
+            change_ledger.tag(d, "c", "implement", "s-ChangeOnly", "box", files["ChangeOnly"])
+            rc, out = run("--root", d, "change-ledger", "sum", "--target", TARGET)
+            self.assertEqual(rc, 0, out)
+            whats = {os.path.basename(g["what"].split(" ran from ")[0]): g["what"]
+                     for g in rows(d, TARGET_LEDGER, "gaps.tsv") if g["column"] == "sessions"}
+            self.assertEqual(sorted(whats), ["ChangeOnly.jsonl", "Rival.jsonl", "Stray.jsonl"])
+            for what in whats.values():
+                self.assertIn("inside this fuzz target's window, and no tag of it is in this fuzz target: ", what)
+            self.assertTrue(whats["Rival.jsonl"].endswith(f"tagged to {other} (step prove)"), whats["Rival.jsonl"])
+            for name in ("ChangeOnly.jsonl", "Stray.jsonl"):
+                self.assertTrue(whats[name].endswith("tagged to no fuzz target"), whats[name])
+
+    def test_an_unknown_target_is_refused_and_writes_nothing(self):
+        """A target with no projects/<project>/<harness>/harness.yaml is refused by `tag` and by `sum`, which write
+        no ledger for it; the control is the same command on the target this root has, which writes one."""
+        with scratch() as d:
+            known_target(d)
+            one, _two = self.two_sessions(d)
+            for name in ("zlib/no_such_harness", "no_such_project/checksum_fuzzer", "checksum_fuzzer"):
+                with self.subTest(target=name):
+                    rc, out = self.tag(d, "s-one", one, target=name)
+                    self.assertEqual(rc, 1, out)
+                    self.assertTrue(out.startswith("FAIL oft change-ledger: refused: "), out)
+                    self.assertIn(name, out)
+                    rc, out = run("--root", d, "change-ledger", "sum", "--target", name)
+                    self.assertEqual(rc, 1, out)
+                    self.assertTrue(out.startswith("FAIL oft change-ledger: refused: "), out)
+            self.assertFalse(os.path.exists(os.path.join(d, "changes")))
+            self.assertIn("projects/zlib/no_such_harness/harness.yaml",
+                          self.tag(d, "s-one", one, target="zlib/no_such_harness")[1])
+            self.assertEqual(self.tag(d, "s-one", one)[0], 0)
+            self.assertTrue(os.path.isfile(os.path.join(target_folder(d), "sessions.tsv")))
+
+    def test_a_tag_reads_the_transcript_it_is_given(self):
+        """`tag --target` is not a pure writer: the transcript must be on the disk of the machine that runs it, so
+        a path string alone is not enough.  A path with no file, a file that is not a transcript, and one whose own
+        session entry is another session are each refused and write nothing; the control is the same command with
+        the session's own transcript, which writes its row."""
+        with scratch() as d:
+            known_target(d)
+            one, two = self.two_sessions(d)
+            empty = os.path.join(d, "Empty.jsonl")
+            with open(empty, "w", encoding="utf-8") as f:
+                f.write("{}\n")
+            refused = {"no file at the path": os.path.join(d, "Absent.jsonl"),
+                       "a file that is no transcript": empty,
+                       "another session's transcript": two}
+            for what, path in refused.items():
+                with self.subTest(given=what):
+                    rc, out = self.tag(d, "s-one", path)
+                    self.assertEqual(rc, 1, out)
+                    self.assertTrue(out.startswith("FAIL oft change-ledger: refused: "), out)
+                    self.assertIn(path, out)
+            self.assertFalse(os.path.exists(os.path.join(d, "changes")))
+            self.assertEqual(self.tag(d, "s-one", one)[0], 0)
+            self.assertEqual([r["session"] for r in rows(d, TARGET_LEDGER, "sessions.tsv")], ["s-one"])
+
+    def test_a_change_ledger_reads_the_same_as_before(self):
+        """A change's records, its sum's files and the line it prints are what they were: the target ledgers are a
+        folder of their own and a second axis, so a root that also tags the same sessions for a fuzz target sums the
+        change byte for byte as a root that does not."""
+        with scratch() as d:
+            one, two = self.two_sessions(d)
+            alone, beside = os.path.join(d, "alone"), os.path.join(d, "beside")
+            os.makedirs(alone)
+            known_target(beside)
+            said = {}
+            for root in (alone, beside):
+                for step, session, path in (("prove", "s-one", one), ("review", "s-two", two)):
+                    rc, out = run("--root", root, "change-ledger", "tag", "c", "--step", step, "--session", session,
+                                  "--host", "box", "--transcript", path)
+                    self.assertEqual((rc, out), (0, "oft change-ledger: tagged session %s as step %s of c\n"
+                                                 % (session, step)))
+                    if root is beside:
+                        self.assertEqual(self.tag(root, session, path, step=step)[0], 0)
+                rc, said[root] = run("--root", root, "change-ledger", "sum", "c")
+                self.assertEqual(rc, 0, said[root])
+            self.assertEqual(said[beside], said[alone])
+            self.assertEqual(said[alone], "oft change-ledger: wrote ledger.tsv, session-totals.tsv, gaps.tsv, "
+                                          "inputs.tsv, journal.md in changes/c/ (2 sessions, 0 check logs, 6 gaps)\n")
+            self.assertEqual(written(os.path.join(beside, "changes", "c"), SUMMED),
+                             written(os.path.join(alone, "changes", "c"), SUMMED))
+
+    def test_a_target_with_no_session_is_refused_and_a_change_with_none_says_not_measured(self):
+        """A sum of a fuzz target with no tagged session writes nothing and says why; the control is the change
+        axis, which is unchanged: it writes the ledger with `not measured`, never 0, and gaps.tsv says no session is
+        tagged."""
+        with scratch() as d:
+            known_target(d)
+            rc, out = run("--root", d, "change-ledger", "sum", "--target", TARGET)
+            self.assertEqual(rc, 1, out)
+            self.assertIn("refused: no session is tagged for target %s" % TARGET, out)
+            self.assertFalse(os.path.exists(os.path.join(d, "changes")))
+            rc, out = run("--root", d, "change-ledger", "sum", "c")
+            self.assertEqual(rc, 0, out)
+            total = by_step(d, "c")["total"]
+            self.assertEqual([total[c] for c in ("agent_hours", "cost_usd", "input_tokens")], ["not measured"] * 3)
+            self.assertIn("no session is tagged", [g["what"] for g in rows(d, "c", "gaps.tsv")])
+
+    def test_tagging_a_target_again_with_the_same_session_changes_nothing(self):
+        """The settle step may run again, and from another machine: a session this target already counts is
+        `already tagged`, exit 3, whatever the host, the VM list or the path the transcript is read from, and the
+        file is not touched.  3, not 2, because argparse exits 2 on a usage error and prints nothing, which the
+        controls here show.  The other controls are a session that is new (exit 0, written) and a window apart
+        from the first, which is a second stretch of the session's work and is recorded."""
+        with scratch() as d:
+            known_target(d)
+            one, two = self.two_sessions(d)
+            self.assertEqual(self.tag(d, "s-one", one), (0, "oft change-ledger: tagged now: session s-one as step "
+                                                            "prove of target %s\n" % TARGET))
+            path = os.path.join(target_folder(d), "sessions.tsv")
+            with open(path, "rb") as f:
+                after_one = f.read()
+            said = ("oft change-ledger: already tagged: target %s counts session s-one in "
+                    "changes/targets/%s/sessions.tsv (step prove); nothing written\n" % (TARGET, TARGET))
+            again = [("the same command", {}),
+                     ("another step", {"step": "review"}),
+                     ("another host", {"host": "box-2"}),
+                     ("a VM the first run did not name", {"vms": ["ossv-x"]}),
+                     ("the transcript at another path", {"path": write_transcript(
+                         os.path.join(d, "Copy.jsonl"), "s-one", [assistant(1, usage(10, 100, 1000, 50, 0.25))])})]
+            for what, kw in again:
+                with self.subTest(run=what):
+                    self.assertEqual(self.tag(d, "s-one", kw.pop("path", one), **kw), (3, said))
+                    with open(path, "rb") as f:
+                        self.assertEqual(f.read(), after_one)
+            # the control that 3 is distinguishable: argparse's own usage error is 2 and prints nothing on stdout
+            with self.assertRaises(SystemExit) as bad, contextlib.redirect_stderr(io.StringIO()):
+                run("--root", d, "change-ledger", "tag", "--target", TARGET, "--step", "prove", "--session",
+                    "s-one", "--host", "box", "--transcript", one, "--no-such-option", "x")
+            self.assertEqual(bad.exception.code, 2)
+            self.assertEqual(self.tag(d, "s-two", two)[0], 0)
+            self.assertEqual([r["session"] for r in rows(d, TARGET_LEDGER, "sessions.tsv")], ["s-one", "s-two"])
+
+    def test_a_window_apart_from_the_first_tag_is_a_second_stretch_and_is_recorded(self):
+        """Idempotence keys on the session, so it must not swallow a second stretch of that session's work: two
+        tags whose windows share no moment are two rows, as they are for a change."""
+        with scratch() as d:
+            known_target(d)
+            one, _two = self.two_sessions(d)
+            self.assertEqual(self.tag(d, "s-one", one, step="early", until=at(1, 30))[0], 0)
+            rc, out = self.tag(d, "s-one", one, step="late", since=at(1, 30))
+            self.assertEqual(rc, 0, out)
+            self.assertEqual([(r["step"], r["from"], r["until"]) for r in rows(d, TARGET_LEDGER, "sessions.tsv")],
+                             [("early", "-", "2026-10-31T10:01:30Z"), ("late", "2026-10-31T10:01:30Z", "-")])
+            # the control: a third tag whose window overlaps the first is the same work again, not a new stretch
+            self.assertEqual(self.tag(d, "s-one", one, step="again", until=at(1, 30))[0], 3)
+            self.assertEqual(len(rows(d, TARGET_LEDGER, "sessions.tsv")), 2)
+
+    def test_a_session_counts_once_in_its_change_and_once_in_its_target(self):
+        """The two ledgers are separate axes over the same sessions: the session that settled a fuzz target as part
+        of a change is tagged in both, and each sum counts it once."""
+        with scratch() as d:
+            known_target(d)
+            one, _two = self.two_sessions(d)
+            rc, out = run("--root", d, "change-ledger", "tag", "c", "--step", "prove", "--session", "s-one",
+                          "--host", "box", "--transcript", one)
+            self.assertEqual(rc, 0, out)
+            self.assertEqual(self.tag(d, "s-one", one)[0], 0)
+            for rc, out in (run("--root", d, "change-ledger", "sum", "c"),
+                            run("--root", d, "change-ledger", "sum", "--target", TARGET)):
+                self.assertEqual(rc, 0, out)
+            self.assertEqual(by_step(d, "c")["total"]["input_tokens"], "15")
+            self.assertEqual(by_step(d, TARGET_LEDGER)["total"]["input_tokens"], "15")
+
+    def test_a_target_tag_writes_one_local_file_and_reaches_nothing_else(self):
+        """The settle step runs it with no credential: it opens no socket and runs no command.  The control is the
+        same two patches around something that does each, which must fail."""
+        no_socket = unittest.mock.patch("socket.socket", side_effect=AssertionError("it opened a socket"))
+        no_command = unittest.mock.patch("subprocess.Popen", side_effect=AssertionError("it ran a command"))
+        with scratch() as d:
+            known_target(d)
+            one, _two = self.two_sessions(d)
+            with no_socket, no_command:
+                with self.assertRaises(AssertionError):
+                    socket.socket()
+                with self.assertRaises(AssertionError):
+                    subprocess.run([sys.executable, "-c", ""], check=False)
+                self.assertEqual(self.tag(d, "s-one", one)[0], 0)
+            self.assertEqual([r["session"] for r in rows(d, TARGET_LEDGER, "sessions.tsv")], ["s-one"])
+
+    def test_targets_is_no_change_name(self):
+        """changes/targets/ is the fuzz targets' folder, so a change may not be named `targets` and take it."""
+        with scratch() as d:
+            one, _two = self.two_sessions(d)
+            rc, out = run("--root", d, "change-ledger", "tag", "targets", "--step", "prove", "--session", "s-one",
+                          "--host", "box", "--transcript", one)
+            self.assertEqual(rc, 1, out)
+            self.assertIn("is no change's name", out)
+            self.assertFalse(os.path.exists(os.path.join(d, "changes")))
+            self.assertEqual(run("--root", d, "change-ledger", "tag", "target-work", "--step", "prove", "--session",
+                                 "s-one", "--host", "box", "--transcript", one)[0], 0)
+
+    def test_one_ledger_is_named_and_only_one(self):
+        with scratch() as d:
+            one, _two = self.two_sessions(d)
+            for argv in ((), ("c", "--target", TARGET)):
+                with self.subTest(argv=argv):
+                    rc, out = run("--root", d, "change-ledger", "tag", *argv, "--step", "prove", "--session",
+                                  "s-one", "--host", "box", "--transcript", one)
+                    self.assertEqual(rc, 1, out)
+                    self.assertIn("name one ledger", out)
+
+    def test_the_target_ledgers_are_internal_hand_files(self):
+        """changes/targets/<project>/<harness>/ is one row of paths.TABLE, hand like a change's ledger, and it
+        matches that row alone.  It is under changes/, so it is internal, and test_release_tree proves no release
+        carries it."""
+        rel = "changes/targets/zlib/checksum_fuzzer/sessions.tsv"
+        self.assertEqual([c for c, _p, _b in paths.classify(rel)], ["hand"])
+        self.assertTrue(paths.is_internal(rel))
+
+    def test_a_tree_holding_a_target_ledger_passes_the_lint(self):
+        """`oft lint` reads every tracked file, so a new path family must be in paths.TABLE or every file of it is
+        a `paths` finding.  The ledger also records the host paths of the transcripts it was summed from, which
+        lint.CHANGE_LEDGERS exempts under changes/.  The controls: the same host path outside changes/ is still a
+        private-data finding, and a file one level deeper than the row matches no pattern.  The ledger's two name
+        segments are `*`, not placeholders, so a target that later leaves the tree does not turn its own record
+        into a finding: that is the last case here."""
+        # built, never written whole: `oft lint` reads this file too, and a host path outside changes/ is a
+        # private-data finding wherever it stands
+        transcript = "/" + "home/someone/omp/One.jsonl"
+        row = "prove\ts-one\tbox\t-\t%s\t-\t-\n" % transcript
+        ledger = "changes/targets/zlib/checksum_fuzzer/sessions.tsv"
+        with tree() as t:
+            t.write(ledger, "\t".join(change_ledger.SESSION_COLUMNS) + "\n" + row)
+            self.assertEqual(rules_of(t.lint()), [])
+            t.write("docs/control.md", "The transcript is at %s\n" % transcript)
+            self.assertIn("private-data", rules_of(t.lint()))
+        with tree() as t:
+            t.write("changes/targets/zlib/checksum_fuzzer/deeper/sessions.tsv", "step\n")
+            self.assertIn("paths", rules_of(t.lint()))
+        with tree() as t:
+            t.write(ledger, "\t".join(change_ledger.SESSION_COLUMNS) + "\n" + row)
+            shutil.rmtree(t.path("projects", "zlib", "checksum_fuzzer"))
+            self.assertNotIn("paths", rules_of(t.lint()))
+
+    def test_a_target_sum_takes_the_target_as_its_unit(self):
+        """With --base and no --unit, a fuzz target's sum reads the git figures of that target: the ledger is about
+        it, so naming it twice is not asked for.  The control is a change's sum, where --base with no --unit is
+        still refused."""
+        with tree() as t:
+            t.write(Git.WALK, "Definition A := 0x11000.\n")
+            contract_repo(t)
+            t.write(Git.WALK, "Definition A := 0x11008.\nDefinition B := 1.\n")
+            head = commit(t)
+            path = write_transcript(t.path("One.jsonl"), "s-one", [assistant(1, usage(10, 100, 1000, 50, 0.25))])
+            rc, out = run("--root", t.root, "change-ledger", "tag", "--target", TARGET, "--step", "prove",
+                          "--session", "s-one", "--host", "box", "--transcript", path)
+            self.assertEqual(rc, 0, out)
+            rc, out = run("--root", t.root, "change-ledger", "sum", "--target", TARGET, "--base", "HEAD~1",
+                          "--head", head)
+            self.assertEqual(rc, 0, out)
+            inputs = {r["input"]: r["value"] for r in rows(t.root, TARGET_LEDGER, "inputs.tsv")}
+            self.assertEqual(inputs["unit"], TARGET)
+            total = by_step(t.root, TARGET_LEDGER)["total"]
+            self.assertEqual((total["proof_lines_added"], total["proof_lines_removed"]), ("2", "1"))
+            rc, out = run("--root", t.root, "change-ledger", "sum", "c", "--base", "HEAD~1")
+            self.assertEqual(rc, 1, out)
+            self.assertIn("--unit and --base go together", out)
+
+
+if __name__ == "__main__":
+    unittest.main()

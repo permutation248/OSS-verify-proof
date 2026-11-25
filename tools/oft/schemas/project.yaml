@@ -1,0 +1,204 @@
+# projects/<project>/project.yaml: one per project, each OSS-Fuzz project at the pinned commit and each project OSS-Fuzz
+# does not have (no oss_fuzz).
+#
+# This file lists every key a project.yaml may carry.  Any other key, an
+# unknown enum value, a malformed digest or a repeated key is an error
+# (`oft lint`, rule schema).  The prose a project page shows is rendered from
+# these typed fields by tools/oft/templates and tools/oft/phrasebook.yaml;
+# the only free text here is `description`, `reason_args.text` and a patch
+# `summary`.
+tag: oss-fuzz-theorems/project/1
+root: {type: ref, name: project}
+defs:
+  project:
+    type: object
+    fields:
+      schema: {type: const, value: oss-fuzz-theorems/project/1}
+      project: {type: project-name}
+      description: {type: text, max: 300, optional: true}     # one sentence, from public project metadata
+      homepage: {type: url, optional: true}
+      language: {type: enum, values: [c, c++, go, jvm, python, rust, javascript, ruby, swift, lua]}
+      # The project's own memory budgets for its agreement statements, in the public project.yaml's shape: per
+      # sanitizer (`undefined`: the UBSan build; `address`: the ASan and ASan+UBSan builds), [plain, sanitizer].  An
+      # agreement statement of a sanitizer that has a pair names no `budgets` in harness.yaml; its term carries the
+      # pair as literals (tools/oft/shapes.py, which also checks the pair's length, floor and order)
+      budgets: {type: ref, name: budgets, optional: true}
+      # OSS-Fuzz's directory for the project, at release.yaml's commit; absent: OSS-Fuzz has no such project
+      oss_fuzz:
+        type: object
+        optional: true
+        fields:
+          path: {type: str, pattern: '^projects/[a-z0-9][a-z0-9_-]*$'}
+          commit: {type: commit}
+      # exactly one status per project; 5.1 of docs/status.md
+      status:
+        type: enum
+        values: [available, language-pending, not-yet-built, needs-model,
+                 no-compiler, no-harness, excluded, withdrawn, held]
+      # private: kept in this repository and held from every public release. `oft release-tree` writes a project
+      # OSS-Fuzz has (oss_fuzz) in its held form (status held, reason held: its page and its index row stay) and
+      # removes the rest of it (harnesses, statements, proofs, counterexamples, notes); it removes a project OSS-Fuzz
+      # does not have whole. release.yaml's counts and image libraries are those of the public release
+      release: {type: enum, values: [private], optional: true}
+      # enrolled: the project's maintainers take part (oss-verify's primary_contact); absent for a seeded project.  An
+      # open finding of an enrolled project holds back only the statements it names (facts.hold); any other
+      # unpublished finding holds the whole project
+      enrolled: {type: bool, optional: true}
+      reason: {type: reason-code, optional: true}        # required unless status is available
+      reason_args: {type: ref, name: reason_args, optional: true}
+      library: {type: ref, name: library, optional: true}
+      patches: {type: list, items: {type: ref, name: patch}, optional: true}
+      withheld: {type: ref, name: withheld, optional: true}
+      harnesses: {type: list, items: {type: ref, name: harness_entry}, optional: true}
+      # The fuzz targets of this project that no public repository may hold, while the rest of the project publishes:
+      # one harness name each, which may come before the harness's files exist.  A person adds the name of a fuzz
+      # target to hold it, and removes the name to lift the hold.  `oft generate` writes each name, as
+      # <project>/<harness>, to tools/publish/private-harnesses.txt in a tree that has tools/publish/.
+      # `oft release-tree` removes each named fuzz target, and this field, from a release.  `oft lint` refuses a name
+      # that this list cannot hold (lint.py check_private_harnesses): a person holds such a fuzz target with its whole
+      # project instead (release: private).  A name that public main, a published release asset's name, the tree of
+      # the pinned model or static-asan commit, or the message, author or committer of a commit in their history
+      # already holds stops every publication until it leaves this list: the gate's scan and the asset guards refuse
+      # each byte that names it
+      private_harnesses: {type: list, items: {type: harness-name}, optional: true}
+      assets:
+        type: object
+        optional: true
+        fields:
+          bin: {type: ref, name: bin_asset}
+          # the upstream source trees the binaries were built from, unmodified (required when any binary's licence is
+          # GPL or LGPL); with src_manifest, which says where each tree goes, in the same release, and what built the
+          # binaries: for a recipe-built project the recipe its binary archive names (assets.bin.recipe), for a
+          # port-built project port, the archive of the OSS Verify port at build.oss_verify.commit, in the same release
+          src: {type: ref, name: asset, optional: true}
+          src_manifest: {type: ref, name: manifest_asset, optional: true}
+          port: {type: ref, name: asset, optional: true}
+      build:
+        type: object
+        optional: true
+        fields:
+          # go: OSS-Fuzz's Go helpers (compile_go_fuzzer, compile_native_go_fuzzer), as the OSS Verify port changes them
+          system: {type: enum, values: [autotools, bazel, cargo, cmake, make, meson, scons, go, custom]}
+          # the clang that compiled the C code; every language but Go has one, and Go has none (rules.py)
+          clang: {type: str, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$', optional: true}
+          # the Go toolchain that built every binary of a Go project (`go env GOVERSION` less its "go"), and only of one
+          go: {type: str, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$', optional: true}
+          builder: {type: image}
+          # The OSS Verify port that built every binary of this project instead of a build recipe: its repository
+          # name, commit and project directory.  Its internal copy is permitted only for a project held back whole (a
+          # finding holds it back whole, or it says `release: private`), or for a project with a held fuzz target in
+          # private_harnesses (rules.py internal_port_projects).  For such a project with a held fuzz target, the cut
+          # writes the repository `none` in place of the internal copy.  `oft lint` refuses `none` in a tree that has
+          # tools/publish/ (lint.py check_port_none).
+          oss_verify:
+            type: object
+            optional: true
+            fields:
+              repository: {type: oss-verify-repository}
+              commit: {type: commit}
+              path: {type: str, pattern: '^projects/[a-z0-9][a-z0-9_-]*$'}
+
+  budgets:
+    type: object
+    fields:
+      agrees:
+        type: object
+        optional: true
+        fields:
+          address: {type: list, items: {type: ref, name: size}, min: 2, optional: true}
+          undefined: {type: list, items: {type: ref, name: size}, min: 2, optional: true}
+
+  # a memory size: bytes, or a whole number of KiB, MiB, GiB or TiB
+  size: {type: str, pattern: '^[1-9][0-9]{0,15}(KiB|MiB|GiB|TiB)?$'}
+
+  # typed values the phrasebook sentence for (status, reason) is filled from
+  reason_args:
+    type: object
+    fields:
+      language: {type: str, optional: true, max: 40}      # "Python", "Swift", "Fortran"
+      system: {type: str, optional: true, max: 40}        # a build system, "Bazel"
+      framework: {type: str, optional: true, max: 40}     # a harness framework, "FuzzTest"
+      dependency: {type: str, optional: true, max: 60}
+      features: {type: list, items: {type: feature}, optional: true}
+      same_as: {type: project-name, optional: true}
+      release: {type: release-version, optional: true}
+      commit: {type: commit, optional: true}
+      text: {type: text, max: 400, optional: true}        # reviewed wording, for the codes that need one
+
+  library:
+    type: object
+    fields:
+      name: {type: str, max: 80}
+      repository: {type: url}
+      commit: {type: commit, optional: true}               # a git commit, or else
+      archive_sha256: {type: sha256, optional: true}       # the release archive it was built from
+      version: {type: str, max: 40, optional: true}
+      licence: {type: spdx}                               # NOASSERTION until a person has confirmed it
+      patch_count: {type: int, min: 0, optional: true}    # every patch applied, listed or not; absent where some builds are not published
+
+  # a patch applied to the library whose text and summary are public
+  patch:
+    type: object
+    fields:
+      id: {type: str, pattern: '^[a-z0-9][a-z0-9-]*$'}
+      summary: {type: text, max: 400}
+      # the text's file name in the project's patches folder: patches/<project>/ in the old layout,
+      # projects/<project>/patches/ in the per-project one (tools/oft/layout.py)
+      file: {type: str, pattern: '^[A-Za-z0-9][A-Za-z0-9._+-]*\.patch$'}
+      upstream: {type: enum, values: [reported, fixed-upstream, not-a-defect]}
+      url: {type: url, optional: true}
+
+  # what this release holds back, by reason only (never what, never how many)
+  withheld:
+    type: object
+    fields:
+      source_bundle: {type: bool, optional: true}         # GPL or LGPL builds wait for their complete corresponding source
+      unpublished: {type: bool, optional: true}           # some builds or statements are not in this release yet
+
+  harness_entry:
+    type: object
+    fields:
+      name: {type: harness-name}
+      status: {type: enum, values: [included, not-included]}
+      origin: {type: enum, values: [oss-fuzz, upstream, this-repository, oss-verify], optional: true}
+      reason: {type: reason-code, optional: true}         # required when not-included
+      reason_args: {type: ref, name: reason_args, optional: true}
+
+  asset:
+    type: object
+    fields:
+      release: {type: asset-release-tag}
+      file: {type: str, pattern: '^[a-z0-9][a-z0-9_-]*-(bin|src|port)\.tar\.zst$'}
+      bytes: {type: int, min: 1}
+      sha256: {type: sha256}
+
+  # the binary archive, and the build recipe its binaries were built with: one that release.yaml lists under recipes,
+  # in any release (or, for a `release: private` project, a recipe of its own that no public release carries, under a
+  # file name that no listed recipe has, and that another private project's own recipe has only if it is the same
+  # recipe), which every build record of the project cites too. Required unless release.yaml has the shape before
+  # recipes, its one recipe; refused for a port-built project (build.oss_verify), which no recipe built (rules.py)
+  bin_asset:
+    type: object
+    fields:
+      release: {type: asset-release-tag}
+      file: {type: str, pattern: '^[a-z0-9][a-z0-9_-]*-(bin|src)\.tar\.zst$'}
+      bytes: {type: int, min: 1}
+      sha256: {type: sha256}
+      recipe:
+        type: object
+        optional: true
+        fields:
+          release: {type: release-tag}
+          file: {type: str, pattern: '^recipe(-[0-9]+)?\.tar\.zst$'}
+          bytes: {type: int, min: 1}
+          sha256: {type: sha256}
+
+  # the source asset's manifest: one row per tree (its upstream URL and commit, or its sha256) and where the build
+  # lays it down
+  manifest_asset:
+    type: object
+    fields:
+      release: {type: asset-release-tag}
+      file: {type: str, pattern: '^[a-z0-9][a-z0-9_-]*-src\.MANIFEST\.tsv$'}
+      bytes: {type: int, min: 1}
+      sha256: {type: sha256}

@@ -1,0 +1,1634 @@
+"""oft generate: render every generated file from the facts.
+
+`render_all(tree)` is a pure function from the facts, and from whether the
+tree has tools/publish/ (PRIVATE_HARNESSES), to {path: text}; the
+exporter calls it too, so the public tree and its preview are rendered by
+the same code.  `run(root, check=True)` compares instead of writing, and is
+what CI runs: a hand-edited generated file, a stale one, or a facts change
+without its rendering all fail it.
+"""
+import collections
+import os
+import posixpath
+import sys
+
+from . import claims, facts, layout, names, paths, render, rules, schema, shapes
+from .facts import PHRASEBOOK as PB
+
+REPO_URL = "https://github.com/theorem-labs/oss-verify-proofs"
+STOP_WORDS = {"abort": "abort()", "assert": "assert()", "trap": "a trap", "throw": "an uncaught exception",
+              "panic": "a panic", "raise": "an uncaught Python exception (status 79)",
+              "fail": "t.Fatal, t.Error or t.Fail (status 79)", "print-only": "prints only", "return-only": "returns only"}
+LIVE_WORDS = {True: "confirmed in the binary", False: "compiled out", "unknown": "not confirmed in the binary"}
+KIND_ORDER = {"halts": 0, "agreement": 1, "bound": 2, "decidability": 3, "classifier-total": 4, "classifier-sound": 5,
+              "classifier-maybe": 6, "classifier-bound": 7}
+PAIR_ORDER = ["asan", "ubsan", "asan-ubsan"]   # ASan first: the headline pair, as in docs/statements.md
+UPSTREAM_WORDS = {"reported": "reported upstream",
+                  "fixed-upstream": "fixed upstream", "not-a-defect": "not a defect"}
+READING_ORDER = {"budget": 0, "may-fail": 1, "alloc-forced-only": 1}
+FALSE_STATUSES = ("refuted", "counterexample", "witnessed-false")
+UNINSTRUMENTED_WORDS = {"libc": "the C library", "compiler-rt": "compiler-rt", "sanitizer-runtime": "the sanitizer runtime",
+                        "cxx-runtime": "the C++ runtime", "fortran-runtime": "the Fortran runtime",
+                        "rust-allocator-shim": "Rust's allocator shim",
+                        "image-library": "a library from the build image", "assembly": "assembly",
+                        "fortran": "Fortran", "driver": "this repository's driver"}
+# the words of the deviation record's values (harness.yaml deviation: docs/facts.md)
+TLS_WORDS = {"openssl": "OpenSSL", "gnutls": "GnuTLS", "mbedtls": "mbedTLS", "wolfssl": "wolfSSL"}
+SANITIZER_WORDS = {"none": "no sanitizer", "address": "AddressSanitizer", "undefined": "UndefinedBehaviorSanitizer",
+                   "address+undefined": "AddressSanitizer and UndefinedBehaviorSanitizer"}
+# the library's debug configuration: each deviation field and the library setting it records
+DEBUG_SETTINGS = (("enable_debug", "ENABLE_DEBUG"), ("unittests", "UNITTESTS"))
+
+
+# ------------------------------------------------------------------ helpers
+
+def _t(template, block, **v):
+    return render.fill(template, block, **v)
+
+
+def _stop(c):
+    return "exit(%d)" % c["exit_status"] if c["stops_with"] == "exit" else STOP_WORDS[c["stops_with"]]
+
+
+def _exits_words(st):
+    ex = st.get("exits", "any")
+    if ex == "any":
+        return "any status"
+    return "status " + render.join_words([str(e) for e in sorted(ex)], "or")
+
+
+def _library(h):
+    lib = h.data["library"]
+    name = (h.project.data.get("library") or {}).get("name", h.project.name)
+    ver = (" " + lib["version"]) if lib.get("version") else ""
+    label = facts.repo_label(lib["repository"])
+    at = ("at %s" % lib["commit"][:8]) if "commit" in lib else ("release archive %s" % lib["archive_sha256"][:8])
+    if label == name:
+        return "%s%s (%s)" % (name, ver, at), name
+    return "%s%s (%s %s)" % (name, ver, label, at), name
+
+
+def _order(h):
+    def build_rank(s):
+        b = s.data["builds"][-1]
+        return schema.BUILDS.index(b) if s.kind == "halts" else PAIR_ORDER.index(b)
+    # a twin after every statement of its kind and reading that is not one (names.TWIN_SUFFIX)
+    return sorted((s for s in h.statements.values()),
+                  key=lambda s: (KIND_ORDER[s.kind], READING_ORDER.get(s.data.get("reading"), 1), "twin" in s.data,
+                                 build_rank(s), s.data.get("classifier") or ""))
+
+
+def _who(h):
+    return "driver" if h.data["origin"] == "this-repository" else "harness"
+
+
+def _origin(h):
+    """The harness's origin as its pages word it: an upstream target of a project OSS-Fuzz does not have is the
+    project's own, which OSS-Fuzz does not run."""
+    o = h.data["origin"]
+    return o + "_no_oss_fuzz" if o == "upstream" and "oss_fuzz" not in h.project.data else o
+
+
+# the blocks with a variant for a language. A Rust build's UB checks are rustc's (-Zub-checks), whose failure is a
+# panic, which the OSS Verify port's hook ends with status 79, and UBSan's in the C code its crates build (which trap);
+# and a may-fail halts statement that allows any status says that a panic does not falsify it. A Python build's
+# sanitizers instrument its C code: the interpreter, which runs the Python code as bytecode
+LANG_BLOCKS = {
+    "rust": {"build_ubsan", "note_ubsan", "note_asan-ubsan", "agree_ubsan", "agree_asan-ubsan",
+             "fires_ubsan", "fires_asan-ubsan", "stronger"},
+    "python": {"agree_asan", "agree_asan-ubsan"},
+    # a Go driver calls a Go fuzz function, not LLVMFuzzerTestOneInput
+    "go": {"driver_harness"},
+}
+# the languages whose fuzz targets' Statements.v header says how the port's runtime ends a failure (driver_<language>)
+DRIVER_NOTES = ("rust", "python", "go")
+# the template block of the project page's compiled sentence, per language (default: compiled, clang alone)
+COMPILED = {"rust": "compiled_rust", "python": "compiled_python", "go": "compiled_go"}
+# the languages whose failed assertion ends the process with status 79 rather than abort(): a Rust or Go panic, an
+# uncaught Python exception in a call of the harness, t.Fatal, t.Error or t.Fail in a Go fuzz test (shapes.STOP_STATUS).
+# A halts statement that allows any status allows 79, so its text does not say that it rules out a failed assertion,
+# and says what it does not rule out from a block per language (never_any_<language>, family_halts_any_<language>).
+# There is no Go block: rules._go_harness refuses every Go statement but plain_halts read budget with exits exactly
+# [0, 2], so no Go statement allows any status and a Go block would be unreachable.  If that rule is relaxed, render
+# fails on the missing block instead of printing text no test has read.
+EXIT_ON_FAILURE = ("rust", "python", "go")
+
+
+def _allows_failure_exit(h, d):
+    """Does halts statement `d` (its fields) of `h` allow the status a failed assertion of its language ends with?"""
+    return h.project.data["language"] in EXIT_ON_FAILURE and d.get("exits", "any") == "any"
+
+
+def _lang(h, block):
+    """The template block for this harness's language."""
+    lang = h.project.data["language"]
+    return block + "_" + lang if block in LANG_BLOCKS.get(lang, ()) else block
+
+
+def _port_repository_words(port):
+    """The port repository as a project page may publish it: the port's
+    name, or a generic phrase for the held port's internal copy.  `none`
+    (schema.NO_PORT_REPOSITORY), which the cut writes for such a port when
+    the project holds a fuzz target (private_harnesses), gets the same
+    phrase, so the internal page and the release's page say the same."""
+    if port["repository"] in (schema.INTERNAL_PORT_REPOSITORY, schema.NO_PORT_REPOSITORY):
+        return "the internal copy of the OSS Verify port"
+    return "`%s`" % port["repository"]
+
+
+def _project_subject(proj):
+    """The public name for a project's statement subjects: "OSS-Fuzz harnesses" or "fuzz targets"."""
+    return ("OSS-Fuzz harnesses"
+            if "oss_fuzz" in proj.data and not proj.targets(("oss-verify",)) else "fuzz targets")
+
+
+def _binding_letters(h, st):
+    return [chr(ord("a") + i) for i, c in enumerate(h.data["checks"]) if shapes.binds(c, st.data, h.data)]
+
+
+def _scope_notes(T, h, lib_name):
+    """The paragraphs, from template T (Statements.v.tmpl or harness-README.md.tmpl), that every rendered statement's
+    text and the harness README carry for the scenarios the binaries do not run (excluded_scenarios) and for a debug
+    build (deviation.enable_debug, deviation.unittests, debug_additions).  Comment text only: none of it is in a
+    Definition or a fingerprint.  Empty when the harness has none of them."""
+    notes = []
+    if h.data.get("excluded_scenarios"):
+        notes.append(_t(T, "excluded", items="\n".join(_t(T, "excluded_item", name=e["name"], reason=e["reason"])
+                                                       for e in h.data["excluded_scenarios"])))
+    dev = h.data.get("deviation") or {}
+    settings = [name for field, name in DEBUG_SETTINGS if dev.get(field)]
+    if settings:
+        notes.append(_t(T, "debug", library_name=lib_name,
+                        config=render.join_words(_t(T, "debug_setting", name=n) for n in settings)))
+        if h.data.get("debug_additions"):
+            notes.append(_t(T, "debug_additions", who=_who(h), library_name=lib_name,
+                            items="\n".join(_t(T, "debug_item", function=a["function"], source=a["source"])
+                                            for a in h.data["debug_additions"])))
+    return notes
+
+
+# --------------------------------------------------------------- Statements.v
+
+def statements_v(h):
+    T = "Statements.v.tmpl"
+    lib, lib_name = _library(h)
+    builds = [b for b, _ in h.builds()]
+    header = _t(T, "header",
+                subject=_t(T, "subject_" + _origin(h), count=claims.COUNT_WORDS[len(builds)],
+                           s="" if len(builds) == 1 else "s",
+                           harness=h.name, project=h.project.name, library=lib),
+                build_table="\n".join(_t(T, _lang(h, "build_" + b)) for b in builds),
+                driver=(_t(T, "driver_api", library_name=lib_name, source=_source_words(h), namespace=h.tree.namespace)
+                        if h.data["origin"] == "this-repository"
+                        else _t(T, _lang(h, "driver_harness"), entry=h.data["entry"], namespace=h.tree.namespace)
+                        + (_t(T, "driver_" + h.project.data["language"],
+                              **({"go": h.project.data["build"]["go"]} if h.project.data["language"] == "go" else {}))
+                           if h.project.data["language"] in DRIVER_NOTES else "")),
+                checks=_checks_paragraph(h))
+    firsts = {}
+    rendered = [s for s in _order(h) if s.rendered()]
+    notes = "".join("\n\n" + n for n in _scope_notes(T, h, lib_name))
+
+    def doc(name):
+        st = h.statements[name]
+        # a statement is written "As [first], for the X build" only after one of the same family; a project's own
+        # budget pair is part of the family, so a statement with the project's own pair is stated "As" only one
+        # with the same pair, and none on a harness enum is stated "As" one with an own pair
+        family = (st.kind, st.data.get("reading"), st.data.get("abort"), st.data.get("machine"),
+                  shapes.exits_key(st.data.get("exits", "any")), shapes.own_budgets(st.data, h.project.data),
+                  st.data.get("classifier"), st.data.get("originals"))
+        text = _statement_doc(h, st, firsts.get(family), rendered, lib_name) + notes
+        firsts.setdefault(family, st.name)
+        return text
+    example = rendered[0].name if rendered else "<statement>"
+    bounds = [s for s in rendered if s.takes_bound()]
+    proving = _t(T, "proving", project=h.project.name, harness=h.name, example=example,
+                 bound_example=_t(T, "bound_example", name=bounds[0].name) if bounds else "")
+    return claims.statements_v(h.tree.namespace, h.project.name, h.name, h.data, h.project.data,
+                               [s.name for s in _order(h)], header, doc,
+                               lambda name: PB["statements"][h.statements[name].status]["words"], proving)
+
+
+def _source_words(h):
+    src = h.data["source"]
+    if src.get("pending") or not src["files"]:
+        return "its source is not in this release yet"
+    return ", ".join(src["files"])
+
+
+def _checks_paragraph(h):
+    T = "Statements.v.tmpl"
+    checks = h.data["checks"]
+    if not checks:
+        # the file sets sentences two spaces apart
+        return _t(T, "checks_none", summary=h.data["summary"], who=_who(h), claim=_no_check_claim(h, "  "))
+    items = [_t(T, "check_item", letter=chr(ord("a") + i), what=c["what"], stops=_stop(c),
+                live=LIVE_WORDS[c["live"]]) for i, c in enumerate(checks)]
+    live = _t(T, "live_all") if all(c["live"] is True for c in checks) else _t(T, "live_some")
+    return _t(T, "checks_some", summary=h.data["summary"], who=_who(h), items="\n".join(items), live_note=live)
+
+
+# the general sentence for halts statements, which the Python entry of NO_CHECK_HALTS_ANY opens with too
+NO_CHECK_HALTS = "Its halts statements say only that the code it calls never crashes, hangs or trips a sanitizer."
+# what the statements of each kind about a harness with no check of its own say, in the order they are given (_order):
+# only a halts statement rules out a run that never ends, and a bound or decidability statement says nothing about one
+# run.  The four classifier kinds share one sentence, under "classifier"
+NO_CHECK_CLAIMS = (
+    ("halts", NO_CHECK_HALTS),
+    ("agreement", "Its agreement statements say only that the code never crashes or trips a sanitizer, and allow a "
+                  "run that never ends."),
+    ("bound", "Its bound statements say only how often its builds may disagree."),
+    ("decidability", "Its decidability statements say only that some program decides where its builds agree."),
+    ("classifier", "Its classifier statements say only how the classifier programs of its pairs answer."),
+)
+# the halts sentences instead, per language, when a live halts statement of the harness allows status 79, which a
+# failed assertion of its language exits with (_allows_failure_exit).  No Go statement allows it (rules._go_harness), so
+# there is no Go entry, and a Go harness that reached here would raise KeyError rather than print the general sentence
+NO_CHECK_HALTS_ANY = {
+    "rust": ("Its halts statements say only that the code it calls never crashes or hangs, and that no ASan report or "
+             "failed UBSan check in C code fires.",
+             "One that allows any status says nothing about a panic, a failed assertion included, or a failed rustc UB "
+             "check, which exit with status 79."),
+    "python": (NO_CHECK_HALTS,
+               "One that allows any status says nothing about an uncaught Python exception in a call of the harness "
+               "other than MemoryError (status 2) and SystemExit (status 77), a failed check included, which exits "
+               "with status 79."),
+}
+
+
+def _no_check_claim(h, sep=" "):
+    """What the statements about a harness with no check of its own say: a sentence for each kind among its statements
+    that are not withdrawn (one for its classifier statements of every kind, two for its halts statements when one of
+    them allows status 79), SEP apart."""
+    live = [s for s in h.statements.values() if s.status != "withdrawn"]
+    kinds = {"classifier" if s.kind in shapes.CLASSIFIER_KINDS else s.kind for s in live}
+    out = []
+    for kind, text in NO_CHECK_CLAIMS:
+        if kind not in kinds:
+            continue
+        if kind == "halts" and any(s.kind == "halts" and _allows_failure_exit(h, s.data) for s in live):
+            text = sep.join(NO_CHECK_HALTS_ANY[h.project.data["language"]])
+        out.append(text)
+    return sep.join(out) or "No statement here says anything about the code it calls."
+
+
+def ordinal(n):
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return "%d%s" % (n, suffix)
+
+
+def witness_words(w):
+    """The sentence a page shows for a witness: fixed by its typed fields."""
+    if "input_hex" in w:
+        hx = w["input_hex"]
+        inp = ("the input file `%s`" % " ".join(hx[i:i + 2] for i in range(0, len(hx), 2))) if hx else "an empty input file"
+    else:
+        inp = "an input file of %s bytes (SHA-256 `%s`)" % (render.thousands(w["input"]["bytes"]), w["input"]["sha256"])
+    if "refused" in w:
+        r = w["refused"]
+        what = {"mmap": "an mmap of %s bytes", "brk": "a brk growth of %s bytes", "mremap": "an mremap to %s bytes"}[
+            r["call"]] % render.thousands(r["bytes"])
+        # the position counts only the requests that back an allocation (docs/facts.md, "A witness's position k")
+        head = ("with %s, refusing the %s memory request that backs an allocation (%s; counted are each brk that asks "
+                "for new pages, each anonymous mmap without MAP_FIXED and each mremap) makes the %s build end in" % (
+                    inp, ordinal(r["position"]), what, names.BUILD_WORDS[w["build"]]))
+    else:
+        head = "with %s and nothing refused, the %s build ends in" % (inp, names.BUILD_WORDS[w["build"]])
+    out = PB["witness"]["outcome"][w["outcome"]]
+    if w["outcome"] == "exit":
+        out = out.format(exit=w["exit"])
+    after = (" " + PB["witness"]["after"][w["after"]]) if w.get("after") else ""
+    return "%s %s%s (run under %s)" % (head, out, after, w["runner"])
+
+
+def gap_of(st):
+    """The model-gap features of a statement: its harness's, or its own."""
+    return st.harness.data.get("model_gap") or st.data.get("gap") or []
+
+
+def _classifier_variant(st):
+    """The variant of classifier statement `st` that picks its doc comment in Statements.v.tmpl (doc_<variant>) and
+    its line in harness-README.md.tmpl (line_<variant>): its kind with an underscore for the hyphen, and for
+    classifier-sound its classifier and its originals, for classifier-maybe bound or empty, as it takes a bound or not
+    (shapes.takes_bound)."""
+    variant = st.kind.replace("-", "_")
+    if st.kind == "classifier-sound":
+        variant += "_%s_%s" % (st.data["classifier"], st.data["originals"])
+    elif st.kind == "classifier-maybe":
+        variant += "_bound" if st.takes_bound() else "_empty"
+    return variant
+
+
+def _statement_doc(h, st, first, rendered, lib_name):
+    T = "Statements.v.tmpl"
+    d = st.data
+    san = d["builds"][-1]
+    words = names.BUILD_WORDS[san]
+    if st.kind == "halts":
+        letters = _binding_letters(h, st)
+        binds = ""
+        if letters:
+            binds = _t(T, "binds_one" if len(letters) == 1 else "binds_many",
+                       letters=render.join_words("(%s)" % x for x in letters))
+        if first and letters == _binding_letters(h, h.statements[first]):
+            binds = ""          # the same as the statement this one is stated like
+        ex = d.get("exits", "any")
+        block = _lang(h, "note_" + san)
+        if block in ("note_ubsan_rust", "note_asan-ubsan_rust") and ex == "any":
+            block += "_any"     # a failed rustc UB check exits with status 79, which such a statement allows
+        note = _t(T, block)
+        rejected = ""
+        if ex != "any" and shapes.REJECTED in ex:
+            rejected = _t(T, "rejected", where=render.join_words([r["where"] for r in h.data["rejects"]], "and"))
+        if d["reading"] == "budget":
+            if first:
+                return "As [%s], for the %s build.%s%s" % (first, words, binds, note)
+            never = (_t(T, "never_any_" + h.project.data["language"]) if _allows_failure_exit(h, d)
+                     else _t(T, "never"))
+            return _t(T, "doc_halts_budget", build=words, budget=shapes.HALTS_BUDGET[1], exits=_exits_words(d),
+                      never=never, rejected=rejected, binds=binds, note=note, library_name=lib_name)
+        twin = names.statement_name("halts", d["builds"], "budget")
+        stronger = ""
+        if any(s.name == twin for s in rendered):
+            # only a statement that allows any status allows more than its budget twin
+            stronger = _t(T, _lang(h, "stronger") if ex == "any" else "stronger_finite", budget_name=twin)
+        if first:
+            return "As [%s], for the %s build.%s%s%s" % (first, words, stronger, binds, note)
+        has_asan = any(s.kind == "halts" and s.data["reading"] == "may-fail" and "asan" in s.data["builds"][0]
+                       for s in rendered)
+        return _t(T, "doc_halts_may_fail", build=words, exits=_exits_words(d), rejected=rejected, stronger=stronger,
+                  binds=binds, note=note, no_asan="" if has_asan else _t(T, "no_asan", who=_who(h)))
+    if st.kind == "agreement":
+        budget, san_budget, own = shapes.budget_words(d, h.project.data)
+        variant = ""
+        if d.get("abort") == "signal":
+            variant += _t(T, "variant_abort")
+        if d.get("machine") == "rv64gc":
+            variant += _t(T, "variant_rv64gc")
+        lang = h.project.data["language"]
+        # why the pair is read alloc-forced-only: in a Rust target its ASan pairs (the allocation-failure hook's
+        # line), in a Python target every pair (CPython aborts when some allocations made at start are refused)
+        if (not first and d["reading"] == "alloc-forced-only"
+                and (lang == "python" or (lang == "rust" and "asan" in san))):
+            variant += _t(T, "variant_alloc_" + lang)
+        if own:
+            plain_default, san_default = shapes.default_budget_words(san)
+            variant += _t(T, "variant_own_budgets", plain=budget, plain_default=plain_default, san=san_budget,
+                          san_build=words, san_default=san_default)
+        san_note = _t(T, _lang(h, "agree_" + san), library_name=lib_name)
+        if first:
+            return "As [%s], for the %s build, with %s for the plain build.  %s%s" % (
+                first, words, budget, san_note, variant)
+        return _t(T, "doc_agreement", plain_budget=budget, environment=_t(T, "env_" + d["reading"]),
+                  san_note=san_note, variant=variant,
+                  not_claimed=_t(T, "not_claimed_asan") if "asan" in san else "")
+    if first:
+        return "As [%s], for the %s build." % (first, words)
+    if st.kind == "bound":
+        return _t(T, "doc_bound", san=words, agrees=names.statement_name("agreement", d["builds"], d["reading"]),
+                  name=st.name)
+    if st.kind in shapes.CLASSIFIER_KINDS:
+        role = d["classifier"]
+        c = dict(san=words, role=role.upper(), classifier=names.classifier_file(h.name, role, san))
+        if st.kind == "classifier-sound":
+            c.update(environment=_t(T, "env_" + d["reading"]), san_ident=names.BUILD_IDENT[san])
+        return _t(T, "doc_" + _classifier_variant(st), **c)
+    return _t(T, "doc_decidability", san=words)
+
+
+# ------------------------------------------------------------ Characterise.v
+
+def characterise_v(h):
+    T = "Characterise.v.tmpl"
+    rendered = [s for s in _order(h) if s.rendered() and s.kind in ("bound", "decidability")]
+    if not rendered:
+        return None
+    pairs, defs = [], []
+    for s in rendered:
+        key = (s.data["reading"], s.data["builds"][-1], s.data.get("machine", "rv64g"))
+        if key not in pairs:
+            pairs.append(key)
+    with_bound = {s.data["builds"][-1] for s in rendered if s.kind == "bound"}
+    for reading, san, machine in pairs:
+        for name, params, body in shapes.templates(reading, san, san in with_bound, machine):
+            doc = (_t(T, "doc_classifies", san=names.BUILD_WORDS[san]) if name.endswith("_classifies")
+                   else _t(T, "doc_rejects"))
+            defs.append(_t(T, "definition", doc=claims.comment(doc), name=name, params=params, body=body))
+    any_bound = bool(with_bound)
+    header = _t(T, "header", and_bound=_t(T, "and_bound") if any_bound else "",
+                and_rejects=_t(T, "and_rejects") if any_bound else "",
+                and_claim=_t(T, "and_claim") if any_bound else "")
+    return _t(T, "file", project=h.project.name, harness=h.name, header=claims.comment(header, False),
+              namespace=h.tree.namespace, rocq=h.data["rocq"],
+              distribution_require=" Distribution" if any_bound else "",
+              definitions="\n" + "\n\n".join(defs)) + "\n"
+
+
+# --------------------------------------------- Images.v, Symbols.v, dune files
+
+def _symbols_namespace(T, rows, idents, what):
+    """The values of one namespace of a Symbols.v module (template blocks module and sections): the comment on the
+    names its rows share, which it leaves out, and the definitions of the addresses and of the sizes of the others."""
+    shared = ["[%s]" % n for n in dict.fromkeys(s.name for s in rows) if n not in idents]
+    left_out = ""
+    if shared:
+        block = "left_out_one" if len(shared) == 1 else "left_out_many"
+        left_out = _t(T, "left_out", text=claims.comment(_t(T, block, what=what, names=render.join_words(shared))))
+        left_out += "\n"
+    named = [s for s in rows if s.name in idents]
+    return dict(left_out=left_out,
+                addresses="\n".join(_t(T, "address", ident=idents[s.name], address="0x%x" % s.address) for s in named),
+                sizes="\n".join(_t(T, "size", ident=idents[s.name], size=s.size) for s in named))
+
+
+def symbols_v(h):
+    """Symbols.v: a module for each build with a symbol fact (names.BUILD_MODULE) that defines the address of each
+    function and data object of the fact under its name, and its size under the same name in the module's Size, and
+    in its module Sec the same of each allocated section (names.symbol_idents), and says which names it leaves out;
+    None for a harness with no symbol fact."""
+    by_build = h.symbols()
+    if not by_build:
+        return None
+    T = "Symbols.v.tmpl"
+    modules = []
+    for b, (_sha256, rows) in by_build.items():
+        idents, section_idents = names.symbol_idents(rows)
+        symbols_, sections = [s for s in rows if s.kind != "section"], [s for s in rows if s.kind == "section"]
+        sec = (_t(T, "sections", **_symbols_namespace(T, sections, section_idents, "sections")) + "\n"
+               if sections else "")
+        modules.append(_t(T, "module", module=names.BUILD_MODULE[b], sections=sec,
+                          **_symbols_namespace(T, symbols_, idents, "functions or objects")))
+    return _t(T, "file", project=h.project.name, harness=h.name, count=claims.COUNT_WORDS[len(by_build)].lower(),
+              s="s" if len(by_build) > 1 else "", header=claims.comment(_t(T, "header"), False),
+              modules="\n\n".join(modules)) + "\n"
+
+
+def theory_deps(namespace, proof=False):
+    """The theories a harness's dune file depends on, and a proof's, which may also use Ltac2: Rocq installs Ltac2 as
+    its own theory, and dune finds a theory only when it is listed."""
+    deps = "Stdlib stdpp ReadFile Flocq LinuxProcessSemantics " + names.rocq_core(namespace)
+    return deps + " Ltac2" if proof else deps
+
+
+def harness_dune(h):
+    tree = h.project.tree
+    return _t("harness-dune.tmpl", "file", rocq=h.data["rocq"],
+              package=names.opam_package(tree.opam_stem, h.project.name), theories=theory_deps(tree.namespace)) + "\n"
+
+
+def proof_dune(tree, sid):
+    p, hn, s = sid.split("/")
+    ns = tree.namespace
+    lib = (" " + names.rocq_proof(ns, p, hn, "lib")) if "%s/%s" % (p, hn) in tree.proof_libs else ""
+    return _t("proof-dune.tmpl", "file", rocq=names.rocq_proof(ns, p, hn, s),
+              package=names.opam_package(tree.opam_stem, p) + "-proofs",
+              theories=theory_deps(ns, proof=True) + " " + names.rocq_harness(ns, p, hn) + lib) + "\n"
+
+
+def proof_lib_dune(namespace, opam_stem, p, hn):
+    """The dune file of fuzz target p/hn's proof library, under the release's names (Tree.namespace, Tree.opam_stem):
+    check.py and check-units.sh render it too, from a tree they do not load whole."""
+    return _t("proof-dune.tmpl", "lib", rocq=names.rocq_proof(namespace, p, hn, "lib"),
+              package=names.opam_package(opam_stem, p) + "-proofs",
+              theories=theory_deps(namespace, proof=True) + " " + names.rocq_harness(namespace, p, hn)) + "\n"
+
+
+def barrier_dune():
+    """The dune file of each per-project proofs and counterexamples folder: it shuts the folder out of the statement
+    theory of the folder above, whose (include_subdirs qualified) would take it."""
+    return _t("proof-dune.tmpl", "barrier") + "\n"
+
+
+def dune_project(tree):
+    T = "dune-project.tmpl"
+    pk = []
+    for proj in sorted(tree.available(), key=lambda p: p.name):
+        if "assets" not in proj.data:
+            continue                    # every binary withheld: nothing to build, so no package
+        pk.append(_t(T, "package", name=names.opam_package(tree.opam_stem, proj.name), opam_stem=tree.opam_stem,
+                     synopsis="Theorem statements about %s's %s" % (proj.name, _project_subject(proj))))
+    # Every project with a statements package has a proofs package too, whether or not it has proofs yet: so a
+    # project's first proof pull request leaves dune-project alone, and two programs' first proofs do not conflict
+    # in it.  A package with no stanza attached needs (allow_empty) since dune 3.0.
+    with_proofs = sorted({p.name for p in tree.available() if "assets" in p.data}
+                         | {sid.split("/")[0] for sid in tree.proofs}
+                         | {u.split("/")[0] for u in tree.proof_libs})
+    for p in with_proofs:
+        pk.append(_t(T, "proofs_package", name=names.opam_package(tree.opam_stem, p) + "-proofs",
+                     opam_stem=tree.opam_stem,
+                     synopsis="Proofs of statements about %s's %s" % (p, _project_subject(tree.projects[p]))))
+    r = tree.release
+    rv = r["rocq"]["version"].split(".")
+    return _t(T, "file", packages=("\n" + "\n\n".join(pk)) if pk else "", rocq_min="%s.%s" % (rv[0], rv[1]),
+              rocq_next="%s.%d" % (rv[0], int(rv[1]) + 1), lps_name=r["semantics"]["name"],
+              opam_stem=tree.opam_stem) + "\n"
+
+
+def project_opam(tree, proj):
+    r = tree.release
+    rv = r["rocq"]["version"].split(".")
+    a = proj.data["assets"]["bin"]
+    return _t("project.opam.tmpl", "file", package=names.opam_package(tree.opam_stem, proj.name),
+              opam_stem=tree.opam_stem, release=r["release"],
+              project=proj.name, subject=_project_subject(proj), rocq_min="%s.%s" % (rv[0], rv[1]),
+              rocq_next="%s.%d" % (rv[0], int(rv[1]) + 1), lps_name=r["semantics"]["name"],
+              bin_file=a["file"], bin_release=a["release"], bin_sha256=a["sha256"]) + "\n"
+
+
+# --------------------------------------------------------------- READMEs
+
+def _check_place(c):
+    """'lines 66-74' or 'line 71': where a check is, as its README row names it."""
+    rng = c["where"].rpartition(":")[2]
+    return ("lines %s" if "-" in rng else "line %s") % rng
+
+
+def _statement_line(h, st):
+    T = "harness-README.md.tmpl"
+    d = st.data
+    san = names.BUILD_WORDS[d["builds"][-1]]
+    if st.kind == "halts":
+        if d["reading"] == "budget":
+            letters = _binding_letters(h, st)
+            if not letters:
+                binds = ""
+            elif len(letters) == len(h.data["checks"]):
+                binds = "; so the check above holds" if len(letters) == 1 else "; so the checks above hold"
+            else:
+                bound = [_check_place(c) for i, c in enumerate(h.data["checks"]) if chr(ord("a") + i) in letters]
+                binds = "; so the %s at %s above %s" % ("check" if len(bound) == 1 else "checks",
+                                                        render.join_words(bound), "holds" if len(bound) == 1 else "hold")
+            return _t(T, "line_halts_budget", budget=shapes.HALTS_BUDGET[1], build=san, exits=_exits_words(d),
+                      binds=binds)
+        return _t(T, "line_halts_may_fail", build=san, exits=_exits_words(d))
+    if st.kind == "agreement":
+        v = []
+        if d.get("abort") == "signal":
+            v.append("abort read as SIGABRT")
+        if d.get("machine") == "rv64gc":
+            v.append("RV64GC")
+        if d["reading"] == "alloc-forced-only":
+            v.append("memory refused only when forced")
+        block = _lang(h, "fires_" + d["builds"][-1])
+        fires = _t(T, block if block.endswith("_rust") else "fires", san=san)
+        budget, san_budget, own = shapes.budget_words(d, h.project.data)
+        return _t(T, "line_agreement", fires=fires, budget=budget, variant="".join("; " + x for x in v),
+                  own=_t(T, "own_budgets", plain=budget, san=san_budget) if own else "")
+    if st.kind in shapes.CLASSIFIER_KINDS:
+        return _t(T, "line_" + _classifier_variant(st), san=san, role=d["classifier"].upper())
+    return _t(T, "line_" + st.kind, san=san)
+
+
+def status_cell(tree, st, from_dir):
+    """The status of a statement in words; a proof or counterexample is linked by its way from from_dir, the folder of
+    the page (a harness page is in its statement folder, a project page in its project folder)."""
+    w = PB["statements"][st.status]["words"]
+    if st.status in ("proved", "refuted"):
+        at = ((" at b = %s" % st.proof.data["bound"])
+              if st.takes_bound() and "bound" in st.proof.data
+              else "")
+        return "[%s](%s/)%s" % (w, posixpath.relpath(st.proof.path, from_dir), at)
+    if st.status == "counterexample":
+        return "[%s](%s/)" % (w, posixpath.relpath(st.counterexample.path, from_dir))
+    if st.status == "suspected-false":
+        return "%s: %s" % (w, render.md_cell(st.data["reason"]))
+    if st.status == "witnessed-false":
+        return "%s: %s" % (w, render.md_cell(witness_words(st.data["witness"])))
+    if st.status == "withheld":
+        return "%s: %s" % (w, PB["withheld"][st.data["withheld"]])
+    if st.status == "model-gap" and st.data.get("gap"):
+        return "%s: the binary %s" % (w, facts.feature_words(st.data["gap"]))
+    if st.takes_bound() and st.status == "open":
+        return "open (best proved b: none)"
+    return w
+
+
+def why_words(st):
+    """Why a statement that is not open or proved has its status."""
+    return {"suspected-false": lambda: render.md_cell(st.data["reason"]),
+            "witnessed-false": lambda: render.md_cell(witness_words(st.data["witness"])),
+            "model-gap": lambda: (("each binary " if st.harness.data.get("model_gap") else "the binary ")
+                                  + facts.feature_words(gap_of(st))
+                                  + ("" if st.harness.data.get("model_gap") else ", which the model does not cover yet")),
+            "withheld": lambda: PB["withheld"][st.data["withheld"]],
+            "withdrawn": lambda: render.md_cell(st.data["reason"]),
+            "counterexample": lambda: (("the run recorded for [%s](../%s/) refutes it too: there the %s build dies by "
+                                        "%s, an error this statement forbids"
+                                        % (st.counterexample.data["statement"], st.counterexample.path,
+                                           names.BUILD_WORDS[st.counterexample.data["observed"]["build"]],
+                                           st.counterexample.data["observed"]["signal"]))
+                                       if st.derived_counterexample
+                                       else render.md_cell(st.counterexample.data["note"])),
+            "refuted": lambda: "a Rocq proof of its negation"}[st.status]()
+
+
+def _deviation_items(T, h, lib_name):
+    """The deviation record of h, one bullet per field in words, origin and harness_origin each with the sentence that
+    defines its value (docs/facts.md).  With no published build, no scan gives tls_backend and no check reads it
+    (deviation.compare), so its bullet says that and not what the binaries link."""
+    dev = h.data["deviation"]
+    tls = dev["tls_backend"]
+    if not h.builds():
+        tls_item = _t(T, "deviation_tls_unscanned", value=tls)
+    elif tls == "none":
+        tls_item = _t(T, "deviation_tls_none")
+    else:
+        tls_item = _t(T, "deviation_tls", value=tls, tls=TLS_WORDS[tls])
+    items = [_t(T, "deviation_commit", commit=dev["library_commit"], library_name=lib_name), tls_item]
+    items += [_t(T, "deviation_setting_%s" % ("true" if dev[field] else "false"), field=field, setting=setting,
+                 library_name=lib_name) for field, setting in DEBUG_SETTINGS]
+    items.append(_t(T, "deviation_sanitizer", items="\n".join(
+        _t(T, "deviation_sanitizer_item", build=b, words=SANITIZER_WORDS[dev["sanitizer"][b]])
+        for b in h.data["builds"])))
+    items.append(_t(T, "deviation_origin", value=h.data["origin"], definition=_t(T, "origin_" + _origin(h))))
+    items.append(_t(T, "deviation_harness_origin", value=dev["harness_origin"],
+                    definition=_t(T, "harness_origin_" + dev["harness_origin"])))
+    items.append(_t(T, "deviation_architecture_" + dev["architecture"]))
+    return "\n".join(items)
+
+
+def _build_section(T, h, lib_name):
+    """The README section on the build the statements are about: the deviation record in words, and the text every
+    statement carries for excluded scenarios and a debug build (_scope_notes).  Empty when the harness has none."""
+    parts = [_t(T, "deviation", items=_deviation_items(T, h, lib_name))] if "deviation" in h.data else []
+    parts += _scope_notes(T, h, lib_name)
+    return ("\n" + _t(T, "build_section", body="\n\n".join(parts)) + "\n") if parts else ""
+
+
+def _instances(T, h):
+    """The README section listing each statement's instance (statements.<s>.instance), under what an instance shows.
+    A row names its lemma file (facts.Statement.instance_lemma) only when the file is in the tree and `oft check` checks
+    the lemma (check.instances_to_check: a statement Statements.v carries, facts.Statement.rendered), and only of those
+    rows does the section say that every premise holds.  A row with no lemma file is recorded, not yet proved; a row of
+    a withheld or withdrawn statement with a lemma file is not proved, since no check reads that lemma.  Empty when no
+    statement has an instance."""
+    with_instance = [s for s in _order(h) if "instance" in s.data]
+    if not with_instance:
+        return ""
+    cells = {s.name: ("recorded" if not os.path.isfile(h.tree.path(s.instance_lemma()))
+                      else "proved" if s.rendered() else "unchecked") for s in with_instance}
+    lemma = {"proved": lambda s: _t(T, "instance_lemma", lemma=posixpath.relpath(s.instance_lemma(), h.dir)),
+             "unchecked": lambda s: _t(T, "instance_unchecked", status=s.status),
+             "recorded": lambda s: _t(T, "instance_no_lemma")}
+    rows = [_t(T, "instance_row", name=s.name, file=s.data["instance"]["file"],
+               bytes=render.thousands(s.data["instance"]["bytes"]), sha=s.data["instance"]["sha256"],
+               path=_t(T, "instance_path_" + s.data["instance"]["path"]), lemma=lemma[cells[s.name]](s))
+            for s in with_instance]
+    notes = [_t(T, "instances_proved")] if "proved" in cells.values() else []
+    notes += [_t(T, "instances_recorded")] if "recorded" in cells.values() else []
+    if any(cells[s.name] == "proved" and shapes.instance_finite(s.data) for s in with_instance):
+        notes.append(_t(T, "instances_finite"))
+    return "\n\n" + _t(T, "instances", notes="".join("\n\n" + n for n in notes), rows="\n".join(rows))
+
+
+def harness_readme(tree, h):
+    T = "harness-README.md.tmpl"
+    lib, lib_name = _library(h)
+    src = h.data["source"]
+    if src.get("pending"):
+        source_link = _t(T, "source_pending")
+    else:
+        source_link = _t(T, "source_link", file=src["files"][0],
+                         modified="modified; see below" if src["modified"] else "unmodified")
+    intro = _t(T, "intro_" + _origin(h), harness=h.name, project=h.project.name, library=lib,
+               library_name=lib_name, source_link=source_link)
+    mods = ""
+    if h.data["modifications"]:
+        # a target OSS-Fuzz does not run differs from a libFuzzer build of it, not from what OSS-Fuzz runs
+        block = ("modifications_libfuzzer" if _origin(h) in ("oss-verify", "upstream_no_oss_fuzz")
+                 else "modifications")
+        mods = "\n" + _t(T, block, items="\n".join("- " + m for m in h.data["modifications"])) + "\n"
+
+    def link(where):
+        f, _, rng = where.rpartition(":")
+        a, _, b = rng.partition("-")
+        anchor = "L%s-L%s" % (a, b) if b else "L%s" % a
+        return f, anchor
+    checks = []
+    for c in h.data["checks"]:
+        f, anchor = link(c["where"])
+        checks.append(_t(T, "check_row", what=c["what"].rstrip("."), lines=_check_place(c),
+                         file=f, anchor=anchor, stops=_stop(c), live=LIVE_WORDS[c["live"]]))
+    if checks:
+        halts = [s for s in h.statements.values() if s.kind == "halts"]
+        bound = [c for i, c in enumerate(h.data["checks"])
+                 if any(chr(ord("a") + i) in _binding_letters(h, s) for s in halts)]
+        every = len(bound) == len(h.data["checks"]) and all(
+            len(_binding_letters(h, s)) == len(h.data["checks"]) for s in halts)
+        others = len(h.data["checks"]) - len(bound)
+        if every:
+            checks.append("\n" + _t(T, "checks_bind", that="them" if len(h.data["checks"]) > 1 else "it"))
+        elif bound:
+            places = render.join_words(_check_place(c) for c in bound)
+            subject = ("any of the checks at %s" % places) if len(bound) > 1 else ("the check at %s" % places)
+            text = _t(T, "checks_bind_some", subject=subject, that="them" if len(bound) > 1 else "it")
+            if others:   # every check can be bound by some halts statement and still not by every one
+                text += " " + _t(T, "checks_bind_others", others="checks" if others > 1 else "check")
+            checks.append("\n" + text)
+    else:
+        checks.append(_t(T, "checks_none", who=_who(h), claim=_no_check_claim(h)))
+    if h.data.get("rejects"):
+        reject_rows = []
+        for r in h.data["rejects"]:
+            f, anchor = link(r["where"])
+            reject_rows.append(_t(T, "reject_row", what=r["what"].rstrip("."), lines=_check_place(r), file=f,
+                                  anchor=anchor))
+        checks.append("\n" + _t(T, "rejects", who=_who(h), status=shapes.REJECTED, rows="\n".join(reject_rows)))
+        returning = [c["where"][len("source/"):] for c in h.data["checks"] if c["stops_with"] == "return-only"]
+        if returning:
+            checks.append("\n" + _t(T, "rejects_return_only", status=shapes.REJECTED,
+                                    lines=render.join_words(returning, "and")))
+    files = ["[Statements.v](Statements.v)"] if h.builds() else []
+    if characterise_v(h) is not None and h.builds():
+        files.append("[Characterise.v](Characterise.v)")
+    if "distribution" in h.data:
+        files.append("[Distribution.v](Distribution.v)")
+    gap = ""
+    if h.data.get("model_gap"):
+        gap = "\n" + _t(T, "model_gap", features=facts.feature_words(h.data["model_gap"])) + "\n"
+    else:
+        own = sorted({f for s in h.statements.values() if s.status == "model-gap" for f in s.data.get("gap", [])})
+        if own:
+            gap = "\n" + _t(T, "model_gap_some", features=facts.feature_words(own)) + "\n"
+    rows = [_t(T, "row", name=s.name, line=_statement_line(h, s), status=status_cell(tree, s, h.dir))
+            for s in _order(h)]
+    brows = []
+    for b, rec in h.builds(published_only=False):
+        if rec.get("withheld"):
+            brows.append(_t(T, "build_row_withheld", build=b, file=rec["file"], why=PB["withheld"][rec["withheld"]]))
+        else:
+            brows.append(_t(T, "build_row", build=b, file=rec["file"], bytes=render.thousands(rec["bytes"]),
+                            sha=rec["sha256"]))
+    check_it = (_t(T, "check_it", project=h.project.name, harness=h.name) if h.builds()
+                else _t(T, "check_it_none"))
+    urows = []
+    for b, rec in h.builds():
+        items = []
+        for u in rec.get("uninstrumented") or []:
+            src = (" from `%s`" % u["source"]) if u.get("source") else ""
+            words = ("the OSS Verify port's driver" if u["kind"] == "driver" and facts.port(h.project)
+                     else UNINSTRUMENTED_WORDS[u["kind"]])
+            items.append("`%s`%s (%s)" % (u["name"], src, words))
+        if items:
+            urows.append(_t(T, "uninstrumented_row", build=b, items=", ".join(items)))
+    if urows:
+        uninstrumented = "\n" + _t(T, "uninstrumented", rows="\n".join(urows)) + "\n"
+    elif h.builds() and h.project.data["language"] != "go":    # Go builds link no toolchain runtime and no sanitizer
+        uninstrumented = "\n" + _t(T, "uninstrumented_none") + "\n"
+    else:
+        uninstrumented = ""
+    return _t(T, "file", project=h.project.name, harness=h.name, intro=intro, summary=h.data["summary"],
+              modifications=mods, build_section=_build_section(T, h, lib_name), who=_who(h),
+              checks="\n".join(checks), files=", ".join(files) if files else "withheld", model_gap=gap,
+              statement_rows="\n".join(rows), instances=_instances(T, h), build_rows="\n".join(brows),
+              uninstrumented=uninstrumented, check_it=check_it) + "\n"
+
+
+def _counts(statements):
+    c = {"n": 0, "proved": 0, "false": 0, "suspected": 0, "model_gap": 0, "withheld": 0, "open": 0}
+    for s in statements:
+        if s.status == "withdrawn":
+            continue
+        c["n"] += 1
+        c["proved"] += s.status == "proved"
+        c["false"] += s.status in FALSE_STATUSES
+        c["suspected"] += s.status == "suspected-false"
+        c["model_gap"] += s.status == "model-gap"
+        c["withheld"] += s.status == "withheld"
+        c["open"] += s.status == "open"
+    return c
+
+
+def _lead(tree, proj):
+    T = "project-README.md.tmpl"
+    d = proj.data
+    if "oss_fuzz" in d:
+        url = "https://github.com/google/oss-fuzz/tree/%s/projects/%s" % (d["oss_fuzz"]["commit"], proj.name)
+        if d.get("homepage"):
+            links = _t(T, "links_homepage", homepage=d["homepage"], homepage_label=facts.repo_label(d["homepage"]),
+                       project=proj.name, oss_fuzz_url=url)
+        else:
+            links = _t(T, "links_oss_fuzz", project=proj.name, oss_fuzz_url=url)
+    elif d.get("homepage"):
+        links = _t(T, "links_homepage_no_oss_fuzz", homepage=d["homepage"],
+                   homepage_label=facts.repo_label(d["homepage"]), project=proj.name)
+    else:
+        links = _t(T, "links_no_oss_fuzz", project=proj.name)
+    desc = d.get("description", "")
+    return _t(T, "lead", description=(desc.rstrip(".") + ". ") if desc else "", links=links)
+
+
+PLACEHOLDER_DIGEST = "0" * 64
+
+
+def _check_summary(ch):
+    """The checks cell of a project page's table: how many, what kinds, how
+    many of them weak, and how many were confirmed in the binary."""
+    if not ch:
+        return "none"
+    n_live = sum(1 for x in ch if x["live"] is True)
+    n_weak = sum(1 for x in ch if x["strength"] == "weak")
+    kinds = sorted({x["kind"] for x in ch})
+    parts = [", ".join(kinds)]
+    if n_weak:
+        parts.append("%d weak" % n_weak)
+    parts.append("all confirmed in the binary" if n_live == len(ch) else "%d confirmed in the binary" % n_live)
+    return "%s (%s)" % (render.plural(len(ch), "check", "checks"), "; ".join(parts))
+
+
+def _coverage(T, block, targets, included, api_note, **values):
+    """One coverage sentence of the status line: of these harness entries (targets), how many (included) have
+    statements."""
+    return _t(T, block, n_included=len(included), n_targets=len(targets),
+              have=("fuzz target" if len(targets) == 1 else "fuzz targets")
+              + (" has" if len(included) == 1 else " have"),
+              api_note=api_note, **values)
+
+
+def _exit_sets_words(family):
+    """The exit sets of a family of a project's halts statements (one reading), each attributed to the statements it
+    holds for: the commonest set, then each other one with its harnesses, a harness whose statements differ in exit
+    set named with the builds of each."""
+    by_words = {}           # exit words -> harness name -> its builds' words
+    for s in family:
+        by_words.setdefault(_exits_words(s.data), {}).setdefault(s.harness.name, []).append(
+            names.BUILD_WORDS[s.data["builds"][-1]])
+    split = {n for n, c in collections.Counter(n for g in by_words.values() for n in g).items() if c > 1}
+
+    def who(w):
+        return render.join_words(
+            n if n not in split else "%s's %s build%s" % (n, render.join_words(b, "and"), "s" if len(b) > 1 else "")
+            for n, b in sorted(by_words[w].items()))
+    common = max(sorted(by_words), key=lambda w: len(by_words[w]))
+    others = ["%s for %s" % (w, who(w)) for w in sorted(by_words) if w != common]
+    return common + (" (%s)" % "; ".join(others) if others else "")
+
+
+def project_readme(tree, proj):
+    T = "project-README.md.tmpl"
+    d = proj.data
+    status = d["status"]
+    if status != "available":
+        return _t(T, "file_short", project=proj.name, lead=_lead(tree, proj),
+                  status_words=PB["projects"][status]["words"], sentence=facts.project_sentence(proj)) + "\n"
+    hs = [proj.harnesses[e["name"]] for e in proj.entries() if e["status"] == "included" and e["name"] in proj.harnesses]
+    oss_fuzz_targets = proj.targets()
+    oss_verify_targets = proj.targets(("oss-verify",))
+    included = [e for e in oss_fuzz_targets if e["status"] == "included"]
+    oss_verify_included = [e for e in oss_verify_targets if e["status"] == "included"]
+    api = any(e["name"] == names.API_DRIVER and e["status"] == "included" for e in proj.entries())
+    stmts = [s for h in hs for s in h.statements.values()]
+    c = _counts(stmts)
+    builds = [(h, b, rec) for h in hs for b, rec in h.builds()]
+    n_held = sum(1 for h in hs for _b, r in h.builds(published_only=False) if r.get("withheld"))
+    wh = d.get("withheld") or {}
+    lib = d["library"]
+    withheld = ""
+    if wh.get("unpublished"):
+        withheld += _t(T, "withheld_unpublished")
+    if wh.get("source_bundle"):
+        withheld += _t(T, "withheld_source_bundle", library_name=lib["name"])
+    patches = d.get("patches", [])
+    glance = []
+    for h in hs:
+        hc = _counts(h.statements.values())
+        parts = ["%d" % hc["n"]]
+        for k, w in (("proved", "proved"), ("false", "known false"), ("suspected", "suspected false"),
+                     ("model_gap", "blocked by the model"), ("withheld", "withheld")):
+            if hc[k]:
+                parts.append("%d %s" % (hc[k], w))
+        glance.append(_t(T, "glance_row", name=h.name, summary=render.md_cell(h.data["summary"]),
+                         checks=_check_summary(h.data["checks"]), counts=", ".join(parts)))
+    not_inc = [e for e in proj.entries() if e["status"] == "not-included"]
+    not_included = ""
+    if not_inc:
+        not_included = "\n" + _t(T, "not_included", items="; ".join(
+            _t(T, "not_included_item", name=e["name"], reason=facts.harness_reason(proj, e)) for e in not_inc)) + "\n"
+    fams = []
+    for reading, block in (("budget", "family_halts"), ("may-fail", "family_halts_may_fail")):
+        family = [s for s in stmts if s.kind == "halts" and s.data["reading"] == reading and s.status != "withdrawn"]
+        if not family:
+            continue
+        # a statement that allows any status allows the status a failed assertion of these languages exits with, so
+        # the line says "failing an assertion" only when no statement of the family allows that status; otherwise it
+        # says what such a statement does not rule out
+        if reading == "budget" and any(_allows_failure_exit(s.harness, s.data) for s in family):
+            without = _t(T, "family_halts_without_any_" + d["language"])
+            any_note = _t(T, "family_halts_any_" + d["language"])
+        else:
+            without, any_note = _t(T, "family_halts_without"), ""
+        fams.append(_t(T, block, exits=_exit_sets_words(family), without=without, any_note=any_note))
+    for k in ("agreement", "bound", "decidability") + shapes.CLASSIFIER_KINDS:
+        if any(s.kind == k for s in stmts):
+            fams.append(_t(T, "family_" + k + ("_rust" if k == "agreement" and d["language"] == "rust" else "")))
+    binding = ""
+    bitems = []
+    for h in hs:
+        whats = [c_["what"] for i, c_ in enumerate(h.data["checks"])
+                 if any(shapes.binds(c_, s.data, h.data) for s in h.statements.values())]
+        if whats:
+            bitems.append(_t(T, "binding_item", name=h.name,
+                             whats="; ".join(render.lower_first(w.rstrip(".")) for w in whats)))
+    if bitems:
+        binding = "\n" + _t(T, "binding", items="\n".join(bitems)) + "\n"
+    issues = []
+    for h in hs:
+        gap_done = False
+        reasons = {s.data.get("withheld") for s in h.statements.values() if s.status == "withheld"}
+        if h.statements and len(reasons) == 1 and all(s.status == "withheld" for s in h.statements.values()):
+            issues.append(_t(T, "issue_row", what="%s: every statement" % h.name,
+                             status=PB["statements"]["withheld"]["words"], why=PB["withheld"][reasons.pop()]))
+            continue
+        for s in _order(h):
+            if s.status in ("open", "proved", "withdrawn"):
+                continue
+            if s.status == "model-gap" and h.data.get("model_gap"):
+                if not gap_done:
+                    issues.append(_t(T, "issue_row", what="%s: every statement" % h.name,
+                                     status=PB["statements"]["model-gap"]["words"],
+                                     why="each binary %s" % facts.feature_words(h.data["model_gap"])))
+                    gap_done = True
+                continue
+            issues.append(_t(T, "issue_row", what="%s `%s`" % (h.name, s.name),
+                             status=PB["statements"][s.status]["words"]
+                             if s.status != "counterexample" else status_cell(tree, s, proj.dir),
+                             why=why_words(s).replace("](../", "](../../")))
+    issues_txt = _t(T, "issues_table", rows="\n".join(issues)) if issues else _t(T, "issues_none")
+    a = d.get("assets") or {}
+    src = a.get("src")
+    rel = lambda tag: "%s/releases/tag/%s" % (REPO_URL, tag)
+    recipe = facts.bin_recipe(tree, proj)
+    pitems = []
+    for p_ in patches:
+        upstream = UPSTREAM_WORDS[p_["upstream"]]
+        if p_.get("url"):
+            upstream = "[%s](%s)" % (upstream, p_["url"])
+        pitems.append(_t(T, "patch_item", id=p_["id"], file="../../" + proj.patch_path(p_["file"]),
+                         summary=p_["summary"].rstrip("."), upstream=upstream))
+    n_unlisted = lib.get("patch_count", 0) - len(patches)
+    if n_unlisted > 0:
+        n = render.plural(n_unlisted, "patch", "patches")
+        more = " more" if patches else ""
+        # Unlisted patches are placed in the recipe only for a recipe-built project that attaches its source archive;
+        # any other project's page says no published archive holds them.  Measured on main on 2026-11-09: 74 project
+        # pages had unlisted patches and the bin recipe recipe.tar.zst of release v2026.10.0-src.  73 of them attach
+        # assets.src, and for each of those the rows of that recipe's patches/series.tsv whose `targets` is the
+        # project or starts with "<project>-" number exactly library.patch_count; mosquitto attaches no assets.src and
+        # has no row there.
+        if src and recipe:
+            pitems.append(_t(T, "patch_unlisted_recipe", n=n, more=more, recipe_file=recipe["file"],
+                             recipe_release=recipe["release"], recipe_url=rel(recipe["release"])))
+        else:
+            pitems.append(_t(T, "patch_unlisted_none", n=n, more=more))
+    mods = [h.name for h in hs if h.data["source"]["modified"]]
+    harness_mods = ("the harness files are modified in %s (see each harness page)%s"
+                    % (render.join_words("`%s`" % m for m in mods),
+                       "; the others are unmodified" if len(mods) < len(hs) else "")) if mods else "unmodified"
+    proofs = [(sid, pd) for sid, pd in sorted(tree.proofs.items()) if sid.split("/")[0] == proj.name]
+    if proofs:
+        ptxt = _t(T, "proofs_table", rows="\n".join(
+            _t(T, "proof_row", id=sid, path=posixpath.relpath(pd.path, proj.dir),
+               result="refuted" if pd.refutes else "proved")
+            for sid, pd in proofs))
+    else:
+        ptxt = _t(T, "proofs_none")
+    notes = ("\n" + _t(T, "notes", text=proj.notes) + "\n") if proj.notes else ""
+    this = ("v" + tree.release["release"], "v" + tree.release["release"] + "-src")
+
+    def recipe_text():
+        """The recipe the binary archive pins: beside the source asset, in this release or an earlier one, or in a
+        release of its own, named apart."""
+        if recipe and recipe["release"] != src["release"]:
+            return _t(T, "recipe_apart", recipe_file=recipe["file"], recipe_release=recipe["release"],
+                      recipe_url=rel(recipe["release"]))
+        return _t(T, "recipe_this_release" if src["release"] in this else "recipe_that_release",
+                  recipe_file=recipe["file"] if recipe else "(none)")
+
+    oss_fuzz_runs_all = "oss_fuzz" in d and not oss_verify_targets
+    get = (_t(T, "get_binaries", project=proj.name, bin_file=a["bin"]["file"], bin_release=a["bin"]["release"],
+              bin_url=rel(a["bin"]["release"]),
+              testcase="an OSS-Fuzz testcase" if oss_fuzz_runs_all else "a testcase")
+           if "bin" in a else _t(T, "get_none"))
+    licences = sorted({h.data["licence"] for h in hs})
+    lib_licences = sorted({h.data["library"]["licence"] for h in hs} | {lib["licence"]})
+    known_lib = [x for x in lib_licences if x != "NOASSERTION"]
+    builder = d["build"]["builder"]
+    port = facts.port(proj)
+    copyleft_sentence = _copyleft_sources(tree, T, hs)
+    # each group of fuzz targets has its own coverage sentence: OSS-Fuzz's, the project's own when OSS-Fuzz does not
+    # have the project, and those OSS Verify builds; an API driver is noted with the first
+    api_note = _t(T, "api_note") if api else ""
+    sentences = []
+    if "oss_fuzz" in d:
+        sentences.append(_coverage(T, "coverage", oss_fuzz_targets, included, api_note))
+        api_note = ""
+    own_targets = [] if "oss_fuzz" in d else proj.targets(("upstream",))
+    if own_targets:
+        sentences.append(_coverage(T, "coverage_own", own_targets, [e for e in own_targets if e["status"] == "included"],
+                                   api_note, project=proj.name))
+        api_note = ""
+    if oss_verify_targets:
+        sentences.append(_coverage(T, "coverage_oss_verify", oss_verify_targets, oss_verify_included, api_note))
+    coverage = " ".join(sentences)
+    return _t(T, "file_available", project=proj.name, lead=_lead(tree, proj), coverage=coverage,
+              sources=(("project.yaml, */harness.yaml, proofs/, counterexamples/ and notes/%s.md" % proj.name
+                        if proj.notes else "project.yaml, */harness.yaml, proofs/ and counterexamples/")
+                       if tree.layout == layout.OLD else
+                       ("project.yaml, */harness.yaml, */proofs/, */counterexamples/ and notes/%s.md" % proj.name
+                        if proj.notes else "project.yaml, */harness.yaml, */proofs/ and */counterexamples/")),
+              binaries=(_t(T, "binaries_some", n_binaries=render.plural(len(builds), "binary", "binaries"),
+                           bytes=render.human_bytes(sum(r["bytes"] for _, _, r in builds)),
+                           held=(", %d more withheld" % n_held) if n_held else "")
+                        if builds else _t(T, "binaries_none")),
+              counts=_t(T, "counts", n_statements=render.thousands(c["n"]), n_open=render.thousands(c["open"]),
+                        n_proved=c["proved"], n_false=c["false"], n_suspected=c["suspected"],
+                        n_model_gap=c["model_gap"],
+                        withheld_part=(", %s withheld" % render.thousands(c["withheld"])) if c["withheld"] else ""),
+              withheld=withheld, library_name=lib["name"],
+              library_version=(lib["version"] + " ") if lib.get("version") else "",
+              pin_short=("commit `%s`" % lib["commit"][:8]) if "commit" in lib
+              else ("release archive `%s`" % lib["archive_sha256"][:8]),
+              patches_note=_t(T, "patches_note", n_patches=render.plural(max(len(patches), lib.get("patch_count", 0)),
+                                                                          "patch", "patches"))
+              if patches or lib.get("patch_count") else "",
+              glance_rows="\n".join(glance), not_included=not_included, families="\n".join(fams), binding=binding,
+              issues=issues_txt, get_binaries=get,
+              library_repo=lib["repository"],
+              library_label=facts.repo_label(lib["repository"]),
+              pin_long=("at `%s`" % lib["commit"]) if "commit" in lib
+              else ("from the release archive whose SHA-256 is `%s`" % lib["archive_sha256"]),
+              library_version_paren=(" (%s)" % lib["version"]) if lib.get("version") else "",
+              build_system=PB["build_systems"][d["build"]["system"]],
+              patch_items=(":\n" + "\n".join(pitems)) if pitems else "",
+              harness_mods=harness_mods,
+              # each block takes only its own toolchain's version, so a missing one fails here rather than render "None"
+              compiled=(_t(T, "compiled_go", go=d["build"]["go"]) if d["language"] == "go"
+                        else _t(T, COMPILED.get(d["language"], "compiled"), clang=d["build"]["clang"])),
+              # a Go project's binaries run the port's patched Go runtime: the page says what the patches change
+              runtime_item=(_t(T, "runtime_go", go=d["build"]["go"]) + "\n") if d["language"] == "go" else "",
+              builder_sentence=(_t(T, "builder_unpublished") if builder.endswith(PLACEHOLDER_DIGEST)
+                                else _t(T, "builder_port", builder=builder, port_path=port["path"],
+                                        port_commit=port["commit"], port_repository=_port_repository_words(port),
+                                        port_file=a["port"]["file"], port_url=rel(a["port"]["release"]),
+                                        src_file=src["file"])
+                                if port and src and "port" in a
+                                else _t(T, "builder_port_no_archive", builder=builder, port_path=port["path"],
+                                        port_commit=port["commit"], port_repository=_port_repository_words(port)) if port
+                                else _t(T, "builder_published", builder=builder) if src
+                                else _t(T, "builder_no_source", builder=builder)),
+              proofs=ptxt, notes=notes,
+              library_licence_sentence=(_t(T, "library_licence_copyleft", library_name=lib["name"])
+                                        if not known_lib and wh.get("source_bundle") else
+                                        _t(T, "library_licence_unknown", library_name=lib["name"])
+                                        if not known_lib else
+                                        _t(T, "library_licence_known", library_name=lib["name"],
+                                           library_licence=render.join_words("`%s`" % x for x in known_lib)
+                                           + (" (for some of its harnesses' builds; the others are not recorded yet)"
+                                              if "NOASSERTION" in lib_licences else ""))),
+              binary_licence_sentence=(_t(T, "binary_licences_unknown" + ("_go" if d["language"] == "go" else ""),
+                                          library_name=lib["name"])
+                                       if not licences or "NOASSERTION" in licences else
+                                       _t(T, "binary_licences_known",
+                                          binary_licences=render.join_words("`%s`" % x for x in licences))),
+              source_sentence=(_t(T, "source_with_port", src_file=src["file"], src_release=src["release"],
+                                  src_url=rel(src["release"]), manifest_file=a["src_manifest"]["file"],
+                                  port_file=a["port"]["file"], port_release=a["port"]["release"],
+                                  port_url=rel(a["port"]["release"]), port_path=port["path"],
+                                  port_commit=port["commit"]) if src and port else
+                               _t(T, "source_with_bundle", src_file=src["file"], src_release=src["release"],
+                                  src_url=rel(src["release"]),
+                                  manifest_file=(a.get("src_manifest") or {}).get("file", "(none)"),
+                                  recipe=recipe_text())
+                               if src else _t(T, "source_none")),
+              copyleft_sentence=copyleft_sentence) + "\n"
+
+
+def _copyleft_sources(tree, T, hs):
+    """The sentence naming the release-wide source archives a copyleft binary's corresponding source also takes: the
+    toolchain for every published copyleft harness, and the build image's libraries for those that link one."""
+    srcs = (tree.release or {}).get("sources")
+    cl = [h for h in hs if h.builds() and facts.copyleft(tree, h)]
+    if not cl or not srcs:
+        return ""
+    linking = [h for h in cl if facts.image_libraries(h)]
+    names_of = lambda group: render.join_words("`%s`" % h.name for h in group)
+    who = (_t(T, "copyleft_who_all") if len(cl) == len(hs)
+           else _t(T, "copyleft_who_some", harnesses=names_of(cl)))
+    if not linking:
+        sysroot = ""
+    elif len(linking) == len(cl):
+        sysroot = _t(T, "copyleft_sysroot", sysroot_file=srcs["sysroot"]["file"])
+    else:
+        sysroot = _t(T, "copyleft_sysroot_some", sysroot_file=srcs["sysroot"]["file"], harnesses=names_of(linking))
+    return " " + _t(T, "copyleft_sources", who=who, toolchain_file=srcs["toolchain"]["file"], sysroot=sysroot,
+                    sources_release=srcs["release"],
+                    sources_url="%s/releases/tag/%s" % (REPO_URL, srcs["release"]))
+
+
+# ------------------------------------------------------- top-level and index
+
+def _project_row_counts(proj):
+    return _counts([s for h in proj.harnesses.values() for s in h.statements.values()])
+
+
+def _n_builds(proj, published):
+    return sum(1 for h in proj.harnesses.values() for _b, r in h.builds(published_only=False)
+               if bool(r.get("withheld")) != published)
+
+
+def status_md(tree):
+    T = "STATUS.md.tmpl"
+    r = tree.release
+    not_in_oss_fuzz = tree.not_in_oss_fuzz()
+    projects = render.join_words("`%s`" % n for n in not_in_oss_fuzz)
+    totals, rows = [], []
+    for status, spec in PB["projects"].items():
+        n = sum(1 for p in tree.projects.values() if p.data["status"] == status)
+        if n:
+            totals.append(_t(T, "total_row", words=spec["words"], n=render.thousands(n)))
+    for proj in sorted(tree.projects.values(), key=lambda p: p.name):
+        d = proj.data
+        c = _project_row_counts(proj)
+        if d["status"] == "available":
+            # every fuzz target: OSS-Fuzz's, the project's own and those OSS Verify builds; not the API driver
+            targets = proj.targets(facts.OSS_FUZZ_ORIGINS + ("oss-verify",))
+            inc = sum(1 for e in targets if e["status"] == "included")
+            t = "%d of %d" % (inc, len(targets))
+            if any(e["name"] == names.API_DRIVER and e["status"] == "included" for e in proj.entries()):
+                t += " + API driver"
+            bins = "%d" % _n_builds(proj, True)
+            held = _n_builds(proj, False)
+            if held:
+                bins += " (%d withheld)" % held
+        else:
+            t, bins = "-", "-"
+        rows.append(_t(T, "row", project=proj.name, language=d["language"], words=PB["projects"][d["status"]]["words"],
+                       targets=t, binaries=bins, statements=render.thousands(c["n"]), open=c["open"], proved=c["proved"],
+                       false=c["false"], suspected=c["suspected"], blocked=c["model_gap"], withheld=c["withheld"]))
+    return _t(T, "file", release=r["release"], oss_fuzz_commit8=r["oss_fuzz"]["commit"][:8], totals="\n".join(totals),
+              title="Status of every project" if not_in_oss_fuzz else "Status of every OSS-Fuzz project",
+              language_note=_t(T, "language_note") if not_in_oss_fuzz else "",
+              not_in_oss_fuzz_note=_t(T, "not_in_oss_fuzz_note", projects=projects,
+                                      pronoun="it" if len(not_in_oss_fuzz) == 1 else "them")
+              if not_in_oss_fuzz else "",
+              n_projects=render.thousands(len(tree.projects)), rows="\n".join(rows)) + "\n"
+
+
+def statement_counts(tree):
+    """{status: n} over every statement that is not withdrawn, plus the
+    withheld ones by reason: the one place the README and the changelog take
+    their numbers from."""
+    by = {k: 0 for k in PB["statements"]}
+    held = {k: 0 for k in PB["withheld"]}
+    n = 0
+    for s in tree.statements():
+        if s.status == "withdrawn":
+            continue
+        n += 1
+        by[s.status] += 1
+        if s.status == "withheld":
+            held[s.data["withheld"]] += 1
+    return n, by, held
+
+
+def counts_sentence(tree):
+    """The statement counts in words, every status named, zeros included."""
+    n, by, held = statement_counts(tree)
+    if not n:
+        return "no statements yet"
+    th = render.thousands
+    false = sum(by[k] for k in FALSE_STATUSES)
+    parts = ["%s proved" % th(by["proved"]),
+             "%s known false (%s counterexample%s, %s false (witnessed)%s)" % (
+                 th(false), th(by["counterexample"]), "" if by["counterexample"] == 1 else "s",
+                 th(by["witnessed-false"]), (", %s refuted" % th(by["refuted"])) if by["refuted"] else ""),
+             "%s suspected false" % th(by["suspected-false"]),
+             "%s blocked by the model" % th(by["model-gap"]),
+             "%s withheld (%s waiting for their source bundle, %s not published yet)" % (
+                 th(by["withheld"]), th(held["source-bundle"]), th(held["not-yet-published"])),
+             "%s open" % th(by["open"])]
+    return "%s statements: %s" % (th(n), ", ".join(parts))
+
+
+def readme(tree):
+    T = "README.md.tmpl"
+    r = tree.release
+    stmts = [s for s in tree.statements() if s.status != "withdrawn"]
+    cov = [_t(T, "coverage_row", words=spec["words"], status=st,
+              n=render.thousands(sum(1 for p in tree.projects.values() if p.data["status"] == st)))
+           for st, spec in PB["projects"].items()
+           if any(p.data["status"] == st for p in tree.projects.values())]
+    ex = _example(stmts)
+    if ex:
+        params, body = ex.term()
+        letters = _binding_letters(ex.harness, ex)
+        shown = [render.lower_first(ex.harness.data["checks"][ord(x) - 97]["what"].rstrip(".")) for x in letters[:2]]
+        if len(letters) > 2:
+            shown[-1] += " (and %s more)" % render.plural(len(letters) - 2, "check", "checks")
+        # in a Rust or Python fuzz target a failed assertion in a call of the fuzz target exits with status 79, which
+        # `exits: any` allows (a Python one before the first call exits with status 80)
+        never = _t(T, "example_never_any" if _allows_failure_exit(ex.harness, ex.data) else "example_never")
+        words = _t(T, "example_binds" if letters else "example_plain", build=names.BUILD_WORDS[ex.data["builds"][0]],
+                   exits=_exits_words(ex.data), budget=shapes.HALTS_BUDGET[1], harness=ex.harness.name,
+                   whats="; ".join(shown), never=never)
+        example = _t(T, "example", example_id=ex.id, example_path="%s/Statements.v" % ex.harness.dir,
+                     example_words=words, example_name=ex.name + params, example_body=body)
+        eid, erev = ex.id, ex.revision
+        unit = (ex.harness.project.name, ex.harness.name)
+    else:
+        example, eid, erev = _t(T, "example_none"), "project/harness/statement", 1
+        unit = ("<project>", "<harness>")
+    harnesses = list(tree.harnesses())
+    n_four = sum(1 for h in harnesses if len(h.data["builds"]) == len(schema.BUILDS))
+    four_builds = ("every harness has all four" if n_four == len(harnesses) else
+                   "%s of the %s harnesses have all four" % (render.thousands(n_four), render.thousands(len(harnesses))))
+    n_pub = sum(len(h.builds()) for h in harnesses)
+    n_held = sum(len(h.builds(published_only=False)) for h in harnesses) - n_pub
+    sem = r["semantics"]
+    unreleased = sem["version"] == "unreleased"
+    published = not unreleased or sem.get("published", False)
+    if not unreleased:
+        lps_version, lps_plain = "version %s" % sem["version"], "%s %s" % (sem["name"], sem["version"])
+    elif published:
+        at = "commit [`%s`](%s/commit/%s)" % (sem["commit"][:12], sem["repository"], sem["commit"])
+        lps_version, lps_plain = at, "%s at %s" % (sem["name"], at)
+    else:
+        lps_version = "the version the checker image pins (not released yet)"
+        lps_plain = "the %s that image carries (not released yet)" % sem["name"]
+    _n, by, _held = statement_counts(tree)
+    false = sum(by[k] for k in FALSE_STATUSES)
+    proved_words = "%s, %s, and proofs are added as they are found." % (
+        "none of them is proved yet (0 proved)" if not by["proved"]
+        else "%s proved" % render.plural(by["proved"], "is", "are"),
+        "none is known to be false" if not false
+        else "%s known to be false" % render.plural(false, "is", "are"))
+    may_fail_exits = _t(T, "may_fail_any" if all(s.data.get("exits", "any") == "any" for s in stmts
+                                                 if s.kind == "halts" and s.data["reading"] == "may-fail")
+                        else "may_fail_named")
+    proved = proved_rows(tree)
+    checked = _checked_unit(proved, unit)
+    if proved:
+        proved_lead = _t(T, "proved_lead", n_entries=render.thousands(len(proved)),
+                         n_libraries=render.thousands(len({x["library"] for x in proved})))
+        proved_table = "\n".join([_t(T, "proved_table_head")] +
+                                 [_t(T, "proved_row", library=x["library"], entry=x["entry"], builds=x["builds"],
+                                     path=x["path"]) for x in proved])
+    else:
+        proved_lead = _t(T, "proved_lead_none")
+        proved_table = proved_lead
+    n_halts = sum(1 for x in proved for s in x["statements"] if s.kind == "halts")
+    halts_words = (_t(T, "halts_none") if not n_halts else
+                   _t(T, "halts_one") if n_halts == 1 else
+                   _t(T, "halts_some", n_halts=render.thousands(n_halts)))
+    # the OSS-Fuzz paragraph counts OSS-Fuzz's projects and their OSS-Fuzz targets alone (no OSS Verify target and no
+    # API driver), as each project page and index/projects.tsv do
+    oss_fuzz_available = [p for p in tree.available() if "oss_fuzz" in p.data]
+    oss_fuzz_targets = [e for p in oss_fuzz_available for e in p.targets()]
+    n_oss_fuzz_included = sum(1 for e in oss_fuzz_targets if e["status"] == "included")
+    not_in_oss_fuzz = tree.not_in_oss_fuzz()
+    projects = render.join_words("[`%s`](projects/%s/)" % (n, n) for n in not_in_oss_fuzz)
+    any_port = any(facts.port(p) for p in tree.projects.values())
+    # the sentence that names the kinds of statement gives the classifier statements a clause once the tree has one
+    classifier = any(s.kind in shapes.CLASSIFIER_KINDS for s in stmts)
+    return _t(T, "file", record_place=_t(T, "record_place_" + tree.layout),
+              unit_rows=_t(T, "unit_rows_" + tree.layout),
+              counterexamples_row=_t(T, "counterexamples_row_" + tree.layout),
+              n_projects=render.thousands(len(tree.projects)),
+              n_oss_fuzz_projects=render.thousands(tree.oss_fuzz_project_count()),
+              n_available=render.thousands(len(tree.available())),
+              n_oss_fuzz_available=render.thousands(len(oss_fuzz_available)),
+              example=example, status_counts=counts_sentence(tree), coverage_rows="\n".join(cov),
+              statement_kinds=_t(T, "statement_kinds_classifier" if classifier else "statement_kinds"),
+              total_label="all projects" if not_in_oss_fuzz else "all OSS-Fuzz projects",
+              not_in_oss_fuzz=_t(T, "not_in_oss_fuzz", projects=projects,
+                                  project_directories=("a project directory" if len(not_in_oss_fuzz) == 1
+                                                       else "project directories"),
+                                  pronoun="it" if len(not_in_oss_fuzz) == 1 else "them")
+              if not_in_oss_fuzz else "",
+              source_description=(_t(T, "source_description_recipe_mixed" if any_port else "source_description_recipe")
+                                  if facts.release_recipes(tree) else ""),
+              port_description=_t(T, "port_description") if any_port else "",
+              proved_words=proved_words, proved_lead=proved_lead, proved_table=proved_table,
+              n_harnesses=render.thousands(len(harnesses)), n_oss_fuzz_included=render.thousands(n_oss_fuzz_included),
+              n_oss_fuzz_targets=render.thousands(len(oss_fuzz_targets)),
+              halts_words=halts_words, may_fail_exits=may_fail_exits,
+              n_binaries=render.thousands(n_pub), n_withheld_binaries=render.thousands(n_held),
+              n_statements=render.thousands(len(stmts)), oss_fuzz_commit8=r["oss_fuzz"]["commit"][:8],
+              oss_fuzz_commit=r["oss_fuzz"]["commit"],
+              not_checkable="" if published else _t(T, "not_checkable"),
+              lps_name=sem["name"], lps_version=lps_version, lps_plain=lps_plain, lps_commit8=sem["commit"][:8],
+              rocq_version=r["rocq"]["version"], four_builds=four_builds, checker_image=r["images"]["checker"],
+              example_id=eid, example_revision=erev,
+              # "Check a proof" fetches and checks a proved fuzz target the release carries (a held one is cut from
+              # the proofs, so it is never named); the fetch comment lines up at one column whatever its name
+              fetch_command=_padded("./oft fetch %s" % checked[0], 37),
+              check_command="./oft check %s/%s" % checked) + "\n"
+
+
+def _padded(command, width):
+    return command + " " * max(1, width - len(command))
+
+
+CHECKED = ("coturn", "FuzzStunClient")
+
+
+def _checked_unit(proved, fallback):
+    """The fuzz target the README's "Check a proof" fetches and checks: coturn/FuzzStunClient while it has a proof,
+    else the first entry point with one, else fallback (the example statement's fuzz target)."""
+    units = [(x["library"], x["entry"]) for x in proved]
+    return CHECKED if CHECKED in units else units[0] if units else fallback
+
+
+EXAMPLE = "zlib/checksum_fuzzer/plain_halts"
+
+
+def _example(stmts):
+    """The statement the README shows: zlib/checksum_fuzzer/plain_halts while it
+    is open and published, else the open halts statement with the smallest
+    plain image among harnesses whose checks it binds, else the smallest open
+    halts statement, else anything."""
+    for s in stmts:
+        if s.id == EXAMPLE and s.status == "open" and s.rendered() and s.harness.builds():
+            return s
+    halts = [s for s in stmts if s.kind == "halts" and s.data["reading"] == "budget" and s.rendered()
+             and s.harness.builds() and s.harness.data["source"]["files"]]
+    size = lambda s: (dict(s.harness.builds()).get(s.data["builds"][0], {}).get("bytes", 0), s.id)
+    for pick in ([s for s in halts if s.status == "open" and _binding_letters(s.harness, s)],
+                 [s for s in halts if s.status == "open"], [s for s in stmts if s.rendered()]):
+        if pick:
+            return min(pick, key=size)
+    return None
+
+
+def _tsv(header, rows):
+    clean = lambda v: str(v).replace("\t", " ").replace("\n", " ")
+    return "\n".join(["\t".join(header)] + ["\t".join(clean(v) for v in r) for r in rows]) + "\n"
+
+
+def index_files(tree):
+    out = {}
+    prow, hrow, srow, brow, crow = [], [], [], [], []
+    for proj in sorted(tree.projects.values(), key=lambda p: p.name):
+        d = proj.data
+        targets = proj.targets()
+        c = _project_row_counts(proj)
+        prow.append([proj.name, d["language"], d["status"], d.get("reason") or "-", len(targets),
+                     sum(1 for e in targets if e["status"] == "included"),
+                     "yes" if any(e["name"] == names.API_DRIVER and e["status"] == "included"
+                                  for e in proj.entries()) else "no",
+                     _n_builds(proj, True), _n_builds(proj, False),
+                     c["n"], c["open"], c["proved"], c["false"], c["suspected"], c["model_gap"], c["withheld"]])
+    for h in tree.harnesses():
+        c = _counts(h.statements.values())
+        hrow.append([h.project.name, h.name, h.data["origin"], ",".join(b for b, _ in h.builds()) or "-",
+                     c["n"], c["open"], c["proved"], c["false"], c["suspected"], c["model_gap"], c["withheld"],
+                     ",".join(h.data.get("model_gap", [])) or "-"])
+        for s in _order(h):
+            d = s.data
+            ex = d.get("exits", "-")
+            detail = {"withheld": lambda: d["withheld"], "model-gap": lambda: ",".join(gap_of(s)),
+                      "witnessed-false": lambda: "run of the %s build" % d["witness"]["build"],
+                      "counterexample": lambda: s.counterexample.path}.get(s.status, lambda: "-")()
+            srow.append([s.id, s.kind, ",".join(d["builds"]), d.get("reading", "-"),
+                         ex if isinstance(ex, str) else ",".join(str(e) for e in ex), s.status, detail, s.revision,
+                         s.fingerprint or "-", s.proof.path if s.proof else "-"])
+        for b, rec in h.builds(published_only=False):
+            held = rec.get("withheld")
+            brow.append([h.project.name, h.name, b, rec["file"], "withheld" if held else "published", held or "-",
+                         "-" if held else rec["bytes"], "-" if held else rec["sha256"], h.data["licence"]])
+        for i, ch in enumerate(h.data["checks"]):
+            bound = [s.name for s in h.statements.values() if shapes.binds(ch, s.data, h.data)]
+            crow.append([h.project.name, h.name, ch["kind"], ch["strength"], ch["stops_with"],
+                         {True: "yes", False: "compiled out"}.get(ch["live"], "not found"), "halts" if bound else "-",
+                         ch["where"], ch["what"]])
+    out["index/projects.tsv"] = _tsv(["project", "language", "status", "reason", "oss_fuzz_targets", "included",
+                                      "api_driver", "binaries", "binaries_withheld", "statements", "open", "proved",
+                                      "false", "suspected_false", "blocked_by_model", "withheld"], prow)
+    out["index/harnesses.tsv"] = _tsv(["project", "harness", "origin", "builds", "statements", "open", "proved",
+                                       "false", "suspected_false", "blocked_by_model", "withheld", "model_gap"], hrow)
+    out["index/statements.tsv"] = _tsv(["id", "kind", "builds", "reading", "exits", "status", "detail", "revision",
+                                        "fingerprint", "proof"], srow)
+    out["index/binaries.tsv"] = _tsv(["project", "harness", "build", "file", "status", "withheld_reason", "bytes",
+                                      "sha256", "licence"], brow)
+    out["analyses/harness-checks/checks.tsv"] = _tsv(["project", "harness", "kind", "strength", "stops_with",
+                                                      "text_in_binary", "binds", "where", "what"], crow)
+    out["index/STATUS.md"] = status_md(tree)
+    proved = proved_rows(tree)
+    out["index/PROOFS.md"] = proofs_md(proved)
+    out["index/proofs.tsv"] = proofs_tsv(proved)
+    issues = ["<!-- generated by oft generate; do not edit -->", "# Known issues", "",
+              "Every statement in this release that is not open or proved.", "",
+              "| statement | status | why |", "|---|---|---|"]
+    n = 0
+    for s in tree.statements():
+        if s.status in ("open", "proved"):
+            continue
+        n += 1
+        st_words = PB["statements"][s.status]["words"]
+        if s.status == "counterexample":
+            st_words = "[%s](../%s/)" % (st_words, s.counterexample.path)
+        issues.append("| [%s](../%s/) | %s | %s |" % (s.id, s.harness.dir, st_words, why_words(s)))
+    if not n:
+        issues.append("| - | - | none |")
+    out["analyses/known-issues.md"] = "\n".join(issues) + "\n"
+    return out
+
+
+# ------------------------------------------------------------------ the proved entry points
+
+FAILURE_WORDS = {"may-fail": "every kind of call that LPS lets fail may fail without cause",
+                 "alloc-forced-only": "every kind of call that LPS lets fail may fail without cause, except that a "
+                                      "memory request fails only when the budget is spent or no address range is free",
+                 "budget": "only the failures that the process's state forces"}
+
+
+def _failure_words(d):
+    # a classifier statement with no reading is about the classifier's own runs, judged with the environment refusing
+    # only what the process's state forces
+    w = FAILURE_WORDS[d.get("reading", "budget")]
+    return w + " (abort() is read as death by SIGABRT, which the statement forbids)" if d.get("abort") == "signal" else w
+
+
+def proved_rows(tree):
+    """One dict per entry point with a proof in its proofs folder, in project and harness order."""
+    rows = []
+    for h in tree.harnesses():
+        proved = [s for s in _order(h) if s.status == "proved"]
+        if not proved:
+            continue
+        lay = tree.unit_layout("%s/%s" % (h.project.name, h.name))
+        rows.append({"library": h.project.name, "entry": h.name,
+                     "path": layout.proofs_dir(h.project.name, h.name, lay) + "/",
+                     "statements": proved, "statement_file": "%s/Statements.v" % h.dir,
+                     "builds": ", ".join(names.BUILD_WORDS[s.data["builds"][-1]] for s in proved
+                                         if s.kind == "agreement") or "-",
+                     "failures": render.join_words(sorted({_failure_words(s.data) for s in proved}), "and"),
+                     "build_record": layout.provenance_dir(h.project.name, h.name, lay) + "/PROVENANCE.md"})
+    return rows
+
+
+def proofs_md(rows):
+    out = ["<!-- generated by oft generate; do not edit -->", "# The proved entry points", "",
+           "One row for each entry point that has a proof. [README.md](../README.md#the-theorem-in-words) says what "
+           "the statements mean, and [docs/statements.md](../docs/statements.md) gives each form. Every proof uses "
+           "the LPS version and the checker image that [release.yaml](../release.yaml) names.", "",
+           "| library | entry point | statements proved | system-call failures the statements allow | binaries | proof |",
+           "|---|---|---|---|---|---|"]
+    for r in rows:
+        stmts = ", ".join("`%s`" % s.name for s in r["statements"])
+        out.append("| %s | %s | %s ([statements](../%s)) | %s | [build record](../%s) | [%s](../%s) |" % (
+            r["library"], r["entry"], stmts, r["statement_file"], r["failures"], r["build_record"],
+            r["path"], r["path"]))
+    if not rows:
+        out.append("| - | - | none | - | - | - |")
+    return "\n".join(out) + "\n"
+
+
+def proofs_tsv(rows):
+    return _tsv(["library", "entry_point", "statement", "kind", "build", "failures", "statement_file", "proof",
+                 "build_record"],
+                [[r["library"], r["entry"], s.name, s.kind, s.data["builds"][-1], _failure_words(s.data),
+                  r["statement_file"], s.proof.path, r["build_record"]]
+                 for r in rows for s in r["statements"]])
+
+
+# The held fuzz targets, in the form every reader of them takes (tools/publish/release_pins.py read_held): one sorted
+# `<project>/<harness>` line each, each ended by a newline, and no byte when nothing is held.  tools/publish/ is
+# internal (paths.py), so a tree without it, as a release is, gets no such file.  It is no shared file (paths.SHARED):
+# the pull request that changes a project's private_harnesses renders it, and `generate --check` refuses a tree whose
+# file is missing or gives another list.
+PRIVATE_HARNESSES = "tools/publish/private-harnesses.txt"
+
+
+def private_harnesses_txt(tree, hold=None):
+    """The text of PRIVATE_HARNESSES: each held fuzz target of each project's private_harnesses (facts.Hold.entries),
+    as <project>/<harness>.  HOLD is facts.hold(tree), computed here when the caller has none."""
+    hold = facts.hold(tree) if hold is None else hold
+    return "".join("%s\n" % e for e in sorted(hold.entries))
+
+
+# ------------------------------------------------------------------ driver
+
+def render_all(tree):
+    out = {"README.md": readme(tree), "dune-project": dune_project(tree)}
+    out.update(index_files(tree))
+    for proj in tree.projects.values():
+        out[os.path.join(proj.dir, "README.md")] = project_readme(tree, proj)
+        if proj.data["status"] == "available" and "assets" in proj.data:
+            out[os.path.join(proj.dir, names.opam_package(tree.opam_stem, proj.name) + ".opam")] = \
+                project_opam(tree, proj)
+    for h in tree.harnesses():
+        out[os.path.join(h.dir, "README.md")] = harness_readme(tree, h)
+        if "distribution" in h.data:
+            out[os.path.join(h.dir, "Distribution.v")] = claims.distribution_v(h.project.name, h.name, h.data,
+                                                                               h.distribution_body())
+        if not h.builds():
+            continue
+        out[os.path.join(h.dir, "dune")] = harness_dune(h)
+        out[os.path.join(h.dir, "Images.v")] = claims.images_v(h.tree.namespace, h.project.name, h.name, h.data)
+        sy = symbols_v(h)
+        if sy is not None:
+            out[os.path.join(h.dir, "Symbols.v")] = sy
+        out[os.path.join(h.dir, "images", "dune")] = claims.images_dune(h.tree.namespace, h.project.name, h.name,
+                                                                        h.data)
+        out[os.path.join(h.dir, "Statements.v")] = statements_v(h)
+        ch = characterise_v(h)
+        if ch is not None:
+            out[os.path.join(h.dir, "Characterise.v")] = ch
+    for sid, pd in tree.proofs.items():
+        out[os.path.join(pd.path, "dune")] = proof_dune(tree, sid)
+    for unit, lib in tree.proof_libs.items():
+        p, _, hn = unit.partition("/")
+        out[os.path.join(lib, "dune")] = proof_lib_dune(tree.namespace, tree.opam_stem, p, hn)
+    # each per-project proofs and counterexamples folder that holds anything is shut out of the statement theory
+    for unit, lay in tree.unit_layouts.items():
+        p, _, hn = unit.partition("/")
+        if lay == layout.NEW:
+            for kind, d in zip(("proofs", "counterexamples"), layout.barrier_dirs(p, hn)):
+                if kind in tree.unit_kinds[unit]:
+                    out[os.path.join(d, "dune")] = barrier_dune()
+    if os.path.isdir(tree.path(os.path.dirname(PRIVATE_HARNESSES))):
+        out[PRIVATE_HARNESSES] = private_harnesses_txt(tree)
+    return out
+
+
+def _rendered_path(rel):
+    m = paths.classify(rel)
+    return len(m) == 1 and (m[0][0] == "gen" or m[0][1].endswith("/Distribution.v"))
+
+
+def existing_generated(root):
+    """Every path on disk that `render_all` owns: the gen class, and
+    Distribution.v, whose header it renders."""
+    found = []
+    for dp, dns, fns in os.walk(root):
+        rel_dir = os.path.relpath(dp, root)
+        dns[:] = [d for d in dns if not paths.ignored(os.path.normpath(os.path.join(rel_dir, d)))]
+        for f in fns:
+            rel = os.path.normpath(os.path.join(rel_dir, f))
+            if _rendered_path(rel):
+                found.append(rel)
+    return found
+
+
+def run(root, check=False, out=sys.stdout, shared=None):
+    """Render (or, with check, compare) the generated files, and fail a Distribution.v whose body does not define the
+    weights and values its harness.yaml gives (claims.distribution_body_error).  `shared` picks the scope: None every
+    generated file, False every one but the shared generated files (paths.SHARED), True the shared ones alone.  The
+    shared files are rendered from the whole tree, so the line's render after a merge owns them."""
+    tree = facts.load(root)
+    rules.check(tree)
+    rules.symbol_facts(tree)
+    if tree.errors:
+        for e in tree.errors:
+            print("error: " + e, file=out)
+        print("oft generate: %d error(s) in the facts; nothing rendered" % len(tree.errors), file=out)
+        return 1
+    # `oft generate` renders every generated file of every fuzz target, and reads the working tree to find the
+    # generated files the facts no longer produce (existing_generated).  In a sparse workspace that holds some
+    # proof libraries, the libraries it does not hold look empty: the render would write a library's dune file
+    # into a directory nothing else is in, and --check would call every generated file of those libraries
+    # missing.  So it refuses and names the commands that add them (INFRA-1385 R12).
+    missing = layout.unwritten_libraries(root, sorted("%s/%s" % (h.project.name, h.name) for h in tree.harnesses()))
+    if missing:
+        print(layout.unwritten_libraries_message("oft generate", missing, root), file=out)
+        return 1
+    in_scope = (lambda rel: True) if shared is None else (lambda rel: paths.is_shared(rel) is shared)
+    rendered = {rel: text for rel, text in render_all(tree).items() if in_scope(rel)}
+    bad = 0
+    for rel, text in sorted(rendered.items()):
+        p = os.path.join(root, rel)
+        old = facts.read_raw(p) if os.path.isfile(p) else None
+        if old == text:
+            continue
+        if check:
+            print("%s: %s" % (rel, "missing" if old is None else "differs from its rendering"), file=out)
+            bad += 1
+        else:
+            os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+            with open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write(text)
+    stale = [r for r in existing_generated(root) if r not in rendered and in_scope(r)]
+    for rel in sorted(stale):
+        if shared and not check:
+            # the render owns the shared files whole: one the facts no longer produce goes with the rest
+            os.remove(os.path.join(root, rel))
+            print("removed %s" % rel, file=out)
+            continue
+        print("%s: generated file that the facts no longer produce; remove it" % rel, file=out)
+        bad += 1
+    for h in tree.harnesses():
+        rel = os.path.join(h.dir, "Distribution.v")
+        if rel in rendered:
+            problem = claims.distribution_body_error(h.distribution_body(), h.data)
+            if problem:
+                print("%s: %s" % (rel, problem), file=out)
+                bad += 1
+    if not rendered:
+        print("oft generate: rendered nothing", file=out)
+        return 1
+    if shared is False:
+        print("oft generate: the shared generated files (tools/oft/paths.py SHARED) are left to the line's render",
+              file=out)
+    print("oft generate%s: %d files, %d problem(s)" % (" --check" if check else "", len(rendered), bad), file=out)
+    return 1 if bad else 0
