@@ -1,0 +1,59 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-10: ported to the binaries of release 2026.10.0 and LPS 2afba80c; the theorem statements are restated in the form this release states them. *)
+(* Modified by Theorem Labs, 2026-11: ported to LPS 727298f3 (the m_channel_reader premise; the reserved ledger; the recorded proof of madvise_ok replaced by plain proof). *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+From Stdlib Require Import ZArith NArith List Lia Bool Permutation.
+From LinuxProcessSemantics.LinuxProcessSem Require Import BvBase RiscvSemantics MemImageType Fs State Monad Specs Run.
+From OSSVerify.Proofs.leptonica.pix_orient_fuzzer.lib.K5.Lib Require Import PropExec MState Mem Exec ITree Nodes RzCPS NodesA NodesA_mm NodesA_madv.
+From OSSVerify.Proofs.leptonica.pix_orient_fuzzer.lib.K5.A23 Require Import ImageA.
+From OSSVerify.Proofs.leptonica.pix_orient_fuzzer.lib.K5.AS Require Import AsanAcct BackingAlgebra.
+From OSSVerify.Proofs.leptonica.pix_orient_fuzzer.lib.K5.A23 Require Import Layout RT_iface RT_frmkit D_defs RT_state RT_rep RT_facts0 RT_init RT_sys_stmt RT_sys_fixed.
+From OSSVerify.Proofs.leptonica.pix_orient_fuzzer.lib Require KReplay.
+Ltac2 kr_t_RT_sys_madvise () := "C69OSSVerify5KrLib2K53A238RT_iface9fdfs_onlyC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53Lib5RzCPS:mat_stableC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A238RT_state3layC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A238RT_state9layout_okC1?~~~~~~~~~~~~~~~K47Corelib7Numbers7BinNums8positive02K47Corelib7Numbers7BinNums1Z02C56Stdlib6ZArith6BinInt1Z6moduloC56Stdlib6ZArith6BinInt1Z2ltI47Corelib4Init5Logic2or00K47Corelib7Numbers7BinNums1N02I45stdpp9bitvector;definitions2bv00C45stdpp9bitvector;definitions;bv_unsignedC56Stdlib6ZArith6BinInt1Z2leC56Stdlib6ZArith6BinInt1Z3addC69OSSVerify5KrLib2K53A238RT_state9rtA_allowC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K52AS8AsanAcct=page_allowedbC1?~~~~~~~~~~~~~~~I47Corelib4Init9Datatypes6option00K47Corelib7Numbers7BinNums8positive01C45stdpp9bitvector;definitions7Z_to_bvK47Corelib4Init9Datatypes6option01K45stdpp9bitvector;definitions2bv01C69OSSVerify5KrLib2K53Lib5Nodes4aregC1?~~~~~~~~~~~~~~~I47Corelib4Init5Logic2eq00C56Stdlib6ZArith6BinInt1Z3subI47Corelib4Init9Datatypes4list00I47Corelib4Init9Datatypes4prod00K47Corelib4Init9Datatypes4list01I47Corelib4Init5Logic3and00C46Stdlib9micromega9SatDivModCZ_mod_nonneg_nonnegK46Stdlib9micromega6VarMap1t02K46Stdlib9micromega6VarMap1t01I46Stdlib9micromega6VarMap1t00I46Stdlib9micromega=RingMicromega7Formula00K46Stdlib9micromega7EnvRing5PExpr02K47Corelib4Init9Datatypes6option02K46Stdlib9micromega7EnvRing5PExpr01K46Stdlib9micromega7EnvRing5PExpr04C46Stdlib9micromega5Tauto8BFormulaK47Corelib4Init5Logic2eq01C46Stdlib9micromega:ZMicromega=ZTautoCheckerC46Stdlib9micromega6VarMap4findC46Stdlib9micromega:ZMicromegaCZTautoChecker_soundC47Corelib4Init5Logic3notC56Stdlib6ZArith6BinInt1Z6divideC56Stdlib6ZArith6BinInt1Z:mod_divideK46Stdlib9micromega5Tauto8GFormula07C56Stdlib6ZArith6BinInt1Z<divide_sub_rC69OSSVerify5KrLib2K52AS8AllocSimGpage_round_up_Z_alignedC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem5State?page_round_up_ZC69OSSVerify5KrLib2K53A23<RT_sys_fixed<maps0_shadowC1?~~~~~~~~~~~~~~~K47Corelib4Init9Datatypes4prod01C69OSSVerify5KrLib2K53A238RT_state7l_maps0C1?~~~~~~~~~~~~~~~C46Stdlib5Lists4List2InC69OSSVerify5KrLib2K53A238RT_iface4frmWC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53Lib5RzCPS3ASTC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53Lib5RzCPS3cpsC1?~~~~~~~~~~~~~~~C56Stdlib6ZArith6BinInt1Z>pow_pos_nonnegC56Stdlib6ZArith6BinInt1Z3powC56Stdlib6ZArith6BinInt1Z:pow_nonnegK47Corelib4Init9Datatypes3nat02K46Stdlib9micromega=RingMicromega5Psatz02K46Stdlib9micromega7EnvRing5PExpr07C47Corelib4Init5Logic6eq_indC69OSSVerify5KrLib2K53A236RT_rep6ARTM_AC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A239RT_facts0>rta_mat_stableC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53Lib5RzCPS>mat_stable_andC1?~~~~~~~~~~~~~~~C4ELinuxProcessSemantics?LinuxProcessSem>RiscvSemantics>ms_svc_pendingK47Corelib4Init5Logic3and01C4ELinuxProcessSemantics?LinuxProcessSem5State8m_vmmapsC4ELinuxProcessSemantics?LinuxProcessSem5State7vm_mapsC46Stdlib5Lists4List6filterC69OSSVerify5KrLib2K53A238RT_state7rt_mapsC1?~~~~~~~~~~~~~~~I46Stdlib7Sorting;Permutation;Permutation00C4ELinuxProcessSemantics?LinuxProcessSem5State;vm_reservedC4ELinuxProcessSemantics?LinuxProcessSem3RunAsegments_reservedC4ELinuxProcessSemantics?LinuxProcessSem5State8vm_limitC69OSSVerify5KrLib2K53A236RT_rep8artm_sysC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K52AS8AsanAcct:eager_usedC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K52AS>BackingAlgebra<model_ivs_wfC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236RT_rep>lazy_in_maps_AC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236RT_rep9confined0C1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236RT_rep;shadow_lazyC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236RT_rep;maps_zboundC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53Lib;NodesA_madv<noaccess_posC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53Lib6MState<unsigned_litC1?~~~~~~~~~~~~~~~C47Corelib4Init9Datatypes3sndI47Corelib4Init5Logic2ex00C69OSSVerify5KrLib2K53A23<RT_sys_fixedBl_maps0_in_rt_mapsC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A23<RT_sys_fixed<artm_in_mapsC1?~~~~~~~~~~~~~~~K47Corelib4Init5Logic2ex01C4ELinuxProcessSemantics?LinuxProcessSem5State;region_freeC69OSSVerify5KrLib2K53A23<RT_sys_fixedCreserved_free_aboveC1?~~~~~~~~~~~~~~~C47Corelib4Init5Logic8eq_ind_rC4ELinuxProcessSemantics?LinuxProcessSem5State9page_baseC4ELinuxProcessSemantics?LinuxProcessSem5State9m_vm_lazyC4ELinuxProcessSemantics?LinuxProcessSem5State>page_in_rangesC4ELinuxProcessSemantics?LinuxProcessSem5State;vm_noaccessC69OSSVerify5KrLib2K52AS>BackingAlgebra7coveredC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236RT_rep5shregC1?~~~~~~~~~~~~~~~C47Corelib4Init5Logic5proj2C69OSSVerify5KrLib2K53Lib;NodesA_madvQregion_free_noaccess_of_uncoveredC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53Lib;NodesA_madvImadvise_dontneed_ok_introC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A239RT_frmkitIast_madvise_dontneed_ms_fC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A238RT_iface8rt_allowC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A238RT_iface4ARTMC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A238RT_iface4ASTAC1?~~~~~~~~~~~~~~~K47Corelib4Init9Datatypes4list02K4ELinuxProcessSemantics?LinuxProcessSem5State=SyscallEffect01C69OSSVerify5KrLib2K53Lib5RzCPS5nretAC1?~~~~~~~~~~~~~~~K46Stdlib9micromega6VarMap1t03K46Stdlib9micromega=RingMicromega7Formula01K46Stdlib9micromega5Tauto8GFormula04K46Stdlib9micromega5Tauto8GFormula08K46Stdlib9micromega=RingMicromega5Psatz06K46Stdlib9micromega:ZMicromega;ZArithProof02K46Stdlib9micromega5Tauto8GFormula05K46Stdlib9micromega5Tauto8GFormula06K46Stdlib9micromega5Tauto8GFormula03K46Stdlib9micromega7EnvRing5PExpr03C6ELinuxProcessSemantics?LinuxProcessSem3Sys2Mm7MadviseCmadvise_dontneed_okC69OSSVerify5KrLib2K53A238RT_state8rt_eagerC1?~~~~~~~~~~~~~~~I46Stdlib5Lists4List>ForallOrdPairs00C4ELinuxProcessSemantics?LinuxProcessSem5State:vm_init_spC69OSSVerify5KrLib2K53A238RT_state5l_sp0C1?~~~~~~~~~~~~~~~C47Corelib4Init9Datatypes3fstI47Corelib7Numbers7BinNums1Z00K47Corelib7Numbers7BinNums1Z01I47Corelib4Init9Datatypes4bool00K47Corelib4Init9Datatypes4bool01C46Stdlib9micromega5Tauto5eKindI47Corelib4Init9Datatypes4unit00K46Stdlib9micromega5Tauto4kind01K46Stdlib9micromega=RingMicromega3Op205K47Corelib4Init9Datatypes4unit01K46Stdlib9micromega=RingMicromega3Op201K46Stdlib9micromega=RingMicromega3Op203K46Stdlib9micromega:ZMicromega;ZArithProof01I46Stdlib9micromega:ZMicromega;ZArithProof00C69OSSVerify5KrLib2K53A238RT_state7VMLIMITC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A238RT_state6E0_MAXC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236RT_rep8iv_apartC1?~~~~~~~~~~~~~~~I69OSSVerify5KrLib2K53A238RT_state4rtsA00C1?~~~~~~~~~~~~~~~I4ELinuxProcessSemantics?LinuxProcessSem5State5Model00I4ELinuxProcessSemantics?LinuxProcessSem>RiscvSemantics=machine_state00K47Corelib7Numbers7BinNums8positive03C69OSSVerify5KrLib2K53A236Layout?K_LOW_SHADOW_loC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236Layout?K_LOW_SHADOW_hiC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236Layout@K_HIGH_SHADOW_loC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236Layout@K_HIGH_SHADOW_hiC1?~~~~~~~~~~~~~~~K47Corelib4Init5Logic4True01I4ELinuxProcessSemantics?LinuxProcessSem5State7MemCopy00I47Corelib4Init9Datatypes3nat00I47Corelib4Init5Logic5False00C4ELinuxProcessSemantics?LinuxProcessSem5State9page_sizeC69OSSVerify5KrLib2K53A236ImageA5asegsC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A238RT_iface8SEGTOP_AC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236D_defs8asegs_wxC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A236D_defs;asegs_belowC1?~~~~~~~~~~~~~~~I47Corelib4Init5Logic4True00K47Corelib4Init9Datatypes3nat01C69OSSVerify5KrLib2K53A238RT_state4vposC1?~~~~~~~~~~~~~~~K47Corelib4Init9Datatypes4bool02C69OSSVerify5KrLib2K53A236RT_rep3RTAC1?~~~~~~~~~~~~~~~C69OSSVerify5KrLib2K53A23;RT_sys_stmt<madvise_nodeC1?~~~~~~~~~~~~~~~".
+Unset Lia Cache. Unset Nia Cache. Unset Nra Cache.
+(* [comment removed for export] *)
+Local Ltac Z.euclidean_division_equations_cleanup ::= idtac.
+
+Import ListNotations.
+Open Scope Z_scope.
+
+Theorem madvise_ok : madvise_node.
+Proof.
+  intros Σ PMc Pm K PB PE HPMc HPMs HL HPBal HPEal HPBE Hwin Hcov Hm.
+  unfold ASTA. cbn [rt_allow ARTM RTA].
+  unfold K_LOW_SHADOW_lo, K_LOW_SHADOW_hi, K_HIGH_SHADOW_lo, K_HIGH_SHADOW_hi in Hwin.
+  set (len := PE - PB) in *.
+  assert (Hlen : 0 < len) by (unfold len; lia).
+  assert (Hlal : len mod 4096 = 0)
+    by (unfold len; apply Z.mod_divide in HPBal, HPEal; try lia; apply Z.mod_divide; [lia|]; apply Z.divide_sub_r; assumption).
+  assert (Hrd : page_round_up_Z len = len) by (apply AllocSim.page_round_up_Z_aligned; [lia| unfold page_size; exact Hlal]).
+  pose proof (maps0_shadow _ HL) as (HE2 & HE4).
+  apply (ast_madvise_dontneed_ms_f asegs SEGTOP_A asegs_wx asegs_below (rtA_allow Σ) Pm (fun mo => ARTM_A Σ mo /\ PMc mo)
+           K (fun mo => ARTM_A Σ mo /\ PMc mo) PB len).
+  - lia.
+  - lia.
+  - unfold page_size. exact HPBal.
+  - rewrite Hrd. unfold len. lia.
+  - intros p H1 H2. rewrite Hrd in H2. apply Hcov; [exact H1| unfold len in H2; lia].
+  - apply mat_stable_and; [apply rta_mat_stable| exact HPMs].
+  - intros ms HPm. destruct (Hm ms HPm) as (S1 & S2 & S3 & S4 & S5). rewrite Hrd. repeat (split; [assumption|]). exact S5.
+  - intros mo (HA & HPc). pose proof HA as (Hperm & Eres & Elim & Heu & (Hwf & Hlz & Hsep & Hisp & Hcf & Hsl & Hzb & Hnp)).
+    rewrite Hrd. split; [|split; [exact HA| exact HPc]].
+    assert (Eua : bv_unsigned (Z_to_bv 64 PB) = PB) by (apply unsigned_lit; lia).
+    assert (Eul : bv_unsigned (Z_to_bv 64 len) = len) by (apply unsigned_lit; lia).
+    assert (Hin : exists e, In e (vm_maps (m_vmmaps mo)) /\ bv_unsigned (fst e) <= PB /\ PB + len <= bv_unsigned (fst e) + bv_unsigned (snd e)).
+    { destruct Hwin as [W|W].
+      - exists (Z_to_bv 64 0x7fff7000, Z_to_bv 64 0x10000000). split; [exact (artm_in_maps Σ mo _ HA (l_maps0_in_rt_maps Σ _ HE2))|].
+        cbn [fst snd]. rewrite !unsigned_lit by lia. unfold len. lia.
+      - exists (Z_to_bv 64 0x2008fff7000, Z_to_bv 64 0xdfff0001000). split; [exact (artm_in_maps Σ mo _ HA (l_maps0_in_rt_maps Σ _ HE4))|].
+        cbn [fst snd]. rewrite !unsigned_lit by lia. unfold len. lia. }
+    destruct Hin as (e & He & He1 & He2).
+    apply (madvise_dontneed_ok_intro _ _ _ e He); rewrite ?Eua, ?Eul; [exact He1| exact He2| |].
+    + apply (artm_res_free mo e _ _ Eres); [apply reserved_free_above; rewrite Eua; unfold SEGTOP_A; lia
+        | apply in_vpos; [exact He | lia] | rewrite ?Eua; lia | rewrite ?Eua, ?Eul; lia].
+    + apply region_free_noaccess_of_uncovered; [exact Hnp| rewrite Eul; exact Hlen| rewrite Eua, Eul; unfold len; lia|].
+      intros a Ha. rewrite Eua, Eul in Ha.
+      refine (proj2 (Hsl a _)). unfold shreg, K_LOW_SHADOW_lo, K_LOW_SHADOW_hi, K_HIGH_SHADOW_lo, K_HIGH_SHADOW_hi. unfold len in Ha. lia.
+Qed.
