@@ -1,0 +1,40 @@
+{
+  "sha": "ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6",
+  "node_id": "C_kwDOVTznFtoAKGFkMGE4NWQ0YzM3YmMxYzk4NWVmNzI4MjZhMDJlZTMzYjAxY2JiZDY",
+  "url": "https://api.github.com/repos/theorem-labs/oss-verify-proofs/git/commits/ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6",
+  "html_url": "https://github.com/theorem-labs/oss-verify-proofs/commit/ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6",
+  "author": {
+    "name": "sjawhar-agent[bot]",
+    "email": "329211056+sjawhar-agent[bot]@users.noreply.github.com",
+    "date": "2026-11-22T07:21:13Z"
+  },
+  "committer": {
+    "name": "GitHub",
+    "email": "noreply@github.com",
+    "date": "2026-11-22T07:21:13Z"
+  },
+  "tree": {
+    "sha": "a36ade652af3a438ecfa227a79240b7480b00ed4",
+    "url": "https://api.github.com/repos/theorem-labs/oss-verify-proofs/git/trees/a36ade652af3a438ecfa227a79240b7480b00ed4"
+  },
+  "message": "zlib: list the held fuzz target compress_roundtrip_full_fuzzer, whose folder the published zlib-bin.tar.zst carries (#50)\n\nPublic oft fetch zlib reads the zlib-bin.tar.zst of release v2026.11.3 with this entry. The second parent of this merge commit is the head that the code owner approved.",
+  "parents": [
+    {
+      "sha": "eedd214b4ade74b201c047ff3654cb4e968b832c",
+      "url": "https://api.github.com/repos/theorem-labs/oss-verify-proofs/git/commits/eedd214b4ade74b201c047ff3654cb4e968b832c",
+      "html_url": "https://github.com/theorem-labs/oss-verify-proofs/commit/eedd214b4ade74b201c047ff3654cb4e968b832c"
+    },
+    {
+      "sha": "3cb770d765d268febc6410de0edb6b385fd8396e",
+      "url": "https://api.github.com/repos/theorem-labs/oss-verify-proofs/git/commits/3cb770d765d268febc6410de0edb6b385fd8396e",
+      "html_url": "https://github.com/theorem-labs/oss-verify-proofs/commit/3cb770d765d268febc6410de0edb6b385fd8396e"
+    }
+  ],
+  "verification": {
+    "verified": true,
+    "reason": "valid",
+    "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJrApfpCRC1aQ7uu5UhlAAATyIQAG4KeXTdu9ISMi6dNLtOfh5x\noSJGRVfGK/nDlec4VpZO/ITqOS/TcwTU/lttPOremQf10LMxgU/u13JPU13A26Sz\n+3sNjz6dqOMGvI21pCFW9ntbqo3KofHlCs3tBNZ1K6MntLFAr06zFHcu/Atmm31O\nsIgF0EA5Y5Z6lMWZQvDv9WqHvYUNjkKAatxUGgvGKCtiNpDr4t0qNgiAguA9xYje\nlG7/VU1ImX6lh5LU2sVHJ3idPwMJ65pn+Zu8KofE3n/bO83Rn0AOeH6fD8WNw7N2\nVM9JDpqjyDo+CmlEuULVnZhnU5z94tQJp1iO5M6NdkJ39eMfMgIfFpTsz56YZf0p\nEJprRqs74K0DB2+4qA/jPqEIkOimHtjT3dArmryoC21sOSn5JnFlqTJya4Y9R47i\nMiqcBbhtQFuuR7frj0iqE6IbYiVADiXVpt3wSODDI2Ux3wWVnwrZdTe0lzzQmFiW\nnzcHcW46EkjlOZM802PD3inoYs1+jMC7jCIJ2amEvhvy6eYzAm6GuhSE9qt3Ttw0\nYjM9OelIFJb8B6pxf9z9SqzIWoz9qA5lL/gzElP1BD967LDITCHPBEDWfU8N/rYC\ntTiqB074mkzr7ujedO4KjPKWOHsoY1+2zXrSSDI2wzMVRZd1L03p/oqq4QKRnEZ0\nG8Ht4Fh72rjtAPMOhapS\n=42o/\n-----END PGP SIGNATURE-----\n",
+    "payload": "tree a36ade652af3a438ecfa227a79240b7480b00ed4\nparent eedd214b4ade74b201c047ff3654cb4e968b832c\nparent 3cb770d765d268febc6410de0edb6b385fd8396e\nauthor sjawhar-agent[bot] <329211056+sjawhar-agent[bot]@users.noreply.github.com> 1795332073 +0000\ncommitter GitHub <noreply@github.com> 1795332073 +0000\n\nzlib: list the held fuzz target compress_roundtrip_full_fuzzer, whose folder the published zlib-bin.tar.zst carries (#50)\n\nPublic oft fetch zlib reads the zlib-bin.tar.zst of release v2026.11.3 with this entry. The second parent of this merge commit is the head that the code owner approved.",
+    "verified_at": "2026-11-22T07:21:14Z"
+  }
+}

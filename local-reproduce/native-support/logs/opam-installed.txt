@@ -1,0 +1,35 @@
+# Packages matching: installed
+# Name                            # Installed # Synopsis
+base                              v0.16.5     Full standard library replacement for OCaml
+base-bigarray                     base
+base-threads                      base
+base-unix                         base
+conf-g++                          1.0         Virtual package relying on the g++ compiler (for C++)
+conf-gmp                          5           Virtual package relying on a GMP lib system installation
+conf-linux-libc-dev               0           Virtual package relying on the installation of the Linux kernel headers files
+conf-pkg-config                   5           Check if pkg-config is installed and create an opam switch local pkgconfig folder
+coq-core                          9.2.0       Compatibility binaries for Coq after the Rocq renaming
+coq-flocq                         4.2.2       A formalization of floating-point arithmetic for the Coq system
+csexp                             1.5.2       Parsing and printing of S-expressions in Canonical form
+dune                              3.23.0      Fast, portable, and opinionated build system
+dune-configurator                 3.23.1      Helper library for gathering system configuration
+ocaml                             4.14.2      The OCaml compiler (virtual package)
+ocaml-base-compiler               4.14.2      Official release 4.14.2
+ocaml-compiler-libs               v0.12.4     OCaml compiler libraries repackaged
+ocaml-config                      2           OCaml Switch Configuration
+ocaml-options-vanilla             1           Ensure that OCaml is compiled with no special options enabled
+ocamlfind                         1.9.8       A library manager for OCaml
+ppx_derivers                      1.2.1       Shared [@@deriving] plugin registry
+ppx_optcomp                       v0.16.0     Optional compilation for OCaml
+ppxlib                            0.35.0      Standard infrastructure for ppx rewriters
+rocq-core                         9.2.0       The Rocq Prover with its prelude
+rocq-linux-process-semantics-core dev         pinned to version dev at file:///home/wupeihan/projects/oss-verify-native-env/deps/lps-core
+rocq-read-file                    0.0.2       Read files from disk into Rocq primitive values
+rocq-runtime                      9.2.0       The Rocq Prover -- Core Binaries and Tools
+rocq-stdlib                       9.2.0       The Rocq Proof Assistant -- Standard Library
+rocq-stdpp                        1.13.0      An extended "Standard Library" for Rocq
+rocq-stdpp-bitvector              1.13.0      A library for bitvectors based on std++
+sexplib0                          v0.16.0     Library containing the definition of S-expressions and some base converters
+stdio                             v0.16.0     Standard IO library for OCaml
+stdlib-shims                      0.3.0       Backport some of the new stdlib features to older compiler
+zarith                            1.14        Implements arithmetic and logical operations over arbitrary-precision integers

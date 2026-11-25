@@ -1,0 +1,98 @@
+# BUILD LOG EXCERPT — NOT THE COMPLETE LOG
+SOURCE_REMOTE_PATH=/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T131821-build-2212848.log
+SOURCE_FILE_SHA256=f0ce38ec87d09126cdcac60e775297f25f91cf6582f1f7cd474cd50caa54305b
+SOURCE_FILE_BYTES=42933977
+SOURCE_FILE_LINES=740387
+SELECTION=first 35 lines; dune build command context; last 40 lines
+Every copied source line below is prefixed by its original 1-based line number. Gaps are omitted.
+
+
+--- source lines starting at 1 ---
+1: 2026-11-24T13:18:21+08:00
+2: HOST=422-4090 ROOT=/home/wupeihan/projects/oss-verify-proofs
+3: ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6
+4: + rocq --version
+5: The Rocq Prover, version 9.2
+6: compiled with OCaml 4.14.2
+7: + dune --version
+8: 3.23.0
+9: + bash /home/wupeihan/projects/oss-verify-native-env/prepare-view.sh /home/wupeihan/projects/oss-verify-proofs
+10: 2026-11-24T13:18:21+08:00
+11: ROOT=/home/wupeihan/projects/oss-verify-proofs
+12: SCRATCH=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4
+13: ARCHIVE=/home/wupeihan/projects/oss-verify-native-env/downloads/oss-verify-proofs-ad0a85d.tar.gz
+14: HASH_START /home/wupeihan/projects/oss-verify-proofs 8492 files; workers=8
+15: HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 1000 / 8492
+16: HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 2000 / 8492
+17: HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 3000 / 8492
+18: HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 4000 / 8492
+19: HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 5000 / 8492
+20: HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 6000 / 8492
+21: HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 7000 / 8492
+22: HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 8000 / 8492
+23: Main source closure: PASS 8769 entries
+24: HASH_START /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 8492 files; workers=8
+25: HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 1000 / 8492
+26: HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 2000 / 8492
+27: HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 3000 / 8492
+28: HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 4000 / 8492
+29: HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 5000 / 8492
+30: HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 6000 / 8492
+31: HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 7000 / 8492
+32: HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 8000 / 8492
+33: Native view source: PASS 8769 entries
+34: OFFICIAL_VERIFY_BUILDS (14, 0)
+35: Existing native preparation validated; no source or build files rewritten
+
+--- source lines starting at 43 ---
+43: 2026-11-24T13:18:31+08:00
+44: + cd /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view
+45: + dune build --display short -j 8 projects/zlib/checksum_fuzzer/Images.vo projects/zlib/checksum_fuzzer/Statements.vo projects/zlib/checksum_fuzzer/Characterise.vo projects/zlib/checksum_fuzzer/proofs/plain_halts/Proof.vo
+46: elf-snapshot projects/zlib/checksum_fuzzer/images/ClassifierAAsan.v,projects/zlib/checksum_fuzzer/images/ClassifierAAsan_seg_000.hex,projects/zlib/checksum_fuzzer/images/ClassifierAAsan_seg_001.hex,projects/zlib/checksum_fuzzer/images/ClassifierAAsan_seg_002.hex,projects/zlib/checksum_fuzzer/images/ClassifierAAsan_seg_003.hex
+47: elf_snapshot: wrote 4 segments to ClassifierAAsan.v (prefix=ClassifierAAsan). init_pc=0x113a8 phdr=0x10040/56/10
+48: elf-snapshot projects/zlib/checksum_fuzzer/images/ClassifierAUbsan.v,projects/zlib/checksum_fuzzer/images/ClassifierAUbsan_seg_000.hex,projects/zlib/checksum_fuzzer/images/ClassifierAUbsan_seg_001.hex,projects/zlib/checksum_fuzzer/images/ClassifierAUbsan_seg_002.hex,projects/zlib/checksum_fuzzer/images/ClassifierAUbsan_seg_003.hex
+49: elf_snapshot: wrote 4 segments to ClassifierAUbsan.v (prefix=ClassifierAUbsan). init_pc=0x113a8 phdr=0x10040/56/10
+50: elf-snapshot projects/zlib/checksum_fuzzer/images/ClassifierBUbsan.v,projects/zlib/checksum_fuzzer/images/ClassifierBUbsan_seg_000.hex,projects/zlib/checksum_fuzzer/images/ClassifierBUbsan_seg_001.hex,projects/zlib/checksum_fuzzer/images/ClassifierBUbsan_seg_002.hex,projects/zlib/checksum_fuzzer/images/ClassifierBUbsan_seg_003.hex
+51: elf_snapshot: wrote 4 segments to ClassifierBUbsan.v (prefix=ClassifierBUbsan). init_pc=0x113a8 phdr=0x10040/56/10
+
+--- source lines starting at 740348 ---
+740348: Warning:
+740349: /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view/_build/default/projects/zlib/checksum_fuzzer/proofs/lib/asan_agrees_alloc_forced_only/AS
+740350: was previously bound to
+740351: OSSVerify.zlib.checksum_fuzzer.proofs.lib.asan_agrees_alloc_forced_only.AS;
+740352: it is remapped to
+740353: OSSVerify.Proofs.zlib.checksum_fuzzer.lib.asan_agrees_alloc_forced_only.AS
+740354: [overriding-logical-loadpath,filesystem,default]
+740355: Warning:
+740356: /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view/_build/default/projects/zlib/checksum_fuzzer/proofs/lib/asan_agrees_alloc_forced_only
+740357: was previously bound to
+740358: OSSVerify.zlib.checksum_fuzzer.proofs.lib.asan_agrees_alloc_forced_only; it
+740359: is remapped to
+740360: OSSVerify.Proofs.zlib.checksum_fuzzer.lib.asan_agrees_alloc_forced_only
+740361: [overriding-logical-loadpath,filesystem,default]
+740362: Warning:
+740363: /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view/_build/default/projects/zlib/checksum_fuzzer/proofs/lib
+740364: was previously bound to OSSVerify.zlib.checksum_fuzzer.proofs.lib; it is
+740365: remapped to OSSVerify.Proofs.zlib.checksum_fuzzer.lib
+740366: [overriding-logical-loadpath,filesystem,default]
+740367: Warning:
+740368: /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view/_build/default/projects/zlib/checksum_fuzzer/proofs/plain_halts
+740369: was previously bound to OSSVerify.zlib.checksum_fuzzer.proofs.plain_halts; it
+740370: is remapped to OSSVerify.Proofs.zlib.checksum_fuzzer.plain_halts
+740371: [overriding-logical-loadpath,filesystem,default]
+740372: + for trace in _build/trace.csexp _build/log
+740373: + [[ ! -f _build/trace.csexp ]]
+740374: ++ basename _build/trace.csexp
+740375: + cp _build/trace.csexp /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T131821-build-2212848-trace.csexp
+740376: + for trace in _build/trace.csexp _build/log
+740377: + [[ ! -f _build/log ]]
+740378: + finish_log
+740379: + local rc=0
+740380: + trap - EXIT
+740381: + [[ 0 == 1 ]]
+740382: + printf 'EXIT_STATUS=%s\n' 0
+740383: EXIT_STATUS=0
+740384: + TZ=Asia/Shanghai
+740385: + date -Iseconds
+740386: 2026-11-24T13:34:22+08:00
+740387: + exit 0

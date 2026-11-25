@@ -1,0 +1,85 @@
+{
+  "copied_from": "Gray Wolf (graywolf.top)",
+  "copy_date": "2026-11-25",
+  "verification": "SHA-256 and byte length matched original remote files",
+  "files": [
+    {
+      "path": "env.sh",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/env.sh",
+      "sha256": "233454ba748dc58453c4893f479fb24a443243a02153fd7b6a02a83092eb143a",
+      "bytes": 397
+    },
+    {
+      "path": "fast-import-upstream.py",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/fast-import-upstream.py",
+      "sha256": "d813b8a4a7e1c7522d40fceac7ad63076be53375a740d25429358ac4b7a62f44",
+      "bytes": 4532
+    },
+    {
+      "path": "install-repeat.sh",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/install-repeat.sh",
+      "sha256": "63f9e09791bb3090250ea66e377deb846799ae63bc166217efbf774aa373c512",
+      "bytes": 1224
+    },
+    {
+      "path": "legacy/install.sh",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/install.sh",
+      "sha256": "174871f509018c42a7e35851cac8dcc6e53497ff0f96fb6f0b86b2be4c7941a5",
+      "bytes": 873
+    },
+    {
+      "path": "legacy/resume-install.sh",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/resume-install.sh",
+      "sha256": "3dd23aa351121ba6a286460582f483e4860b202452f7f39b8d59597588d5d401",
+      "bytes": 756
+    },
+    {
+      "path": "logs/input-archives.sha256",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/logs/input-archives.sha256",
+      "sha256": "c9eb176d70433c03046f93c271914896034245682449d6daf3600baee59869b6",
+      "bytes": 427
+    },
+    {
+      "path": "logs/lps-core-tree.sha256",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/logs/lps-core-tree.sha256",
+      "sha256": "6f389d73a4bf30a590643c6da84cb876c1338c4a093b66bbd43dc5ed5b2aea4d",
+      "bytes": 68
+    },
+    {
+      "path": "logs/opam-installed.txt",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/logs/opam-installed.txt",
+      "sha256": "54c3e5340e5d0396ae2dc85d05f234d04e1be1adfcbc2338bf8d1bb1598ca4a4",
+      "bytes": 3078
+    },
+    {
+      "path": "logs/switch.export",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/logs/switch.export",
+      "sha256": "6e958a70e3287bfdc426e1a505904c02041ed3427b8f6dac1d1e6553a0fae580",
+      "bytes": 3039
+    },
+    {
+      "path": "prefetch.py",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/prefetch.py",
+      "sha256": "86a0421d0c8c7c000223cc802fd63df5df4011fe435ffa49134bb32c64ee2325",
+      "bytes": 1753
+    },
+    {
+      "path": "prepare-view.sh",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/prepare-view.sh",
+      "sha256": "53e4abb205dc48a41d377d658311c2b110c8d726aa0b4a7eefa1586ea56fa6b8",
+      "bytes": 10452
+    },
+    {
+      "path": "qemu-install-native.sh",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/qemu-install-native.sh",
+      "sha256": "b76072849db583d1281df8914bd65640e6582b7abf7cb024c370b178d0e72a0a",
+      "bytes": 1045
+    },
+    {
+      "path": "selftest.sh",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/selftest.sh",
+      "sha256": "c1b5c8495cec5094758c91658d78c099a2c41405ac4b3bc78fec3ead7bbf561b",
+      "bytes": 1073
+    }
+  ]
+}

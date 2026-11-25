@@ -1,0 +1,24 @@
+2026-11-24T14:18:26+08:00
+HOST=422-4090 ROOT=/home/wupeihan/projects/oss-verify-proofs
+OFT_JOBS=8 DUNE_CACHE=disabled
+ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6
++ [[ -n '' ]]
++ [[ -f /home/wupeihan/projects/oss-verify-native-env/downloads/zlib-assets/zlib-bin.tar.zst ]]
++ ./oft fetch zlib --source /home/wupeihan/projects/oss-verify-native-env/downloads/zlib-assets
+zlib: zlib-bin.tar.zst (07ea992e0d07), 136 binaries, each SHA-256 checked; 12 licence files; 28 files of compress_roundtrip_full_fuzzer, minigzip_fuzzer skipped, which this tree has no home for
++ ./oft verify-sha zlib
+oft verify-sha: 136 binaries, 0 problem(s)
++ sha256sum projects/zlib/bin/checksum_fuzzer/checksum_fuzzer.plain
+abc3576b38eb0fc9760857226677d99b5d66abee1b84c42deb4781f400479c89  projects/zlib/bin/checksum_fuzzer/checksum_fuzzer.plain
++ file projects/zlib/bin/checksum_fuzzer/checksum_fuzzer.plain
+projects/zlib/bin/checksum_fuzzer/checksum_fuzzer.plain: ELF 64-bit LSB executable, UCB RISC-V, double-float ABI, version 1 (SYSV), statically linked, BuildID[sha1]=eca6d5676a13c7997a2b8c1b1c3d689ef79f82ab, stripped
++ finish_log
++ local rc=0
++ trap - EXIT
++ [[ 0 == 1 ]]
++ printf 'EXIT_STATUS=%s\n' 0
+EXIT_STATUS=0
++ TZ=Asia/Shanghai
++ date -Iseconds
+2026-11-24T14:19:05+08:00
++ exit 0

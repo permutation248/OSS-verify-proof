@@ -1,0 +1,37 @@
+2026-11-25T09:38:10+08:00
+HOST=422-4090 ROOT=/var/tmp/wupeihan-oss-verify-publish-20261125/smoke
+OFT_JOBS=8 DUNE_CACHE=disabled
+5af3e971c51d5d62dc04142988f54a69461e2b59
++ for cmd in rocq dune oft elf-snapshot qemu-riscv64 python3
++ command -v rocq
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/rocq
++ for cmd in rocq dune oft elf-snapshot qemu-riscv64 python3
++ command -v dune
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/dune
++ for cmd in rocq dune oft elf-snapshot qemu-riscv64 python3
++ command -v oft
+/var/tmp/wupeihan-oss-verify-publish-20261125/smoke/oft
++ for cmd in rocq dune oft elf-snapshot qemu-riscv64 python3
++ command -v elf-snapshot
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/elf-snapshot
++ for cmd in rocq dune oft elf-snapshot qemu-riscv64 python3
++ command -v qemu-riscv64
+/home/wupeihan/projects/oss-verify-native-env/qemu/usr/bin/qemu-riscv64
++ for cmd in rocq dune oft elf-snapshot qemu-riscv64 python3
++ command -v python3
+/home/wupeihan/projects/oss-verify-native-env/python-venv/bin/python3
++ python3 -c 'import idna,yaml; print("PYTHON_DEPENDENCIES_OK")'
+PYTHON_DEPENDENCIES_OK
++ oft --help
++ echo FRESH_LOG_DIRECTORY_AND_NATIVE_PATHS=PASS
+FRESH_LOG_DIRECTORY_AND_NATIVE_PATHS=PASS
++ finish_log
++ local rc=0
++ trap - EXIT
++ [[ 0 == 1 ]]
++ printf 'EXIT_STATUS=%s\n' 0
+EXIT_STATUS=0
++ TZ=Asia/Shanghai
++ date -Iseconds
+2026-11-25T09:38:11+08:00
++ exit 0

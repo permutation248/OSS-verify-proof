@@ -1,0 +1,25 @@
+2026-11-24T14:07:58+08:00
+ROOT=/home/wupeihan/projects/oss-verify-proofs
+ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6
+Linux 5.15.0-203-generic x86_64 GNU/Linux
+Filesystem     Type  Size  Used Avail Use% Mounted on
+zpool/home     zfs    26T   23T  3.0T  89% /home
+/dev/nvme0n1p4 xfs   1.7T  801G  926G  47% /
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/ocaml
+/home/wupeihan/projects/oss-verify-native-env/bin/opam
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/rocq
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/dune
+/home/wupeihan/projects/oss-verify-proofs/oft
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/elf-snapshot
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/gen-fd-lemmas
+/home/wupeihan/projects/oss-verify-proofs/local-reproduce/.venv/bin/python3
+/home/wupeihan/projects/oss-verify-native-env/qemu/usr/bin/qemu-riscv64
+The OCaml toplevel, version 4.14.2
+2.6.1
+The Rocq Prover, version 9.2
+compiled with OCaml 4.14.2
+3.23.0
+Python 3.10.12
+qemu-riscv64 version 10.0.11 (Debian 1:10.0.11+ds-0+deb13u1)
+Copyright (c) 2003-2025 Fabrice Bellard and the QEMU Project developers
+ENVIRONMENT_CHECK_EXIT=0

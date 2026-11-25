@@ -1,0 +1,152 @@
+2026-11-24T14:17:10+08:00
+HOST=422-4090 ROOT=/home/wupeihan/projects/oss-verify-proofs
+OFT_JOBS=8 DUNE_CACHE=disabled
+ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6
+++ git rev-parse HEAD
+++ cat local-reproduce/logs/verified-commit.txt
++ [[ ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6 == \a\d\0\a\8\5\d\4\c\3\7\b\c\1\c\9\8\5\e\f\7\2\8\2\6\a\0\2\e\e\3\3\b\0\1\c\b\b\d\6 ]]
++ bash /home/wupeihan/projects/oss-verify-native-env/prepare-view.sh /home/wupeihan/projects/oss-verify-proofs
+2026-11-24T14:17:10+08:00
+ROOT=/home/wupeihan/projects/oss-verify-proofs
+SCRATCH=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4
+ARCHIVE=/home/wupeihan/projects/oss-verify-native-env/downloads/oss-verify-proofs-ad0a85d.tar.gz
+HASH_START /home/wupeihan/projects/oss-verify-proofs 8492 files; workers=8
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 1000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 2000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 3000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 4000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 5000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 6000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 7000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 8000 / 8492
+Main source closure: PASS 8769 entries
+HASH_START /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 8492 files; workers=8
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 1000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 2000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 3000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 4000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 5000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 6000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 7000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 8000 / 8492
+Native view source: PASS 8769 entries
+OFFICIAL_VERIFY_BUILDS (14, 0)
+Existing native preparation validated; no source or build files rewritten
+VIEW=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view
+FACTS=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts
+TMPDIR=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/check-work
+Native preparation only: no Dune/Rocq build and no Program execution performed
+CHECK_COMMAND /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view/oft check zlib/checksum_fuzzer --facts-from /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts --parts statements
+CHECK_COMMAND /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view/oft check zlib/checksum_fuzzer --facts-from /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts --parts proofs --statements plain_halts
+PREPARE_EXIT_STATUS=0
+2026-11-24T14:17:13+08:00
++ qemu-riscv64 --version
+qemu-riscv64 version 10.0.11 (Debian 1:10.0.11+ds-0+deb13u1)
+Copyright (c) 2003-2025 Fabrice Bellard and the QEMU Project developers
++ sha256sum -c local-reproduce/logs/verified-program.sha256
+projects/zlib/bin/checksum_fuzzer/checksum_fuzzer.plain: OK
++ mkdir -p local-reproduce/inputs
++ python3 -
++ cd local-reproduce/inputs
++ for name in ascii bytes repeat4 too-short
++ out=/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-ascii.stdout
++ err=/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-ascii.stderr
++ set +e
++ timeout 60 qemu-riscv64 /home/wupeihan/projects/oss-verify-proofs/projects/zlib/bin/checksum_fuzzer/checksum_fuzzer.plain ascii.bin
++ rc=0
++ set -e
+++ wc -c
+++ wc -c
++ printf 'CASE=%s EXIT_STATUS=%s STDOUT_BYTES=%s STDERR_BYTES=%s\n' ascii 0 2 0
+CASE=ascii EXIT_STATUS=0 STDOUT_BYTES=2 STDERR_BYTES=0
++ printf '%s\n' '--- stdout ---'
+--- stdout ---
++ cat /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-ascii.stdout
+0
++ printf '%s\n' '--- stderr ---'
+--- stderr ---
++ cat /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-ascii.stderr
++ printf '%s\n' 0
++ expected=0
++ [[ ascii != too-short ]]
++ [[ 0 -eq 0 ]]
++ for name in ascii bytes repeat4 too-short
++ out=/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-bytes.stdout
++ err=/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-bytes.stderr
++ set +e
++ timeout 60 qemu-riscv64 /home/wupeihan/projects/oss-verify-proofs/projects/zlib/bin/checksum_fuzzer/checksum_fuzzer.plain bytes.bin
++ rc=0
++ set -e
+++ wc -c
+++ wc -c
++ printf 'CASE=%s EXIT_STATUS=%s STDOUT_BYTES=%s STDERR_BYTES=%s\n' bytes 0 2 0
+CASE=bytes EXIT_STATUS=0 STDOUT_BYTES=2 STDERR_BYTES=0
++ printf '%s\n' '--- stdout ---'
+--- stdout ---
++ cat /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-bytes.stdout
+0
++ printf '%s\n' '--- stderr ---'
+--- stderr ---
++ cat /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-bytes.stderr
++ printf '%s\n' 0
++ expected=0
++ [[ bytes != too-short ]]
++ [[ 0 -eq 0 ]]
++ for name in ascii bytes repeat4 too-short
++ out=/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-repeat4.stdout
++ err=/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-repeat4.stderr
++ set +e
++ timeout 60 qemu-riscv64 /home/wupeihan/projects/oss-verify-proofs/projects/zlib/bin/checksum_fuzzer/checksum_fuzzer.plain repeat4.bin
++ rc=0
++ set -e
+++ wc -c
+++ wc -c
++ printf 'CASE=%s EXIT_STATUS=%s STDOUT_BYTES=%s STDERR_BYTES=%s\n' repeat4 0 8 0
+CASE=repeat4 EXIT_STATUS=0 STDOUT_BYTES=8 STDERR_BYTES=0
++ printf '%s\n' '--- stdout ---'
+--- stdout ---
++ cat /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-repeat4.stdout
+0
+0
+0
+0
++ printf '%s\n' '--- stderr ---'
+--- stderr ---
++ cat /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-repeat4.stderr
++ printf '%s\n' 0
++ expected=0
++ [[ repeat4 != too-short ]]
++ [[ 0 -eq 0 ]]
++ for name in ascii bytes repeat4 too-short
++ out=/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-too-short.stdout
++ err=/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-too-short.stderr
++ set +e
++ timeout 60 qemu-riscv64 /home/wupeihan/projects/oss-verify-proofs/projects/zlib/bin/checksum_fuzzer/checksum_fuzzer.plain too-short.bin
++ rc=2
++ set -e
+++ wc -c
+++ wc -c
++ printf 'CASE=%s EXIT_STATUS=%s STDOUT_BYTES=%s STDERR_BYTES=%s\n' too-short 2 0 31
+CASE=too-short EXIT_STATUS=2 STDOUT_BYTES=0 STDERR_BYTES=31
++ printf '%s\n' '--- stdout ---'
+--- stdout ---
++ cat /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-too-short.stdout
++ printf '%s\n' '--- stderr ---'
+--- stderr ---
++ cat /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-too-short.stderr
+cli: input shorter than header
++ printf '%s\n' 2
++ expected=0
++ [[ too-short != too-short ]]
++ expected=2
++ [[ 2 -eq 2 ]]
++ finish_log
++ local rc=0
++ trap - EXIT
++ [[ 0 == 1 ]]
++ printf 'EXIT_STATUS=%s\n' 0
+EXIT_STATUS=0
++ TZ=Asia/Shanghai
++ date -Iseconds
+2026-11-24T14:17:15+08:00
++ exit 0

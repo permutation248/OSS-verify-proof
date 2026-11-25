@@ -1,0 +1,151 @@
+{
+  "copied_from": "Gray Wolf (graywolf.top)",
+  "copy_date": "2026-11-25",
+  "verification": "SHA-256 and byte length matched original remote files",
+  "files": [
+    {
+      "path": "20261124T133618-verify-3251828.log",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T133618-verify-3251828.log",
+      "sha256": "43d1786b1818b66ef10a2252dc0eec04a19b1e9f9970da990285755b0a70d164",
+      "bytes": 7847
+    },
+    {
+      "path": "20261124T141710-run-1322098-ascii.exit",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-ascii.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "20261124T141710-run-1322098-ascii.stderr",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-ascii.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "20261124T141710-run-1322098-ascii.stdout",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-ascii.stdout",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "20261124T141710-run-1322098-bytes.exit",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-bytes.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "20261124T141710-run-1322098-bytes.stderr",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-bytes.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "20261124T141710-run-1322098-bytes.stdout",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-bytes.stdout",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "20261124T141710-run-1322098-repeat4.exit",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-repeat4.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "20261124T141710-run-1322098-repeat4.stderr",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-repeat4.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "20261124T141710-run-1322098-repeat4.stdout",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-repeat4.stdout",
+      "sha256": "6a33a504c8d16194914401f4f46532de96e1b63119fc5981341c6b65c6c27096",
+      "bytes": 8
+    },
+    {
+      "path": "20261124T141710-run-1322098-too-short.exit",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-too-short.exit",
+      "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+      "bytes": 2
+    },
+    {
+      "path": "20261124T141710-run-1322098-too-short.stderr",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-too-short.stderr",
+      "sha256": "f8aa73763f9cf4d44f6735d07566bcda89886d0a6959190c036522db53bbc44f",
+      "bytes": 31
+    },
+    {
+      "path": "20261124T141710-run-1322098-too-short.stdout",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098-too-short.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "20261124T141710-run-1322098.log",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141710-run-1322098.log",
+      "sha256": "d292b5b384292d4eaeb309d0db5de4a33c0d274bf97ebf0880e374f8850b85d3",
+      "bytes": 7410
+    },
+    {
+      "path": "20261124T141826-fetch-1356578.log",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/20261124T141826-fetch-1356578.log",
+      "sha256": "e4b3e5a7ca39d6c71e809ed39bfe7930352b6b82eef852d6b56f9b53158e2d19",
+      "bytes": 1265
+    },
+    {
+      "path": "build.exit",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/build.exit",
+      "sha256": "6f4e8c8e9346ccba632dae90c0b2f3507e7e093bce779254d5ec2e84f5a2a121",
+      "bytes": 20
+    },
+    {
+      "path": "environment-final.log",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/environment-final.log",
+      "sha256": "969dc2cd1300cac58b56577bc177f576e4131ca8bec302af64fb9700380bd44e",
+      "bytes": 1253
+    },
+    {
+      "path": "native-selftest.log",
+      "source_path": "/home/wupeihan/projects/oss-verify-native-env/logs/native-selftest.log",
+      "sha256": "3661b6fb259d388ef74012e5b02853efaa1373531ec75e3f83b237f52403857a",
+      "bytes": 1711
+    },
+    {
+      "path": "run.exit",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/run.exit",
+      "sha256": "50b78517f84661b8ecae50036717ae1281e1b7653c9d6c5fd79561dee3786c10",
+      "bytes": 18
+    },
+    {
+      "path": "tmp/oft-check-2slgdwhg/proof-bl6u8jby/assumptions.out",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/tmp/oft-check-2slgdwhg/proof-bl6u8jby/assumptions.out",
+      "sha256": "eab98922740244b9fba90deb6bcc7e6bc9e928951a715710219f3a338a54c1b8",
+      "bytes": 2239
+    },
+    {
+      "path": "tmp/oft-check-2slgdwhg/proof-bl6u8jby/wrap/Wrapper.v",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/tmp/oft-check-2slgdwhg/proof-bl6u8jby/wrap/Wrapper.v",
+      "sha256": "4198bfb28816a5ff00b1923b2e65c2eae8609dd007a319070ff3cfe4e5f252c3",
+      "bytes": 449
+    },
+    {
+      "path": "tmp/oft-check-uwfhehc5/defined-j4abtsvu/Defined.v",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/tmp/oft-check-uwfhehc5/defined-j4abtsvu/Defined.v",
+      "sha256": "86b42997a16958fd1c0f1a1ecc274c7d73ec5f1ca93b15b0b533034c7c54a3ec",
+      "bytes": 2797
+    },
+    {
+      "path": "tmp/oft-check-uwfhehc5/defined-j4abtsvu/assumptions.out",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/tmp/oft-check-uwfhehc5/defined-j4abtsvu/assumptions.out",
+      "sha256": "304bcd232f8a8d23b8cb958a54cae528e0bc44b58d3f40e6559f91e322c88706",
+      "bytes": 2005
+    },
+    {
+      "path": "verify.exit",
+      "source_path": "/home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/verify.exit",
+      "sha256": "bf834480adc6bcc66effe903dc6c74f3a1e2e78f700777b27d8f4ed66d5e058d",
+      "bytes": 21
+    }
+  ]
+}

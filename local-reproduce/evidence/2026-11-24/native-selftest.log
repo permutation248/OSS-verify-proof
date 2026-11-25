@@ -1,0 +1,54 @@
++ cd /home/wupeihan/projects/oss-verify-native-env/selftest
++ rocq --version
+The Rocq Prover, version 9.2
+compiled with OCaml 4.14.2
++ dune --version
+3.23.0
++ ocamlc -version
+4.14.2
++ opam --version
+2.6.1
++ command -v rocq dune elf-snapshot gen-fd-lemmas
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/rocq
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/dune
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/elf-snapshot
+/home/wupeihan/projects/oss-verify-native-env/opam-root/oss-verify-4.14/bin/gen-fd-lemmas
++ opam list --installed
++ opam switch export /home/wupeihan/projects/oss-verify-native-env/logs/switch.export
++ cat
++ cat
++ rocq compile -native-compiler no -R . NativeSelftest Ok.v
+strong_universal_error_free_T_budgets
+     : BinNums.Z ->
+       BinNums.Z -> MemImageType.Image -> MemImageType.Image -> Prop
+halts_allowed_T_scfg_budgets
+     : Run.SpuriousCfg ->
+       BinNums.Z ->
+       list
+         (definitions.bv
+            (BinNat.N.pos
+               (BinNums.xO
+                  (BinNums.xO
+                     (BinNums.xO
+                        (BinNums.xO (BinNums.xO (BinNums.xO BinNums.xH)))))))) ->
+       MemImageType.Image -> Prop
++ set +e
++ rocq compile -native-compiler no -R . NativeSelftest Bad.v
++ bad_status=1
++ set -e
++ cat bad.stdout bad.stderr
+File "./Bad.v", line 1, characters 26-27:
+Error:
+The term "I" has type "True" while it is expected to have type "False".
+
++ printf 'BAD_PROOF_EXIT=%s\n' 1
+BAD_PROOF_EXIT=1
++ test 1 -ne 0
++ elf-snapshot --help
++ echo NATIVE_SELFTEST_PASS
+NATIVE_SELFTEST_PASS
++ s=0
++ echo SELFTEST_EXIT=0
+SELFTEST_EXIT=0
++ date -Is
+2026-11-24T13:06:57+08:00

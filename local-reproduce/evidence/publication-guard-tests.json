@@ -1,0 +1,42 @@
+[
+  {
+    "case": "unchanged_original",
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "tree": "a36ade652af3a438ecfa227a79240b7480b00ed4",
+    "stdout": "COMMITTED_UPSTREAM_TREE=PASS a36ade652af3a438ecfa227a79240b7480b00ed4\nWorking-tree source and binaries are checked separately by prepare-view.sh.",
+    "stderr": ""
+  },
+  {
+    "case": "added_local_reproduce",
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "tree": "e7e49a24fc7804a698bf7e82b2cd5ade3fa93073",
+    "stdout": "COMMITTED_UPSTREAM_TREE=PASS a36ade652af3a438ecfa227a79240b7480b00ed4\nWorking-tree source and binaries are checked separately by prepare-view.sh.",
+    "stderr": ""
+  },
+  {
+    "case": "changed_upstream_README",
+    "expected_exit": 1,
+    "actual_exit": 1,
+    "tree": "72a8ae62b9db3cb86a96c33656e33f35c2027c1a",
+    "stdout": "",
+    "stderr": "Upstream source tree changed: f1ec99df2829e428abcfae321025cc1fe5f20f59; expected a36ade652af3a438ecfa227a79240b7480b00ed4"
+  },
+  {
+    "case": "removed_release_yaml",
+    "expected_exit": 1,
+    "actual_exit": 1,
+    "tree": "b433a82bb853d94e8a402724eeecf1880d54ac05",
+    "stdout": "",
+    "stderr": "Upstream source tree changed: 4d34b4948a4cb483690252d181f03e51812df2a3; expected a36ade652af3a438ecfa227a79240b7480b00ed4"
+  },
+  {
+    "case": "added_similar_prefix",
+    "expected_exit": 1,
+    "actual_exit": 1,
+    "tree": "377d354e0fa6a2cdfe58caaa72d09b5b63c32f2e",
+    "stdout": "",
+    "stderr": "Upstream source tree changed: b6b0a541299f06f63d15166471798b09539b88ef; expected a36ade652af3a438ecfa227a79240b7480b00ed4"
+  }
+]

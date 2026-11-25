@@ -1,0 +1,109 @@
+2026-11-24T13:36:18+08:00
+HOST=422-4090 ROOT=/home/wupeihan/projects/oss-verify-proofs
+OFT_JOBS=32 DUNE_CACHE=disabled
+ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6
++ SAVE_CHECK_WORK=1
++ rm -f local-reproduce/logs/verified-commit.txt local-reproduce/logs/verified-program.sha256
++ bash /home/wupeihan/projects/oss-verify-native-env/prepare-view.sh /home/wupeihan/projects/oss-verify-proofs
+2026-11-24T13:36:18+08:00
+ROOT=/home/wupeihan/projects/oss-verify-proofs
+SCRATCH=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4
+ARCHIVE=/home/wupeihan/projects/oss-verify-native-env/downloads/oss-verify-proofs-ad0a85d.tar.gz
+HASH_START /home/wupeihan/projects/oss-verify-proofs 8492 files; workers=8
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 1000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 2000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 3000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 4000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 5000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 6000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 7000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 8000 / 8492
+Main source closure: PASS 8769 entries
+HASH_START /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 8492 files; workers=8
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 1000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 2000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 3000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 4000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 5000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 6000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 7000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 8000 / 8492
+Native view source: PASS 8769 entries
+OFFICIAL_VERIFY_BUILDS (14, 0)
+Existing native preparation validated; no source or build files rewritten
+VIEW=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view
+FACTS=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts
+TMPDIR=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/check-work
+Native preparation only: no Dune/Rocq build and no Program execution performed
+CHECK_COMMAND /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view/oft check zlib/checksum_fuzzer --facts-from /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts --parts statements
+CHECK_COMMAND /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view/oft check zlib/checksum_fuzzer --facts-from /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts --parts proofs --statements plain_halts
+PREPARE_EXIT_STATUS=0
+2026-11-24T13:36:38+08:00
++ cd /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view
++ ./oft check zlib/checksum_fuzzer --facts-from /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts --parts statements
+stack: at least 256 MiB usable (soft 2147483648, hard unlimited; started with soft 2147483648, hard unlimited; runtime linux)
+projects/zlib/checksum_fuzzer: statements compiled, each of the 40 listed defined; 2 rules run, 2 under theories/
+zlib/checksum_fuzzer: peak memory 0.9 GiB (anon in this process's cgroup, sampled every 2 s) on 32 CPUs
+COMPILED 7 file(s) with dune -j 32
+oft check: 1 step(s) passed, 0 failed; work files in /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/check-work/oft-check-uwfhehc5
++ ./oft check zlib/checksum_fuzzer --facts-from /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts --parts proofs --statements plain_halts
+stack: at least 256 MiB usable (soft 2147483648, hard unlimited; started with soft 2147483648, hard unlimited; runtime linux)
+projects/zlib/checksum_fuzzer/proofs/lib: 7560 of 8099 library targets compiled (log /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/check-work/oft-check-2slgdwhg/zlib.checksum_fuzzer.lib.dune.log)
+projects/zlib/checksum_fuzzer: 1 proof directory built by dune, 0 rules run (log /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/check-work/oft-check-2slgdwhg/zlib.checksum_fuzzer.proofs.dune.log)
+projects/zlib/checksum_fuzzer/proofs/plain_halts: proves zlib/checksum_fuzzer/plain_halts; assumptions: 16 axioms, all allowed
+zlib/checksum_fuzzer: peak memory 27.8 GiB (anon in this process's cgroup, sampled every 2 s) on 32 CPUs
+COMPILED 8107 file(s) with dune -j 32
+oft check: 1 step(s) passed, 0 failed; work files in /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/check-work/oft-check-2slgdwhg
++ bash /home/wupeihan/projects/oss-verify-native-env/prepare-view.sh /home/wupeihan/projects/oss-verify-proofs
+2026-11-24T14:16:14+08:00
+ROOT=/home/wupeihan/projects/oss-verify-proofs
+SCRATCH=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4
+ARCHIVE=/home/wupeihan/projects/oss-verify-native-env/downloads/oss-verify-proofs-ad0a85d.tar.gz
+HASH_START /home/wupeihan/projects/oss-verify-proofs 8492 files; workers=8
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 1000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 2000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 3000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 4000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 5000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 6000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 7000 / 8492
+HASH_PROGRESS /home/wupeihan/projects/oss-verify-proofs 8000 / 8492
+Main source closure: PASS 8769 entries
+HASH_START /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 8492 files; workers=8
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 1000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 2000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 3000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 4000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 5000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 6000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 7000 / 8492
+HASH_PROGRESS /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view 8000 / 8492
+Native view source: PASS 8769 entries
+OFFICIAL_VERIFY_BUILDS (14, 0)
+Existing native preparation validated; no source or build files rewritten
+VIEW=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view
+FACTS=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts
+TMPDIR=/var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/check-work
+Native preparation only: no Dune/Rocq build and no Program execution performed
+CHECK_COMMAND /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view/oft check zlib/checksum_fuzzer --facts-from /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts --parts statements
+CHECK_COMMAND /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/view/oft check zlib/checksum_fuzzer --facts-from /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/facts --parts proofs --statements plain_halts
+PREPARE_EXIT_STATUS=0
+2026-11-24T14:16:32+08:00
++ cd /home/wupeihan/projects/oss-verify-proofs
+++ git rev-parse HEAD
++ [[ ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6 == ad0a85d4c37bc1c985ef72826a02ee33b01cbbd6 ]]
++ git rev-parse HEAD
++ sha256sum projects/zlib/bin/checksum_fuzzer/checksum_fuzzer.plain
++ finish_log
++ local rc=0
++ trap - EXIT
++ [[ 1 == 1 ]]
++ [[ -d /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/check-work ]]
++ mkdir -p /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/tmp
++ rsync -a /var/tmp/wupeihan-oss-verify-reproduce/ad0a85d4/check-work/ /home/wupeihan/projects/oss-verify-proofs/local-reproduce/logs/tmp/
++ printf 'EXIT_STATUS=%s\n' 0
+EXIT_STATUS=0
++ TZ=Asia/Shanghai
++ date -Iseconds
+2026-11-24T14:16:33+08:00
++ exit 0

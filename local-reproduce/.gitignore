@@ -1,0 +1,5 @@
+# Runtime state stays on the machine; evidence/ contains reviewed historical records.
+/.venv
+/inputs/
+/logs/
+__pycache__/
