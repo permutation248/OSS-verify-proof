@@ -1,0 +1,363 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-10: ported to the binaries of release 2026.10.0 and LPS 2afba80c; the theorem statements are restated in the form this release states them. *)
+(* Modified by Trevor Hansen, 2026-11: module names. *)
+(* Modified by Theorem Labs, 2026-11: ported toward LPS 727298f3 by the change of the same file of cgif/cgif_rgb_fuzzer, its addresses relocated to this unit's binaries. *)
+From Stdlib Require Import ZArith NArith List Lia Bool.
+From LinuxProcessSemantics.LinuxProcessSem Require Import
+BvBase RiscvSemantics MemImageType StackLayout Fs State Monad Specs Run.
+From LinuxProcessSemantics.Riscv Require Import Prelude Instr Decode DecodeC Sem.
+From OSSVerify.Proofs.libtasn1.asn1_get_length_der_fuzzer.lib.C Require Import YP0g YP0c.
+From OSSVerify.Proofs.libtasn1.asn1_get_length_der_fuzzer.lib.C Require Import
+YK11 YK0i YK0j YK14 YK1b YK15 YK0o YK0v YK02 YQ0k YN06.
+From OSSVerify.Proofs.libtasn1.asn1_get_length_der_fuzzer.lib.C Require Import YP09 YP0b YO2i YO2n.
+From OSSVerify.Proofs.libtasn1.asn1_get_length_der_fuzzer.lib.C Require Import
+YQ0j YQ0b YQ03 YQ0i YQ0h YQ09 YQ04 YQ05 YQ0e YQ02.
+From OSSVerify.Proofs.libtasn1.asn1_get_length_der_fuzzer.lib.C Require Import YH04 YH07 YH06.
+From OSSVerify.Proofs.libtasn1.asn1_get_length_der_fuzzer.lib.C Require Import YN05.
+From OSSVerify.Proofs.libtasn1.asn1_get_length_der_fuzzer.lib.C Require Import YK0a.
+Import ListNotations.
+Unset Lia Cache. Unset Nia Cache.
+Open Scope bv_scope.
+Open Scope Z_scope.
+Section a. Context {fx : YK11.FPState} {rc : YN05.RunCeil}.
+Definition LOCK : Z := src2_D_malloc_lock.
+Definition CTX : Z := src2_D_malloc_context.
+Definition LIBC : Z := src2_D_libc.
+Definition TP : Z := src2_tp.
+Definition ERRNO : Z := src2_tp - 164.
+Definition GOT : Z := src2_D_got_stack_chk_guard.
+Definition GUARD : Z := src2_D_stack_chk_guard.
+Definition AMS : Z := 160.
+Definition PC_MCRET : Z := src2_A_alloc_meta + 0x7c.
+Definition PC_A2 : Z := src2_A_alloc_meta + 0xa4.
+Definition PC_V : Z := src2_A_alloc_meta + 0x1b8.
+Definition PC_GRET : Z := src2_A_alloc_meta + 0x18c.
+Definition PC_O : Z := src2_A_alloc_meta + 0x218.
+Definition PC_RET : Z := src2_A_alloc_meta + 0x2a4.
+Definition run_ (ss : sstate) : sstate := fst (sym_runN src2segs src2tbl FUEL ss).
+Definition runto_ (pc : Z) (ss : sstate) : sstate := fst (sym_run_toN src2segs src2tbl FUEL pc ss).
+Definition addR (r : region) (ss : sstate) : sstate := mkSS (ss_pc ss) (ss_regs ss) (r :: ss_mem ss) (ss_resv ss) (ss_facts ss).
+Definition resume_ (ss : sstate) (rv : sv) (rs : smem) : sstate := mkSS (ss_pc ss + 4) (sr_set (ss_regs ss) 10 rv) rs None (ss_facts ss).
+Definition setmem (rs : smem) (ss : sstate) : sstate := mkSS (ss_pc ss) (ss_regs ss) rs (ss_resv ss) (ss_facts ss).
+Definition setfacts (G : facts) (ss : sstate) : sstate := mkSS (ss_pc ss) (ss_regs ss) (ss_mem ss) (ss_resv ss) G.
+Definition setpc (pc : Z) (ss : sstate) : sstate := mkSS pc (ss_regs ss) (ss_mem ss) (ss_resv ss) (ss_facts ss).
+Fixpoint lupd_nth {A} (l : list A) (i : nat) (f : A -> A) : list A :=
+match l, i with
+| [], _ => []
+| x :: l', O => f x :: l'
+| x :: l', S i' => x :: lupd_nth l' i' f
+end.
+Definition upd_chunk (i : nat) (off : Z) (cv : cval) (ss : sstate) : sstate :=
+setmem (lupd_nth (ss_mem ss) i (fun r =>
+mkRegion (r_base r) (r_lo r) (r_hi r) (r_wlo r) (r_whi r)
+(map (fun c => if Z.eqb (c_off c) off then mkChunk off cv else c) (r_chunks r)))) ss.
+Definition drop_chunk (i : nat) (off : Z) (ss : sstate) : sstate :=
+setmem (lupd_nth (ss_mem ss) i (fun r =>
+mkRegion (r_base r) (r_lo r) (r_hi r) (r_wlo r) (r_whi r) (List.filter (fun c => negb (Z.eqb (c_off c) off)) (r_chunks r)))) ss.
+Definition regs_am : list sv :=
+SLit 0 :: SOff 1 0 :: SOff 2 0 :: SOff 3 0 :: SLit TP :: map (fun r => SOff r 0) (seq 5 27).
+Definition R_stack : region := mkRegion (Some 2%nat) (-AMS) 0 (-AMS) 0 [].
+Definition R_got : region := mkRegion None GOT (GOT + 8) 0 0 [mkChunk GOT (CVal 8 (SLit GUARD))].
+Definition R_guard : region := mkRegion None GUARD (GUARD + 8) 0 0 [mkChunk GUARD (CVal 8 (SOff 32 0))].
+Definition R_pgsz : region := mkRegion None (LIBC + 48) (LIBC + 56) 0 0 [mkChunk (LIBC + 48) (CVal 8 (SLit 4096))].
+Definition R_errno : region := mkRegion None ERRNO (ERRNO + 4) ERRNO (ERRNO + 4) [].
+Definition R_ctxA (i : bool) : region :=
+mkRegion None CTX (CTX + 12) CTX (CTX + 12)
+[mkChunk CTX (CVal 8 (if i then SOff 0 0 else SLit 0)); mkChunk (CTX + 8) (CVal 4 (SLit (if i then 1 else 0)))].
+Definition R_ctxB : region :=
+mkRegion None (CTX + 16) (CTX + 80) (CTX + 16) (CTX + 80)
+[mkChunk (CTX + 16) (CVal 8 (SOff 33 0)); mkChunk (CTX + 24) (CVal 8 (SOff 36 0));
+mkChunk (CTX + 32) (CVal 8 (SOff 37 0)); mkChunk (CTX + 40) (CVal 8 (SOff 38 0));
+mkChunk (CTX + 48) (CVal 8 (SOff 39 0)); mkChunk (CTX + 56) (CVal 8 (SOff 40 0));
+mkChunk (CTX + 64) (CVal 8 (SOff 41 0)); mkChunk (CTX + 72) (CVal 8 (SOff 42 0))].
+Definition R_ctxC : region :=
+mkRegion None (CTX + 920) (CTX + 928) (CTX + 920) (CTX + 928) [mkChunk (CTX + 920) (CVal 8 (SOff 43 0))].
+Definition R_auxp : region := mkRegion None (LIBC + 8) (LIBC + 16) 0 0 [mkChunk (LIBC + 8) (CVal 8 (SOff 44 0))].
+(* #38.  The auxv as [get_random_secret] reads it: musl walks the vector from
+   pair 0 to AT_NULL reading every KEY, and copies AT_RANDOM's VALUE.  So the
+   fixture holds the key word of every pair ([APC.AUXV_KEYS], read off the
+   model's [StackLayout.auxv_entries]; pair k at byte 16 * k) and AT_RANDOM's
+   value word at 392 = 16 * 24 + 8, in ascending offset order.  It was ten
+   pairs at 0,16,...,144 with AT_RANDOM's value at 136, the pre-revision
+   ten-pair layout; with only the ten keys the plan names, the run stopped at
+   pair 0's key ([RS_stopped (SR_load (Some 44%nat) 0)]) instead of reaching
+   memcpy.  A key is a literal of [auxv_entries], so naming all of them asks
+   nothing of the launch.
+
+   THIS IS A CLOSED STATE THAT [Eval vm_compute] REDUCES: the two CONFIG_RSEQ
+   cases are two closed instantiations, [R_auxv_t] and [R_auxv_f], and
+   [R_auxv_of_eq] ties both to the one builder [auxv_region]. *)
+Definition auxv_key_chunk (r : Z) (k : nat) : chunk :=
+mkChunk (16 * Z.of_nat k) (CVal 8 (SLit (nth k (APC.AUXV_KEYS r) 0))).
+Definition auxv_region (rs : bool) : region :=
+mkRegion (Some 44%nat) 0 (APC.AUXSZ (APC.rseq_z rs)) 0 0
+(map (auxv_key_chunk (APC.rseq_z rs)) (seq 0 25)
+ ++ mkChunk APC.AT_RANDOM_VOFF (CVal 8 (SOff 45 0))
+ :: map (auxv_key_chunk (APC.rseq_z rs)) (seq 25 (length (APC.AUXV_KEYS (APC.rseq_z rs)) - 25))).
+Definition R_auxv_t : region := Eval vm_compute in auxv_region true.
+Definition R_auxv_f : region := Eval vm_compute in auxv_region false.
+Definition R_auxv_of (rs : bool) : region := if rs then R_auxv_t else R_auxv_f.
+Lemma R_auxv_of_eq : forall rs, R_auxv_of rs = auxv_region rs.
+Proof. intros [|]; vm_compute; reflexivity. Qed.
+Definition R_fh : region := mkRegion (Some 33%nat) 0 16 0 16 [mkChunk 0 (CVal 8 (SOff 35 0)); mkChunk 8 (CVal 8 (SOff 34 0))].
+Definition R_nx : region := mkRegion (Some 34%nat) 0 8 0 8 [].
+Definition R_pr : region := mkRegion (Some 35%nat) 8 16 8 16 [].
+Definition R_am : region := mkRegion (Some 36%nat) 0 16 0 16 [].
+Definition R_tl : region := mkRegion (Some 41%nat) 8 16 8 16 [].
+Definition zregion (n : nat) (off len : Z) : region :=
+mkRegion (Some n) off (off + len) off (off + len) [mkChunk off (CZero len)].
+Definition mem_am1 : smem := [R_stack; R_got; R_guard; R_pgsz; R_ctxA true; R_ctxB; R_ctxC; R_errno].
+Definition mem_am0_of (rs : bool) : smem :=
+[R_stack; R_got; R_guard; R_pgsz; R_ctxA false; R_ctxB; R_ctxC; R_errno; R_auxp; R_auxv_of rs].
+Definition F_sp : afact := mkAF (CEIL_MIN + AMS) (2 ^ 63 - 1) 4.
+Definition F_sh : afact := mkAF 0 40 0.
+(* #38, the SECOND-ORDER trap Main names: when the span moves, a FACT bound
+   moves with it IN A DIFFERENT FILE.  This ceiling and [YL06.auxv_check]'s
+   `af_hi fa + APC.AUXSZ 1 <=? 2 ^ 63` must agree, and they did NOT: written
+   as `2 ^ 63 - (if rs then 464 else 432)`, the rs = false branch gives
+   `af_hi = 2 ^ 63 - 432`, and the checker then demands
+   `2 ^ 63 - 432 + 464 <= 2 ^ 63`, FALSE BY 32.  A correct retable on each
+   side, inconsistent across the pair - and it would have read as a checker
+   bug rather than as a bound mismatch.
+   Fixed by taking the MAXIMUM span on both sides: 464 = 16 * 29 = AUXSZ 1 is
+   rs-FREE and pins nothing - it is the larger of the two layouts, so the
+   bound it states is the WEAKER obligation and holds for either build.  It
+   was [2 ^ 63 - 160], 160 being 16 * 10 under the ten-pair layout (12h).
+   The parameter stays only so the call sites keep their shape. *)
+Definition F_av_of (rs : bool) : afact := mkAF 4096 (2 ^ 63 - 464) 0.
+Definition F_ar : afact := mkAF 4096 (2 ^ 63 - 16) 0.
+Definition F_pg : afact := mkAF 4096 (CEIL_MAX - 4096) 12.
+Definition facts_am1 : facts := mkFacts [ (2%nat, F_sp); (39%nat, F_sh) ] [] [].
+Definition facts_am0_of (rs : bool) : facts :=
+mkFacts [ (2%nat, F_sp); (39%nat, F_sh); (44%nat, F_av_of rs); (45%nat, F_ar) ] [] [].
+Definition ss_am1 : sstate := mkSS src2_A_alloc_meta regs_am mem_am1 None facts_am1.
+Definition ss_am0_of (rs : bool) : sstate := mkSS src2_A_alloc_meta regs_am (mem_am0_of rs) None (facts_am0_of rs).
+(* #38, Main's CHAIN-DUP ruling: the reduced chain is instantiated TWICE, once
+   per CONFIG_RSEQ case, and selected by the run's own flag.  The duplication is
+   CONTAINED - it ends at [merge_a2y], because [ss_A2] comes from [mem_am1],
+   which has no auxv region at all - so eight definitions and four lemmas
+   double, not the file's 44 [Eval vm_compute] lines.  The reduction reads NO
+   kernel field (measured: zero hits for all thirteen accessors in this file and
+   its twin), so the flag enters through [R_auxv_of] alone. *)
+Definition ss_i1_t : sstate := Eval vm_compute in runto_ src2_A_memcpy (ss_am0_of true).
+Definition ss_i1_f : sstate := Eval vm_compute in runto_ src2_A_memcpy (ss_am0_of false).
+Definition ss_i1_of (rs : bool) : sstate := if rs then ss_i1_t else ss_i1_f.
+Definition MC_JUNK : list reg := [5; 6; 7; 11; 12; 13; 14; 15; 16; 17; 28]%bv.
+Definition mem_i2_t : smem :=
+Eval vm_compute in match store_region (ss_mem ss_i1_t) (Some 2%nat) (-64) 8 (CVal 8 (SOff 0 0)) with Some rs => rs | None => [] end.
+Definition mem_i2_f : smem :=
+Eval vm_compute in match store_region (ss_mem ss_i1_f) (Some 2%nat) (-64) 8 (CVal 8 (SOff 0 0)) with Some rs => rs | None => [] end.
+Definition mem_i2_of (rs : bool) : smem := if rs then mem_i2_t else mem_i2_f.
+Definition ss_i1'_of (rs : bool) : sstate := setpc PC_MCRET (setmem (mem_i2_of rs) (ss_i1_of rs)).
+Definition ss_i2_t : sstate := Eval vm_compute in junk_regs MC_JUNK 46 (ss_i1'_of true).
+Definition ss_i2_f : sstate := Eval vm_compute in junk_regs MC_JUNK 46 (ss_i1'_of false).
+Definition ss_i2_of (rs : bool) : sstate := if rs then ss_i2_t else ss_i2_f.
+Definition ss_a2x : sstate := Eval vm_compute in runto_ PC_A2 ss_am1.
+Definition ss_a2y_t : sstate := Eval vm_compute in runto_ PC_A2 (ss_i2_of true).
+Definition ss_a2y_f : sstate := Eval vm_compute in runto_ PC_A2 (ss_i2_of false).
+Definition ss_a2y_of (rs : bool) : sstate := if rs then ss_a2y_t else ss_a2y_f.
+Definition A2_JUNK : list reg := [1; 5; 6; 7; 9; 10; 11; 12; 13; 14; 15; 16; 17; 20; 28]%bv.
+Definition ss_A2 : sstate := Eval vm_compute in junk_regs A2_JUNK 57 ss_a2x.
+Definition C_fh0 : acond := mkAC BC_EQ (SOff 33 0) (SLit 0).
+Definition C_fh1 : acond := mkAC BC_NE (SOff 33 0) (SLit 0).
+Definition C_amc1 : acond := mkAC BC_NE (SOff 37 0) (SLit 0).
+Definition C_amc0 : acond := mkAC BC_EQ (SOff 37 0) (SLit 0).
+Definition C_nxm : acond := mkAC BC_EQ (SOff 34 0) (SOff 33 0).
+Definition C_nxo : acond := mkAC BC_NE (SOff 34 0) (SOff 33 0).
+Definition ss_fh : sstate := Eval vm_compute in run_ ss_A2.
+Definition ss_amc : sstate := Eval vm_compute in run_ (add_cond ss_fh C_fh0).
+Definition ss_c1 : sstate := Eval vm_compute in run_ (add_cond ss_amc C_amc1).
+Definition ss_c2 : sstate := addR R_am ss_c1.
+Definition ss_cE : sstate := Eval vm_compute in run_ ss_c2.
+Definition ss_d0 : sstate := addR R_fh (add_cond ss_fh C_fh1).
+Definition ss_d1 : sstate := Eval vm_compute in run_ ss_d0.
+Definition ss_d1E : sstate := Eval vm_compute in run_ (add_cond ss_d1 C_nxm).
+Definition ss_d2 : sstate := addR R_pr (addR R_nx (add_cond ss_d1 C_nxo)).
+Definition ss_d2E : sstate := Eval vm_compute in run_ ss_d2.
+Definition C_aac1 : acond := mkAC BC_NE (SOff 38 0) (SLit 0).
+Definition C_aac0 : acond := mkAC BC_EQ (SOff 38 0) (SLit 0).
+Definition C_bd : acond := mkAC BC_EQ (SOff 43 0) (SLit (2 ^ 64 - 1)).
+Definition C_nbd : acond := mkAC BC_NE (SOff 43 0) (SLit (2 ^ 64 - 1)).
+Definition C_bn : acond := mkAC BC_EQ (SOff 43 0) (SLit 0).
+Definition C_bc : acond := mkAC BC_NE (SOff 43 0) (SLit 0).
+Definition ss_aac : sstate := Eval vm_compute in run_ (add_cond ss_amc C_amc0).
+Definition ss_r0 : sstate := add_atom (add_cond ss_aac C_aac1) 42 F_pg.
+Definition ss_rK : sstate := Eval vm_compute in run_ ss_r0.
+Definition ss_b0 : sstate := Eval vm_compute in run_ (add_cond ss_aac C_aac0).
+Definition ss_b1 : sstate := Eval vm_compute in run_ (add_cond ss_b0 C_nbd).
+Definition ss_vBD : sstate := Eval vm_compute in runto_ PC_V (add_cond ss_b0 C_bd).
+Definition ss_nQ : sstate := Eval vm_compute in run_ (add_cond ss_b1 C_bn).
+Definition ss_nQ1 : sstate := add_atom (resume_ ss_nQ (SOff 72 0) (ss_mem ss_nQ)) 72 F_pg.
+Definition ss_nG : sstate := Eval vm_compute in run_ ss_nQ1.
+Definition ss_nR : sstate := resume_ ss_nG (SOff 72 0) (ss_mem ss_nG).
+Definition ss_vBN : sstate := Eval vm_compute in runto_ PC_V ss_nR.
+Definition ss_cG : sstate := Eval vm_compute in run_ (add_cond ss_b1 C_bc).
+Definition ss_cR : sstate := resume_ ss_cG (SOff 43 0) (ss_mem ss_cG).
+Definition ss_vBC : sstate := Eval vm_compute in runto_ PC_V ss_cR.
+Definition V_JUNK : list reg := [9; 12; 17]%bv.
+Definition facts_V : facts := mkFacts [ (2%nat, F_sp); (39%nat, F_sh) ] [C_aac0; C_amc0; C_fh0] [].
+Definition absV (ss : sstate) : sstate := upd_chunk 6 (CTX + 920) (CVal 8 (SLit (2 ^ 64 - 1))) (junk_regs V_JUNK 74 ss).
+Definition ss_V : sstate := Eval vm_compute in setfacts facts_V (absV ss_vBD).
+Definition F_n2 : afact := mkAF 2 (2 ^ 41) 1.
+Definition F_nl : afact := mkAF 8192 (2 ^ 53) 12.
+Definition ss_v1 : sstate := Eval vm_compute in runto_ (src2_A_alloc_meta + 0x1c4) ss_V.
+Definition ss_v1' : sstate := add_atom (junk_regs [9%bv] 77 ss_v1) 77 F_n2.
+Definition ss_v2 : sstate := Eval vm_compute in runto_ (src2_A_alloc_meta + 0x1c8) ss_v1'.
+Definition ss_v2' : sstate := add_atom (junk_regs [11%bv] 78 ss_v2) 78 F_nl.
+Definition ss_vK : sstate := Eval vm_compute in run_ ss_v2'.
+Definition ss_vF1 : sstate := resume_ ss_vK (SLit (2 ^ 64 - 12)) (ss_mem ss_vK).
+Definition ss_vF1E : sstate := Eval vm_compute in run_ ss_vF1.
+Definition ss_vG : sstate := add_atom (resume_ ss_vK (SOff 79 0) (ss_mem ss_vK)) 79 F_pg.
+Definition ss_vG1 : sstate := Eval vm_compute in run_ ss_vG.
+Definition C_vok : acond := mkAC BC_NE (SAlu ALU_OR (SLit 0) (SAlu ALU_XOR (SOff 79 0) (SLit (-1)))) (SLit 0).
+Definition ss_vK2 : sstate := Eval vm_compute in run_ (add_cond ss_vG1 C_vok).
+Definition ss_vF2 : sstate := resume_ ss_vK2 (SLit (2 ^ 64 - 12)) (ss_mem ss_vK2).
+Definition ss_vF2E : sstate := Eval vm_compute in run_ ss_vF2.
+Definition ss_vO : sstate := resume_ ss_vK2 (SLit 0) (ss_mem ss_vK2).
+Definition ss_oV : sstate := Eval vm_compute in runto_ PC_O ss_vO.
+Definition ss_rF : sstate := resume_ ss_rK (SLit (2 ^ 64 - 12)) (ss_mem ss_rK).
+Definition ss_rFE : sstate := Eval vm_compute in run_ ss_rF.
+Definition ss_rO : sstate := resume_ ss_rK (SLit 0) (ss_mem ss_rK).
+Definition ss_oR : sstate := Eval vm_compute in runto_ PC_O ss_rO.
+Definition ss_nGG : sstate := resume_ ss_nG (SOff 72 8192) (ss_mem ss_nG).
+Definition ss_nK3 : sstate := Eval vm_compute in run_ ss_nGG.
+Definition C_gok1 : acond := mkAC BC_NE (SAlu ALU_OR (SOff 72 0) (SLit 11)) (SLit 0).
+Definition C_gok2 : acond := mkAC BC_NE (SAlu ALU_OR (SOff 72 0) (SAlu ALU_XOR (SOff 72 0) (SLit (-1)))) (SLit 0).
+Definition ss_g1 : sstate := Eval vm_compute in run_ (resume_ ss_nK3 (SLit (2 ^ 64 - 12)) (ss_mem ss_nK3)).
+Definition ss_oN1 : sstate := Eval vm_compute in runto_ PC_O (add_cond ss_g1 C_gok1).
+Definition ss_g2 : sstate := Eval vm_compute in run_ (resume_ ss_nK3 (SOff 72 0) (ss_mem ss_nK3)).
+Definition ss_oN2 : sstate := Eval vm_compute in runto_ PC_O (add_cond ss_g2 C_gok2).
+Definition ss_cGG : sstate := resume_ ss_cG (SOff 43 4096) (ss_mem ss_cG).
+Definition ss_oC : sstate := Eval vm_compute in runto_ PC_O ss_cGG.
+Definition O_JUNK : list reg := [1; 5; 8; 10; 11; 12; 13; 14; 15; 16; 17; 20]%bv.
+Definition absO (ss : sstate) : sstate :=
+upd_chunk 6 (CTX + 920) (CVal 8 (SOff 110 0))
+(upd_chunk 5 (CTX + 48) (CVal 8 (SOff 109 0))
+(upd_chunk 5 (CTX + 40) (CVal 8 (SOff 108 0))
+(junk_regs O_JUNK 96 (junk_regs [9%bv] 95 ss)))).
+Definition facts_O : facts := mkFacts [ (95%nat, F_pg); (2%nat, F_sp); (39%nat, F_sh) ] [C_amc0; C_fh0] [].
+Definition ss_O' : sstate := Eval vm_compute in setfacts facts_O (drop_chunk 5 (CTX + 72) (absO ss_oC)).
+Definition R_page : region := zregion 95 0 4096.
+Definition ss_O : sstate := addR R_page ss_O'.
+Definition C_tl0 : acond := mkAC BC_EQ (SOff 41 0) (SLit 0).
+Definition C_tl1 : acond := mkAC BC_NE (SOff 41 0) (SLit 0).
+Definition ss_o1 : sstate := Eval vm_compute in run_ ss_O.
+Definition ss_oE0 : sstate := Eval vm_compute in run_ (add_cond ss_o1 C_tl0).
+Definition ss_o2 : sstate := addR R_tl (add_cond ss_o1 C_tl1).
+Definition ss_oE1 : sstate := Eval vm_compute in run_ ss_o2.
+(* #38: one statement per fact, quantified over the run's CONFIG_RSEQ flag and
+   closed by splitting on it before any reduction, so each branch reduces a
+   CLOSED state exactly as the single-instantiation form did (rule 12).  The
+   consumers stay ONE proof: only the steps that need a reduced literal split. *)
+Lemma run_am0_of : forall rs,
+sym_run_toN src2segs src2tbl FUEL src2_A_memcpy (ss_am0_of rs) = (ss_i1_of rs, RS_running).
+Proof. intros [|]; vm_compute; reflexivity. Qed.
+Lemma store_i1_of : forall rs,
+store_region (ss_mem (ss_i1_of rs)) (Some 2%nat) (-64) 8 (CVal 8 (SOff 0 0)) = Some (mem_i2_of rs).
+Proof. intros [|]; vm_compute; reflexivity. Qed.
+Lemma run_i2_of : forall rs,
+sym_run_toN src2segs src2tbl FUEL PC_A2 (ss_i2_of rs) = (ss_a2y_of rs, RS_running).
+Proof. intros [|]; vm_compute; reflexivity. Qed.
+Lemma run_am1 : sym_run_toN src2segs src2tbl FUEL PC_A2 ss_am1 = (ss_a2x, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_A2 : sym_runN src2segs src2tbl FUEL ss_A2 = (ss_fh, RS_stopped (SR_branch BC_EQ (SOff 33 0) (SLit 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_fh0 : sym_runN src2segs src2tbl FUEL (add_cond ss_fh C_fh0) = (ss_amc, RS_stopped (SR_branch BC_EQ (SOff 37 0) (SLit 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_amc1 : sym_runN src2segs src2tbl FUEL (add_cond ss_amc C_amc1) = (ss_c1, RS_stopped (SR_store (Some 36%nat) 8)).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_c2 : sym_runN src2segs src2tbl FUEL ss_c2 = (ss_cE, RS_stopped (SR_jalr (SOff 1 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_d0 : sym_runN src2segs src2tbl FUEL ss_d0 = (ss_d1, RS_stopped (SR_branch BC_EQ (SOff 34 0) (SOff 33 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_d1m : sym_runN src2segs src2tbl FUEL (add_cond ss_d1 C_nxm) = (ss_d1E, RS_stopped (SR_jalr (SOff 1 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_d2 : sym_runN src2segs src2tbl FUEL ss_d2 = (ss_d2E, RS_stopped (SR_jalr (SOff 1 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_amc0 : sym_runN src2segs src2tbl FUEL (add_cond ss_amc C_amc0) = (ss_aac, RS_stopped (SR_branch BC_NE (SOff 38 0) (SLit 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_r0 : sym_runN src2segs src2tbl FUEL ss_r0 = (ss_rK, RS_ecall).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_rF : sym_runN src2segs src2tbl FUEL ss_rF = (ss_rFE, RS_stopped (SR_jalr (SOff 1 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_rO : sym_run_toN src2segs src2tbl FUEL PC_O ss_rO = (ss_oR, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_aac0 : sym_runN src2segs src2tbl FUEL (add_cond ss_aac C_aac0) = (ss_b0, RS_stopped (SR_branch BC_EQ (SOff 43 0) (SLit 18446744073709551615))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_bd : sym_run_toN src2segs src2tbl FUEL PC_V (add_cond ss_b0 C_bd) = (ss_vBD, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_nbd : sym_runN src2segs src2tbl FUEL (add_cond ss_b0 C_nbd) = (ss_b1, RS_stopped (SR_branch BC_EQ (SOff 43 0) (SLit 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_bn : sym_runN src2segs src2tbl FUEL (add_cond ss_b1 C_bn) = (ss_nQ, RS_ecall).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_nQ1 : sym_runN src2segs src2tbl FUEL ss_nQ1 = (ss_nG, RS_ecall).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_nR : sym_run_toN src2segs src2tbl FUEL PC_V ss_nR = (ss_vBN, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_nGG : sym_runN src2segs src2tbl FUEL ss_nGG = (ss_nK3, RS_ecall).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_g1 : sym_runN src2segs src2tbl FUEL (resume_ ss_nK3 (SLit (2 ^ 64 - 12)) (ss_mem ss_nK3)) = (ss_g1, RS_stopped (SR_branch BC_NE (ac_a C_gok1) (SLit 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_g1' : sym_run_toN src2segs src2tbl FUEL PC_O (add_cond ss_g1 C_gok1) = (ss_oN1, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_g2 : sym_runN src2segs src2tbl FUEL (resume_ ss_nK3 (SOff 72 0) (ss_mem ss_nK3)) = (ss_g2, RS_stopped (SR_branch BC_NE (ac_a C_gok2) (SLit 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_g2' : sym_run_toN src2segs src2tbl FUEL PC_O (add_cond ss_g2 C_gok2) = (ss_oN2, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_bc : sym_runN src2segs src2tbl FUEL (add_cond ss_b1 C_bc) = (ss_cG, RS_ecall).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_cR : sym_run_toN src2segs src2tbl FUEL PC_V ss_cR = (ss_vBC, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_cGG : sym_run_toN src2segs src2tbl FUEL PC_O ss_cGG = (ss_oC, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_V : sym_run_toN src2segs src2tbl FUEL (src2_A_alloc_meta + 0x1c4) ss_V = (ss_v1, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_v1' : sym_run_toN src2segs src2tbl FUEL (src2_A_alloc_meta + 0x1c8) ss_v1' = (ss_v2, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_v2' : sym_runN src2segs src2tbl FUEL ss_v2' = (ss_vK, RS_ecall).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_vF1 : sym_runN src2segs src2tbl FUEL ss_vF1 = (ss_vF1E, RS_stopped (SR_jalr (SOff 1 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_vG : sym_runN src2segs src2tbl FUEL ss_vG = (ss_vG1, RS_stopped (SR_branch BC_NE (ac_a C_vok) (SLit 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_vG1 : sym_runN src2segs src2tbl FUEL (add_cond ss_vG1 C_vok) = (ss_vK2, RS_ecall).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_vF2 : sym_runN src2segs src2tbl FUEL ss_vF2 = (ss_vF2E, RS_stopped (SR_jalr (SOff 1 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_vO : sym_run_toN src2segs src2tbl FUEL PC_O ss_vO = (ss_oV, RS_running).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_O : sym_runN src2segs src2tbl FUEL ss_O = (ss_o1, RS_stopped (SR_branch BC_EQ (SOff 41 0) (SLit 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_tl0 : sym_runN src2segs src2tbl FUEL (add_cond ss_o1 C_tl0) = (ss_oE0, RS_stopped (SR_jalr (SOff 1 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma run_o2 : sym_runN src2segs src2tbl FUEL ss_o2 = (ss_oE1, RS_stopped (SR_jalr (SOff 1 0))).
+Proof. vm_compute. reflexivity. Qed.
+Lemma merge_a2x : mergeb ss_A2 (junk_regs A2_JUNK 57 ss_a2x) = true. Proof. vm_compute. reflexivity. Qed.
+Lemma merge_a2y_of : forall rs, mergeb ss_A2 (junk_regs A2_JUNK 57 (ss_a2y_of rs)) = true.
+Proof. intros [|]; vm_compute; reflexivity. Qed.
+Definition absO1 (ss : sstate) : sstate := junk_regs [9%bv] 95 ss.
+Definition absO2 (ss : sstate) : sstate := junk_regs O_JUNK 96 (absO1 ss).
+Definition absO3 (ss : sstate) : sstate := upd_chunk 5 (CTX + 40) (CVal 8 (SOff 108 0)) (absO2 ss).
+Definition absO4 (ss : sstate) : sstate := upd_chunk 5 (CTX + 48) (CVal 8 (SOff 109 0)) (absO3 ss).
+Definition absO5 (ss : sstate) : sstate := upd_chunk 6 (CTX + 920) (CVal 8 (SOff 110 0)) (absO4 ss).
+
+
+
+
+
+Definition absV1 (ss : sstate) : sstate := junk_regs V_JUNK 74 ss.
+Definition absV2 (ss : sstate) : sstate := upd_chunk 6 (CTX + 920) (CVal 8 (SLit (2 ^ 64 - 1))) (absV1 ss).
+
+
+
+Lemma ss_i1_pc_of : forall rs, ss_pc (ss_i1_of rs) = src2_A_memcpy. Proof. intros [|]; reflexivity. Qed.
+Lemma ss_rK_pc : ss_pc ss_rK = src2_A_mprotect + 0x30. Proof. reflexivity. Qed.
+Lemma ss_vK2_pc : ss_pc ss_vK2 = src2_A_mprotect + 0x30. Proof. reflexivity. Qed.
+Lemma ss_vK_pc : ss_pc ss_vK = src2_A_mmap + 0xc4. Proof. reflexivity. Qed.
+Lemma ss_nK3_pc : ss_pc ss_nK3 = src2_A_mmap + 0xc4. Proof. reflexivity. Qed.
+Lemma ss_nQ_pc : ss_pc ss_nQ = src2_A_alloc_meta + 0x144. Proof. reflexivity. Qed.
+Lemma ss_nG_pc : ss_pc ss_nG = src2_A_alloc_meta + 0x168. Proof. reflexivity. Qed.
+
+
+End a.

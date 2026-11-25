@@ -1,0 +1,161 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-10: ported to the binaries of release 2026.10.0 and LPS 2afba80c; the theorem statements are restated in the form this release states them. *)
+(* Modified by Theorem Labs, 2026-11: ported to LPS 727298f3 (the reserved-ledger goal is closed by model1g_resv: the image's reservations, then the launch's vDSO and vvar pair; cut_heap_init_hyps takes cut_mem with the entry draw rd, reads the image data through main_entry_launch, and gives rauxv_ok_intro the launch's own auxv vector (read_auxv_all) and AT_RANDOM secret); and launch_auxv / vdso_text_base at the entry's stack pointer (LPS b84e73ef). *)
+(* [comment removed for export] *)
+From Stdlib Require Import ZArith NArith List Lia Bool.
+From LinuxProcessSemantics.EquivalenceDefinition Require Import Equivalence.
+From LinuxProcessSemantics.LinuxProcessSem Require Import BvBase RiscvSemantics MemImageType StackLayout Fs State Monad Specs Run.
+From LinuxProcessSemantics.Riscv Require Import Prelude Instr Decode DecodeC Sem Fpu.
+From OSSVerify.mbedtls.fuzz_pkcs7.images Require Import Plain.
+From OSSVerify.Proofs.mbedtls.fuzz_pkcs7.lib.Lib Require Import Walk AEvt AStep HeapIface HeapRz RegsExt Shape Cells Mem Step.
+From OSSVerify.Proofs.mbedtls.fuzz_pkcs7.lib.P Require Import PImg P_layout P_heap.
+From OSSVerify.Proofs.mbedtls.fuzz_pkcs7.lib.BB Require Import Amb CatExec CatSim SeqExec StoreOk StreamSim StepTac MemSplit StartupAux ArgvEnv Layout SymExec SymExec2 SymExec2Sound SymDriveX.
+From OSSVerify.Proofs.mbedtls.fuzz_pkcs7.lib.Spec Require Import Spec.
+From OSSVerify.Proofs.mbedtls.fuzz_pkcs7.lib.P Require Import P_exit_base P_startup_defs P_startup P_startup_facts P_main_entry P_main_open P_main_cut P_cutkit P_tailkit.
+From OSSVerify.Proofs.mbedtls.fuzz_pkcs7.lib.Heap Require Import RunConsts.
+From OSSVerify.Proofs.mbedtls.fuzz_pkcs7.lib.Lib Require Import DietDestruct.   (* [comment removed for export] *)
+Import ListNotations.
+Import SX2. Import SX2S.
+#[local] Existing Instance PropExec.fx0.
+Open Scope Z_scope.
+Set Printing Width 200.
+From OSSVerify.Proofs.mbedtls.fuzz_pkcs7.lib.Lib Require CDefT.
+From Ltac2 Require Ltac2.
+Ltac2 gd_tbl_P_cutheap () : Init.string Init.list := ["stdpp.bitvector.definitions.bv"; "Corelib.Init.Datatypes.option"; "Corelib.Init.Datatypes.nat"; "Stdlib.ZArith.BinInt.Z.le"; "stdpp.bitvector.definitions.bv_unsigned"; "Stdlib.ZArith.BinInt.Z.add"; "Stdlib.ZArith.BinInt.Z.of_nat"; "Corelib.Init.Logic.eq"; "Corelib.Init.Datatypes.bool"; "LinuxProcessSemantics.LinuxProcessSem.RiscvSemantics.store_ok"; "OSSVerify.KrLib.P.PImg.psegs"; "Corelib.Init.Datatypes.true"; "Corelib.Numbers.BinNums.Z"; "OSSVerify.KrLib.Lib.Cells.cell"; "Corelib.Init.Datatypes.list"; "OSSVerify.KrLib.Lib.PropExec.rdn"; "stdpp.bitvector.definitions.Z_to_bv"; "OSSVerify.KrLib.Lib.Cells.csize"; "Corelib.Init.Datatypes.Some"; "OSSVerify.KrLib.Lib.Cells.cbytes"; "OSSVerify.KrLib.Lib.Cells.cell_wf"; "Corelib.Init.Logic.or"; "Corelib.Init.Logic.and"; "OSSVerify.KrLib.Lib.Step.rw_cells"; "Corelib.Init.Datatypes.cons"; "Corelib.Init.Datatypes.nil"; "OSSVerify.KrLib.Heap.RunConsts.mkRC"; "OSSVerify.KrLib.P.P_startup_defs.secret_w"; "OSSVerify.KrLib.P.P_startup_defs.canary_w"; "OSSVerify.KrLib.Lib.PropExec.u64_range"; "LinuxProcessSemantics.LinuxProcessSem.State.FdEntry"; "OSSVerify.KrLib.P.P_main_cut.cut_mem"; "OSSVerify.KrLib.P.P_heap.P_heap_init_hyps"; "CutHeap.cut_rc"; "OSSVerify.KrLib.P.P_main_open.model1g"].
+
+
+Lemma ref_wseg_48 : wseg_ok psegs (0x48000 : word) 4096%nat = true.
+Proof. vm_compute. reflexivity. Qed.
+Lemma store_ok_data48 : ltac2:(CDefT.buildp (gd_tbl_P_cutheap ()) "Pm,P,(0.&40.)(1.(0.&8.))Pa,(0.&40.)Pn,$2.P,(3.+48000.(4.&40.R2.))P,(3.(5.(4.&40.R3.)(6.R2.))+49000.)(7.$8.(9.$:.R5.R4.R3.)$;.)")
+(* [comment removed for export] *).
+Proof.
+  intros m a n Hlo Hhi.
+  eapply (store_ok_window psegs m (0x48000 : word) a 4096%nat n 0x48000 0x49000);
+    [reflexivity | reflexivity | lia | exact ref_wseg_48 | exact Hlo | exact Hhi].
+Qed.
+
+(* [comment removed for export] *)
+Lemma rw_cell_of_rdn : ltac2:(CDefT.buildp (gd_tbl_P_cutheap ()) "Pm,P,(0.&40.)(1.(0.&8.))Pa,$<.Pc,$=.P,(7.(1.(>.(0.&8.)))(?.$:.R3.(10.&40.R2.)(11.R1.))(12.(>.(0.&8.))(13.R1.)))P,(14.R2.)P,(15.(16.(3.+48000.R4.)(3.(5.R4.(6.(11.R3.)))+49000.))(16.(3.+49000.R4.)(3.(5.R4.(6.(11.R3.)))+7;000.)))(17.$:.R6.R5.(18.$=.R4.(19.$=.)))")
+(* [comment removed for export] *).
+Proof.
+  intros m a c RD WF Hr. split.
+  - split; [cbn; split; [exact WF | exact I] |]. cbn [cells_bytes]. rewrite app_nil_r.
+    apply (bytes_at_of_rdn m (cbytes c) a); rewrite ?(cbytes_length c WF); [exact RD | lia | lia].
+  - cbn [cells_size Nat.add]. rewrite Nat.add_0_r. split; [lia|]. split; [lia|]. intros i Hi.
+    assert (SO : store_ok psegs m (Z_to_bv 64 a) (csize c) = true).
+    { destruct Hr as [Hr|Hr]; [apply store_ok_data48 | apply store_ok_data]; rewrite u_small by lia; lia. }
+    pose proof (store_ok_wview psegs m (Z_to_bv 64 a) (csize c) (Z.to_nat i) SO ltac:(lia)) as W.
+    unfold wa. rewrite u_small in W by lia. replace (a + Z.of_nat (Z.to_nat i)) with (a + i) in W by lia. exact W.
+Qed.
+
+Section CutHeap.
+  Context {AMB : Amb}.
+  Context {LM : Lim}.
+  Variable sp0 : word.
+  Variables a0s path : list byte.
+  Variable envv : list (list byte).
+  Variable tid : word.
+  Variable rd : EntryDraw.            (* [comment removed for export] *)
+  Variable regs0 : bvmap 5 word.
+  Variable mem0 : word -> option byte.
+  Variables (brk mbase : word) (fs0 : Fs) (stdin0 : InputStream).
+  Hypothesis Hva : valid_argv [a0s; path].
+  Hypothesis Hve : valid_envp envv.
+  Hypothesis Hvsp : valid_sp sp0.
+  Hypothesis Htid : (0 < bv_unsigned tid < 2 ^ 22)%Z.
+  Hypothesis ME : main_entry sp0 [a0s; path] envv tid rd regs0 mem0.
+  Hypothesis Hbrk : valid_brk psegs brk.
+
+  Let SPlo : (0x7fff80000000 <= bv_unsigned sp0)%Z := proj1 Hvsp.
+  Let SPhi : (bv_unsigned sp0 <= 0x800000000000)%Z := proj1 (proj2 Hvsp).
+
+  (* [comment removed for export] *)
+  Definition cut_rc : rconsts := ltac2:(CDefT.buildp (gd_tbl_P_cutheap ()) "(1:.(4.&40.(1;.Vrd,))(4.&40.(1<.Vrd,))(1=.(1;.Vrd,))(1=.(1<.Vrd,)))")
+(* [comment removed for export] *).
+
+  #[using="regs0 Hva Hve Hvsp Htid ME Hbrk SPlo SPhi"] Theorem cut_heap_init_hyps : ltac2:(CDefT.buildp (gd_tbl_P_cutheap ()) "PM,P,(0.&40.)(1.(0.&8.))Pfd3,$1>.P,(1?.VAMB,Vsp0,Va0s,Vpath,Venvv,Vrd,Vmem0,R2.)(20.Vsp0,$21.R3.(22.VAMB,VLM,Vsp0,Vtid,Vbrk,Vmbase,Vfs0,Vstdin0,R2.)(4.&40.Vsp0,))")
+(* [comment removed for export] *).
+  Proof.
+    intros M fd3 CM. pose proof SPlo as Hlo. pose proof SPhi as Hhi. pose proof (u64_range tid) as Htr.
+    pose proof (cut_tail_mem sp0 a0s path envv tid rd regs0 mem0 Hvsp Htid ME M CM) as TM.
+    destruct TM as [W RO GOT DA CO TI TR LO CA NL SI OF].
+    assert (BE : forall a : Z, (0 <= a < 0x7b000)%Z -> M (Z_to_bv 64 a) = mem0 (Z_to_bv 64 a)).
+    { intros a Ha. apply (cm_below _ _ _ _ _ _ _ CM). rewrite u_small by lia. lia. }
+    assert (RD : forall (a : Z) (n : nat), (0 <= a)%Z -> (a + Z.of_nat n <= 0x7b000)%Z ->
+                 rdn psegs M (Z_to_bv 64 a) n = rdn psegs mem0 (Z_to_bv 64 a) n).
+    { intros a n Ha Hn. apply rdn_agree. intros j Hj. rewrite u_small by lia. apply BE. lia. }
+    assert (AB : forall a : Z, bv_unsigned sp0 <= a < 2 ^ 64 -> M (Z_to_bv 64 a) = mem0 (Z_to_bv 64 a)).
+    { intros a Ha. apply (cm_above _ _ _ _ _ _ _ CM). rewrite u_small by lia. lia. }
+    assert (RDA : forall (a : Z) (n : nat), bv_unsigned sp0 <= a -> a + Z.of_nat n <= 2 ^ 64 ->
+                 rdn psegs M (Z_to_bv 64 a) n = rdn psegs mem0 (Z_to_bv 64 a) n).
+    { intros a n Ha Hn. apply rdn_agree. intros j Hj. rewrite u_small by lia. apply AB. lia. }
+    (* LPS 727298f3: the image data and the auxv are read back through the launch [main_entry] names *)
+    destruct (main_entry_launch sp0 [a0s; path] envv tid rd regs0 mem0 ME)
+      as (inp & mb0 & brk0 & Eav & Eev & Euid & Egid & Ehw & Ekb & Eef & Hvl & Hlau & RDW & MD & RDD).
+    assert (Hva' : valid_argv (in_argv inp)) by (rewrite Eav; exact Hva).
+    assert (Hve' : valid_envp (in_envp inp)) by (rewrite Eev; exact Hve).
+    destruct (auxvp_u sp0 a0s path envv Hve Hvsp) as [Hau Hab].
+    ddestruct (rnd_u sp0 a0s path envv tid rd regs0 mem0 Hva Hve Hvsp ME) as (Hr1 & Hr2 & Hr3 & Hr4).
+    set (auxvp0 := auxvp sp0 a0s path envv) in *. set (rnd0 := rnd sp0 a0s path envv) in *.
+    pose proof (u64_range auxvp0) as Hapr. pose proof (u64_range rnd0) as Hrr.
+    assert (Er : rnd0 = at_random_ptr sp0 (kb_rseq (in_kernel inp)) (in_argv inp) (in_envp inp))
+      by (unfold rnd0, rnd; rewrite Eav, Eev, Ekb; reflexivity).
+    assert (EA : auxvp0 = (sp0 + nat_to_word (auxv_off (in_argv inp) (in_envp inp)))%bv)
+      by (rewrite w_add_nat, Eav, Eev; unfold auxvp0; apply auxvp_eq).
+    (* the whole vector at auxvp, the launch's [StackLayout.auxv_bytes] *)
+    pose proof (read_auxv_all psegs Sv48 inp mb0 RPH (0x1cc80 : word) sp0 brk0 rd) as AX.
+    repeat (specialize (AX ltac:(first [ exact Hva' | exact Hve' | exact Hvl | exact Hlau | exact (proj2 (proj2 Hvsp))
+                                       | (unfold sp_window_lo; lia) | (unfold sp_window_hi; lia) ]))).
+    set (L := P.HP_RMallocTree.rauxv_list (launch_auxv inp sp0 mb0) RPH (0x1cc80 : word) (in_uid inp) (in_gid inp) (in_hwcap inp)
+                (Z_to_bv 64 (bv_unsigned rnd0)) (at_execfn_ptr (ed_top rd) (in_execfn inp))).
+    assert (LB : auxv_bytes (launch_auxv inp sp0 mb0) RPH (0x1cc80 : word) (in_uid inp) (in_gid inp) (in_hwcap inp)
+                   (at_random_ptr sp0 (kb_rseq (in_kernel inp)) (in_argv inp) (in_envp inp))
+                   (at_execfn_ptr (ed_top rd) (in_execfn inp)) = flat_map word_le8 L).
+    { unfold L. rewrite Z_to_bv_bv_unsigned, <- Er, auxv_bytes_words. reflexivity. }
+    assert (AS : (auxv_size (kb_rseq (in_kernel inp)) <= 464)%nat)
+      by (unfold auxv_size, auxv_count; destruct (kb_rseq (in_kernel inp)); lia).
+    assert (RV : rdn psegs M (Z_to_bv 64 (bv_unsigned auxvp0)) (length (flat_map word_le8 L)) = Some (flat_map word_le8 L)).
+    { rewrite <- LB, length_auxv_bytes.
+      change (la_rseq (launch_auxv inp sp0 mb0)) with (kb_rseq (in_kernel inp)).
+      rewrite RDA by lia. rewrite Z_to_bv_bv_unsigned.
+      rewrite RDW by lia.
+      pose proof (rdn_wmem_stack psegs inp mb0 RPH (0x1cc80 : word) sp0 rd) as Hw. unfold wmem in Hw.
+      rewrite Hw by (try eassumption; lia).
+      rewrite EA. exact AX. }
+    assert (RC : rdn psegs M (Z_to_bv 64 498776) 8 = Some (word_to_le_bytes 8 (Z_to_bv 64 (bv_unsigned auxvp0)))).
+    { rewrite RD by (cbn; lia). rewrite RDD by (rewrite stack_max_size_val, u_small by lia; cbn; lia).
+      rewrite Z_to_bv_bv_unsigned. exact (D_main_auxvp sp0 a0s path envv tid rd Hvsp inp psegs Eav Eev). }
+    assert (RZ : rdn psegs M (Z_to_bv 64 (bv_unsigned rnd0 + 8)) 8 = Some (word_to_le_bytes 8 (Z_to_bv 64 (rc_secret cut_rc)))).
+    { rewrite RDA by lia. cbn [rc_secret cut_rc]. rewrite Z_to_bv_bv_unsigned.
+      exact (main_entry_secret sp0 a0s path envv tid rd regs0 mem0 Hva Hve Hvsp ME). }
+    split.
+    - (* [comment removed for export] *) intros a Ha. rewrite <- (Z_to_bv_bv_unsigned a). apply (cut_clear sp0 a0s path envv tid rd regs0 mem0 Hvsp ME M CM); lia.
+    - (* [comment removed for export] *) apply rw_cell_of_rdn; [exact NL | exact I | cbn; lia].
+    - (* [comment removed for export] *) apply rw_cell_of_rdn; [| exact I | cbn; lia]. cbn [csize cbytes].
+      rewrite RD by (cbn; lia). rewrite RDD by (rewrite stack_max_size_val, u_small by lia; cbn; lia).
+      apply (D_main_pagesize inp sp0 tid rd Hva').
+    - (* the launch's own auxv vector ([HP_RMallocTree.rauxv_ok]) *)
+      eapply (rauxv_ok_intro sp0 cut_rc M (bv_unsigned sp0) (bv_unsigned auxvp0) (bv_unsigned rnd0)
+                (launch_auxv inp sp0 mb0) RPH (0x1cc80 : word) (in_uid inp) (in_gid inp) (in_hwcap inp)
+                (at_execfn_ptr (ed_top rd) (in_execfn inp)) RC RV RZ);
+        [ rewrite (P_alloc_ceiling_eq sp0 Hvsp); lia | lia | lia | lia | lia | lia ].
+    - (* [comment removed for export] *) apply rw_cell_of_rdn; [exact GOT | exact I | cbn; lia].
+    - (* [comment removed for export] *)
+      apply rw_cell_of_rdn; [| exact I | cbn; lia]. cbn [csize rc_canary cut_rc]. rewrite Z_to_bv_bv_unsigned.
+      rewrite RD by (cbn; lia). rewrite (main_entry_guard sp0 [a0s; path] envv tid rd Hlo regs0 mem0 ME). rewrite <- canary_store. reflexivity.
+    - (* [comment removed for export] *)
+      exists (Z_to_bv 64 0). apply rw_cell_of_rdn; [| exact I | cbn; lia]. cbn [csize cbytes].
+      rewrite RD by (cbn; lia). rewrite (mem0_img_rdn sp0 a0s path envv tid rd regs0 mem0 Hvsp ME) by (vm_compute; reflexivity).
+      vm_compute. reflexivity.
+    - exact (cut_mem_inv sp0 a0s path envv tid rd regs0 mem0 Hvsp ME M CM).
+    - reflexivity.
+    - reflexivity.
+    - reflexivity.
+    - (* phi_resv: the image's reservations, then the launch's vDSO/vvar pair *) apply model1g_resv.
+    - reflexivity.
+    - exact Hbrk.
+    - (* [comment removed for export] *) reflexivity.
+    - exact Hvsp.
+  Qed.
+End CutHeap.
