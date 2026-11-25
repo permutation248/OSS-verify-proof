@@ -1,0 +1,3 @@
+schema: oss-fuzz-theorems/proof/1
+proves: jsoncons/fuzz_ubjson_parser_max/ubsan_agrees
+fingerprint: 234c42db4e33ddffc6f4e662c3fe6c62ddcecaa5d88326d7703be86ca67cf68f

@@ -1,0 +1,42 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-10: ported to the binaries of release 2026.10.0 and LPS 2afba80c; the theorem statements are restated in the form this release states them. *)
+(* Modified by Theorem Labs, 2026-11: srz_write_ch is now written as a plain statement with an added access_okb premise on the write buffer, and its proof discharges the extra obligation with RomWrite.write_ch_rob; taken in part from projects/jsoncons/fuzz_bigint/proofs/lib/SpinAlgX.v, lines 11, 16-33, 42. *)
+From OSSVerify.Proofs.jsoncons.fuzz_ubjson_parser_max.lib Require BvWfKernel.
+From Stdlib Require Import ZArith NArith List Lia Bool.
+From LinuxProcessSemantics.EquivalenceDefinition Require Import Equivalence.
+From LinuxProcessSemantics.LinuxProcessSem Require Import
+BvBase RiscvSemantics MemImageType StackLayout Fs State Monad Specs Run.
+From OSSVerify.Proofs.jsoncons.fuzz_ubjson_parser_max.lib Require Import SimInv ExitSim CatSim ShapeAlg DivergeSim SpinAlg.
+From OSSVerify.Proofs.jsoncons.fuzz_ubjson_parser_max.lib.Common.Cfg Require RomWrite.
+Import ListNotations.
+Open Scope bv_scope.
+Unset Lia Cache. Unset Nia Cache. Unset Nra Cache.
+Lemma srz_write_ch : forall segs scfg ms model fd ch x8 buf T,
+m_halted model = None ->
+m_vm_lazy model = [] ->
+fdchan fd ch model -> fd32 fd = fd ->
+ms_svc_pending ms = Some x8 ->
+bv_unsigned x8 = 64%Z ->
+ms_gpr ms 0 = fd ->
+ms_read_bytes ms (ms_gpr ms 1) (ms_gpr ms 2) = Some buf ->
+access_okb (ms_gpr ms 1) (bv_unsigned (ms_gpr ms 2)) = true ->
+buf_modeled buf ->
+(1 <= length buf)%nat ->
+(forall n, (1 <= n)%nat -> (n <= length buf)%nat ->
+srealizes segs scfg
+(mkCfg (advance_past_svc (set_gpr0 ms (len_word (firstn n buf)))) model) T) ->
+srealizes segs scfg (mkCfg ms model) (t_write_ch ch buf T).
+Proof.
+intros segs scfg ms model fd ch x8 buf T Hh Hlazy Hfdc H32 Hsvc Hno Hg Hr Hok Hbm Hnb Hc.
+unfold t_write_ch.
+apply (srz_node segs scfg (mkCfg ms model) (wr_index buf)
+(fun i => map (WriteEv ch) (firstn (proj1_sig i) buf))
+(fun i => mkCfg (advance_past_svc
+(set_gpr0 ms (len_word (firstn (proj1_sig i) buf))))
+model)
+(fun _ => T) (wr_full buf Hnb)).
+- eapply node_write_ch; eassumption.
+- eapply RomWrite.write_ch_rob; eassumption.
+- intros [n [Hn1 Hn2]]. cbn [proj1_sig]. apply Hc; assumption.
+Qed.
