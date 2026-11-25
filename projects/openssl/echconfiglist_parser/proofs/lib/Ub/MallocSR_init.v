@@ -1,0 +1,126 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-10: ported to the binaries of release 2026.10.0 and LPS 2afba80c; the theorem statements are restated in the form this release states them. *)
+(* Modified by Theorem Labs, 2026-11: ported to LPS 727298f3 (mminv_init and KM_init take the in_channel_reader premise; KM_init also takes valid_mmap_base and re-proves the ledger facts now that init_model's reserved ledger holds the launch's vDSO/vvar pair). *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+From Stdlib Require Import ZArith NArith List Lia Bool.
+From stdpp Require Import gmap.
+From LinuxProcessSemantics.LinuxProcessSem Require Import BvBase RiscvSemantics MemImageType State Run.
+From LinuxProcessSemantics.Riscv Require Import Prelude Instr Decode DecodeC Sem Fpu.
+From OSSVerify.Proofs.openssl.echconfiglist_parser.lib Require Import HeapCeil HeapSecret.
+From OSSVerify.Proofs.openssl.echconfiglist_parser.lib.Lib Require Import Tac ITree Nodes SysStep Exec Decode.
+From OSSVerify.Proofs.openssl.echconfiglist_parser.lib.Spec Require Import Prelim Monad MSafeP STree Malloc MallocCtrl Prog KInv MI_Inv AllocTop MmNodes GapGrid KLink KLink2 KLink3.
+From OSSVerify.Proofs.openssl.echconfiglist_parser.lib.Ub Require Import USegs RMallocRep MallocSR.
+Unset Lia Cache. Unset Nia Cache. Unset Nra Cache.
+Import ListNotations.
+Open Scope Z_scope.
+
+Lemma reserved_top_ref : reserved_top (segments_reserved usegs) = 0x358000.
+Proof. vm_compute. reflexivity. Qed.
+
+(* [comment removed for export] *)
+Definition ref_segments : list (Z * Z) := [(0x10000, 0xd2000); (0xe2000, 0x1e3000); (0x2c5000, 0x5d000); (0x322000, 0x36000)].
+Lemma segments_reserved_ref : segments_reserved usegs = map (fun p => went (fst p) (snd p)) ref_segments.
+Proof. vm_compute. reflexivity. Qed.
+Lemma reservedZ_segments : reservedZ usegs = ref_segments.
+Proof. vm_compute. reflexivity. Qed.
+
+(* [init_model] seeds [m_channel_reader] from [in_channel_reader]; the launch's
+   [valid_input] pins it true ([Run.valid_input_channel_reader]) *)
+Lemma mminv_init : forall tid brk mbase sp lim inp,
+  in_channel_reader inp = true ->
+  mminv (with_tid tid (init_model (segments_reserved usegs) brk mbase sp lim inp)).
+Proof. intros tid brk mbase sp lim inp Hrd. split; [reflexivity | split; [reflexivity | exact Hrd]]. Qed.
+
+Section HC.
+Context {HCEIL : HeapCeil} {HSEC : HeapSecret}.
+
+Theorem KM_init : forall tid brk mbase sp lim inp,
+  valid_brk usegs brk -> valid_sp sp -> BUDCAP <= lim ->
+  bv_unsigned sp - stack_max_size = hceil ->
+  (* the revision's [init_model] puts the launch's vDSO/vvar pair in the
+     reserved ledger just below [mmap_top]; [valid_mmap_base] (from
+     [Run.valid_entry]) keeps it far above the brk guard *)
+  valid_mmap_base mbase ->
+  in_channel_reader inp = true ->
+  KM (ps_init (reservedZ usegs)) (with_tid tid (init_model (segments_reserved usegs) brk mbase sp lim inp)).
+Proof.
+  intros tid brk mbase sp lim inp (VB1 & VB2 & VB3) VSP LIM HSP (Hm1 & Hm2 & Hm3) Hrd.
+  rewrite reserved_top_ref in VB1, VB2. unfold brk_aslr_max in VB2. rewrite page_size_eq in VB3.
+  pose proof (alloc_top_range sp VSP) as TR. rewrite HSP in TR.
+  pose proof VSP as (Hs1 & Hs2 & Hs3).
+  set (mo := with_tid tid (init_model (segments_reserved usegs) brk mbase sp lim inp)).
+  assert (AT : alloc_top (m_vmmaps mo) = hceil).
+  { unfold mo. rewrite alloc_top_with_tid, alloc_top_init. exact HSP. }
+  hcb. hsb.
+  assert (Hsb : bv_unsigned (vm_start_brk (m_vmmaps mo)) = bv_unsigned brk) by reflexivity.
+  assert (Hbb : bv_unsigned (vm_brk (m_vmmaps mo)) = bv_unsigned brk) by reflexivity.
+  assert (Hlm : vm_limit (m_vmmaps mo) = lim) by reflexivity.
+  assert (Hmaps : vm_maps (m_vmmaps mo) = []) by reflexivity.
+  assert (Hnacc : vm_noaccess (m_vmmaps mo) = []) by reflexivity.
+  assert (Hres : vm_reserved (m_vmmaps mo)
+                 = segments_reserved usegs ++ vdso_reserved (in_kernel inp) (vdso_top (m_vmmaps mo)))
+    by exact (vm_reserved_init_model _ _ _ _ _ _).
+  assert (Htop : vdso_top (m_vmmaps mo)
+                 = page_round_down_Z (Z.min (bv_unsigned mbase) (bv_unsigned sp - stack_max_size)))
+    by exact (vdso_top_init_model _ _ _ _ _ _).
+  (* the pair sits within [[vdso_top - vdso_len, vdso_top)], far above the brk *)
+  assert (Hvd : forall a n, In (a, n) (vdso_reserved (in_kernel inp) (vdso_top (m_vmmaps mo))) ->
+            bv_unsigned brk + 4 * PGSZ <= bv_unsigned a /\ 0 < bv_unsigned n
+            /\ bv_unsigned n <= 2^33).
+  { intros a n Hin.
+    pose proof (page_round_down_Z_le (Z.min (bv_unsigned mbase) (bv_unsigned sp - stack_max_size))) as Pd.
+    assert (Pu : Z.min (bv_unsigned mbase) (bv_unsigned sp - stack_max_size) - page_size
+                 < vdso_top (m_vmmaps mo)).
+    { rewrite Htop. unfold page_round_down_Z, page_size. Z.div_mod_to_equations. lia. }
+    assert (Ht64 : vdso_top (m_vmmaps mo) < two_pow_64).
+    { rewrite Htop in *. unfold two_pow_64, stack_max_size, sp_window_hi in *. lia. }
+    destruct (vdso_reserved_above _ _ _ _ Ht64 Hin) as [A1 A2].
+    pose proof (vdso_reserved_nonzero _ _ _ _ Ht64 Hin) as A3.
+    pose proof (vdso_len_bounds (in_kernel inp)) as Lb.
+    unfold PGSZ, page_size, mmap_base_min, stack_max_size,
+      sp_window_lo, two_pow_64 in *. lia. }
+  assert (Elt : ltotal (led_init (rband hceil :: reservedZ usegs)) = 0) by reflexivity.
+  assert (Elc : lcount (led_init (rband hceil :: reservedZ usegs)) = 0) by reflexivity.
+  exists (led_init (rband hceil :: reservedZ usegs)). split; [| split].
+  - unfold ps_init. cbn [ps_m]. apply hreach_init. lia.
+  - constructor.
+    + exact (mminv_init tid brk mbase sp lim inp Hrd).
+    + reflexivity.
+    + rewrite Hmaps. split; [intros e [] | constructor].
+    + rewrite Hnacc. intros e [].
+    + exists (segments_reserved usegs), (vdso_reserved (in_kernel inp) (vdso_top (m_vmmaps mo))).
+      split; [exact Hres|]. cbn [ld_resv led_init]. rewrite AT.
+      rewrite reservedZ_segments, segments_reserved_ref. reflexivity.
+    + rewrite AT. exact TR.
+    + exact AT.
+    + intros e He. rewrite Hres in He. apply in_app_or in He as [He|He].
+      * left. rewrite Hsb. rewrite segments_reserved_ref in He. unfold ref_segments in He.
+        cbn [map fst snd] in He. destruct He as [<-|[<-|[<-|[<-|[]]]]]; rewrite ehi_went; lia.
+      * right. destruct e as [a n]. destruct (Hvd a n He) as (V1 & _ & _).
+        unfold elo. cbn [fst]. rewrite Hsb. exact V1.
+    + intros e He. rewrite Hres in He. apply in_app_or in He as [He|He].
+      * rewrite segments_reserved_ref in He. unfold ref_segments in He. cbn [map fst snd] in He.
+        destruct He as [<-|[<-|[<-|[<-|[]]]]]; rewrite elo_went, ehi_went; lia.
+      * destruct e as [a n]. destruct (Hvd a n He) as (_ & V2 & V3).
+        unfold elo, ehi. cbn [fst snd]. lia.
+    + rewrite Hres, segments_reserved_ref. unfold ref_segments. cbn [map app length].
+      unfold vdso_reserved. destruct (_ <? _)%Z; cbn [length]; lia.
+    + rewrite ?Hsb, ?Hbb, ?AT. rewrite ?PGSZ_eq. unfold CEIL_MIN in TR. repeat split; lia.
+    + intros b l [].
+    + intros b l k [].
+    + constructor.
+    + intros b l H. discriminate H.
+    + cbn [ld_brk led_init]. split; reflexivity.
+    + rewrite Elt. reflexivity.
+    + rewrite Elc, Hmaps. reflexivity.
+    + rewrite Hlm. unfold BUDCAP in *. lia.
+    + (* [kb_vdso_in]: the pair is the reserved ledger's tail ([vm_reserved_init_model]) *)
+      rewrite Hres. intros e He. apply in_or_app. right. exact He.
+    + (* [kb_vdso_disj]: no tracked mapping yet *)
+      rewrite Hmaps. intros r _ e [].
+  - unfold BUD. rewrite Elt, Elc, Hlm. unfold BUDCAP, RESV_MAX, GRID_J in *. lia.
+Qed.
+
+End HC.
