@@ -1,0 +1,3 @@
+schema: oss-fuzz-theorems/proof/1
+proves: simdjson/fuzz_minifyimpl/ubsan_agrees
+fingerprint: 8b3dd4edef0fbe74cadc6e59ec7e46c271fc7ca2dda63f27c0c405bacec964b8

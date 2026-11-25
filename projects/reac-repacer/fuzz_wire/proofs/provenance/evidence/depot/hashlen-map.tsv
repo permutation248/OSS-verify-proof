@@ -1,0 +1,7 @@
+2f8f8697cd4f99bd15999cce4963a6fcc39b308444bd58e2bf526ec7c1ad5fa1	sha256	fuzz_wire.asan (the pin)
+d2f662a229626fd402f1018631498190e800834bad837fa4027204b79088b128	sha256	fuzz_wire.asan unstripped twin
+-	commit	recipes commit: the fuzz_grant release the fuzz_uci core relocation took
+-	commit	recipes commit: the fuzz_grant release of record (this core's donor)
+-	commit	recipes commit: cgif_file_fuzzer's start-up text
+-	commit	this unit's converged image-A build
+-	commit	fuzz_lock core-B classifier commit
