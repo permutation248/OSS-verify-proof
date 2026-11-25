@@ -1,0 +1,21 @@
+(* Machine-generated data computed from the task's compiled program image (decoder-built tables and encoded data blocks); may contain fragments of third-party object code - see NOTICE. No Anthropic licence header applies to this file. *)
+(* Modified by Theorem Labs, 2026-11: ported to LPS 727298f3 (the CONFIG_RSEQ flag: the recorded hand-off tables replaced by the tables computed from each start state). *)
+(* LPS 75d69e00: THE HAND-OFF TABLE IS COMPUTED, ONE PER CONFIG_RSEQ
+   VALUE.  [kb_rseq] is free under [Run.valid_input] ([Run.recorded_kernel], Run.v:4575-4581), so the
+   start-up runs from [asan_a_init 0] or [asan_a_init 1].  The recorded [HS_asan_0 .. HS_asan_3000]
+   literals, collected over one older initial state, are replaced by the tables [StartupCoGen.gc_cc]
+   computes from each start state ([StartupGenAsan0], [StartupGenAsan1]); [AsanStartupCert] re-checks
+   them, so nothing here is trusted.  [b] is the run's flag. *)
+From Stdlib Require Import ZArith List Bool.
+From OSSVerify.Proofs.leptonica.edge_fuzzer.lib.K5.AS Require Import AxSymExec3 AsanPlanCore AsanPlan StartupCoGen.
+From OSSVerify.Proofs.leptonica.edge_fuzzer.lib.K5.ASB9 Require Import StartupPlanAsan StartupJSAsan StartupGenAsan0 StartupGenAsan1.
+Unset Lia Cache. Unset Nia Cache. Unset Nra Cache.
+Import ListNotations. Import AX2. Import AP.
+Open Scope Z_scope.
+
+Definition startup_tabs (b : bool) : gc_out := if b then startup_tabs_1 else startup_tabs_0.
+(* the hand-off table at the run's flag *)
+Definition HS_asan (b : bool) : nat -> option acs := gc_get (go_H (startup_tabs b)).
+(* the shipped plan with its join states replaced by the computed ones *)
+Definition startup_plan_r (b : bool) : plan := lsub (gc_jget (go_J (startup_tabs b)) js_0) startup_plan.
+Definition startup_shape (b : bool) : shape := gc_shape (startup_tabs b).
