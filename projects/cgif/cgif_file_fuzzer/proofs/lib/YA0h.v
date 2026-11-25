@@ -1,0 +1,242 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-10: ported to the binaries of release 2026.10.0 and LPS 2afba80c; the theorem statements are restated in the form this release states them. *)
+(* Modified by Theorem Labs, 2026-11: ported to LPS 727298f3 (the launch premises entry_launch_ok_va and valid_input; the run's CONFIG_RSEQ flag; AT_EXECFN; the launch's group id; the launch's SIGPIPE disposition left free): changed XB0_sound, x_stmt_XSniff_dead, Dp4, urnd, Hhw, SINV, argH, E0a and 12 more; added apc, kb, execfn, sdef, INP, RZ, Hapc, Hzr and 7 more. *)
+From OSSVerify.Proofs.cgif.cgif_file_fuzzer.lib Require YZ00.
+From Stdlib Require Import ZArith NArith List Lia Bool.
+From LinuxProcessSemantics.EquivalenceDefinition Require Import Equivalence.
+From LinuxProcessSemantics.LinuxProcessSem Require Import
+BvBase RiscvSemantics MemImageType StackLayout Fs State Monad Specs Run.
+From LinuxProcessSemantics.Riscv Require Import Prelude Instr Decode DecodeC Sem.
+From OSSVerify.Proofs.cgif.cgif_file_fuzzer.lib Require Import
+YK11 YK15 YK18 YK00 YK04 YK05 YK0c YK0e YK0f YK09 YK0a.
+From OSSVerify.Proofs.cgif.cgif_file_fuzzer.lib Require Import YA01 YA0c YA0e YA0d YA0f YA02 YA04 YA07 YA08 YA03 YA0a YA0b.
+From OSSVerify.Proofs.cgif.cgif_file_fuzzer.lib Require Import YA00 YK06.
+Unset Lia Cache. Unset Nia Cache.
+Import ListNotations.
+Import AX2. Import AX2S. Import APG. Import APSG. Import APSXG.
+Open Scope Z_scope.
+Definition XE0 (id : nat) (args : list expr) (cs : acs) : option (Z * list spiece * acs) := None.
+Definition XB0 (id : nat) (args : list expr) (cs : acs) : option (acs * acs) := None.
+Definition XN_SPLITVIS : nat := 64.
+Definition XNG (segs : list Segment) (XN1 : nat -> list expr -> acs -> option acs) (id : nat) (args : list expr) (cs : acs) : option acs :=
+if Nat.eqb id XN_SPLITVIS then xn_splitvis YA02.LIMIT args cs else
+match id with O => xn_havoccell NX0G segs args cs | S i => XN1 i args cs end.
+Definition is_sum_x (x : xnode) : bool :=
+match x with
+| XIMemset | XMemset | XIMemcpy | XMemcpy | XMemIsZero | XIStrncpy | XPopFree => true
+| XEnvScan | XPnScan | XLayout | XSniff => false
+end.
+Section b. Context {fx : YK11.FPState}.
+Lemma XE0_sound : forall SEGS A nx0 LIMIT TOP SINV argH FS0, emit_stmt SEGS A nx0 LIMIT TOP XE0 SINV argH FS0.
+Proof. intros ? ? ? ? ? ? ? ?. intros id args cs fd ps cs' E R FULL model T _ H _. discriminate H. Qed.
+Lemma XB0_sound : forall SEGS A nx0 LIMIT TOP SINV argH FS0, ext2_stmt SEGS A nx0 LIMIT TOP XB0 SINV argH FS0.
+Proof. intros ? ? ? ? ? ? ? ?. intros id args cs csa csb E R FULL model TA TB _ H. discriminate H. Qed.
+(* [x_stmt] gained [rz] after [FS0] in the start-up port (YA0e.v:91 declares [rz] LAST in section
+   [a0], YA0e.v:1658 is the gaining definition).  This is a dead-node lemma: it holds for
+   EVERY [rz], so the flag is universally quantified here and nothing is pinned. *)
+Lemma x_stmt_XSniff_dead : forall SEGS A nx0 LIMIT TOP SINV argH FS0 rz, x_stmt SEGS A nx0 LIMIT TOP SINV argH FS0 rz XSniff.
+Proof. intros ? ? ? ? ? ? ? ? ?. intros args cs cs' E R FULL model T _ _ H. cbn [node_x] in H. discriminate H. Qed.
+Section c.
+Variable segs : list Segment.
+Variable A : atable.
+Variable ph : PhdrInfo.
+Hypothesis IMG : img_facts segs A ph.
+Hypothesis SEGS_wx : wx_segs_nowrap segs.
+Hypothesis SEGS_in_hull : forall a : word, in_hull A (bv_unsigned a) = false -> find_segment segs (bv_unsigned a) 1 = None.
+Hypothesis RES_len : res_len_ok segs A.
+Hypothesis HULL_ok : hull_ok A.
+Hypothesis SHADOW_ok : shadow_ok A.
+Hypothesis RES_chk : res_cover_check segs A = true.
+Hypothesis SEGS_wr : segs_wr_ok segs.
+Let RES_hull : Forall (fun iv => img_lo A <= bv_unsigned (fst iv) /\ bv_unsigned (fst iv) + bv_unsigned (snd iv) <= img_hi A)
+(segments_reserved segs) := if_res _ _ _ IMG.
+Let RES_cover : res_cover_ok segs A := res_cover_check_sound segs A RES_chk.
+Variables we1 we2 we3 wp0 wp1 wp2 wp3 wp4 : bv 32.
+Hypothesis Xenv : 0 <= x_envscan A /\ x_envscan A + 12 < 2 ^ 64 /\ x_envscan_k A = x_envscan A + 12.
+Hypothesis Fe1 : fetch_word segs (Z_to_bv 64 (x_envscan A)) = Some we1.
+Hypothesis Fe2 : fetch_word segs (Z_to_bv 64 (x_envscan A + 4)) = Some we2.
+Hypothesis Fe3 : fetch_word segs (Z_to_bv 64 (x_envscan A + 8)) = Some we3.
+Hypothesis Ee : is_ecall we1 = false /\ is_ecall we2 = false /\ is_ecall we3 = false.
+Hypothesis De1 : decode_any we1 = Some (Load SZ8 true 10 9 0, 4%Z).
+Hypothesis De2 : decode_any we2 = Some (OpImm ALU_ADD 9 9 8, 4%Z).
+Hypothesis De3 : decode_any we3 = Some (Branch BC_NE 10 0 8184, 4%Z).
+Hypothesis Xpn : 8 <= x_pnscan A /\ x_pnscan A + 12 < 2 ^ 64 /\ x_pnscan_k A = x_pnscan A + 12.
+Hypothesis Fp0 : fetch_word segs (Z_to_bv 64 (x_pnscan A - 8)) = Some wp0.
+Hypothesis Fp1 : fetch_word segs (Z_to_bv 64 (x_pnscan A - 4)) = Some wp1.
+Hypothesis Fp2 : fetch_word segs (Z_to_bv 64 (x_pnscan A)) = Some wp2.
+Hypothesis Fp3 : fetch_word segs (Z_to_bv 64 (x_pnscan A + 4)) = Some wp3.
+Hypothesis Fp4 : fetch_word segs (Z_to_bv 64 (x_pnscan A + 8)) = Some wp4.
+Hypothesis Ep : is_ecall wp0 = false /\ is_ecall wp1 = false /\ is_ecall wp2 = false /\ is_ecall wp3 = false /\ is_ecall wp4 = false.
+Hypothesis Dp0 : decode_any wp0 = Some (Store SZ8 10 11 0, 4%Z).
+Hypothesis Dp1 : decode_any wp1 = Some (OpImm ALU_ADD 11 11 1, 4%Z).
+Hypothesis Dp2 : decode_any wp2 = Some (Load SZ1 false 13 11 4095, 4%Z).
+Hypothesis Dp3 : decode_any wp3 = Some (Branch BC_EQ 13 12 8180, 4%Z).
+Hypothesis Dp4 : decode_any wp4 = Some (Branch BC_NE 13 0 8180, 4%Z).
+(* [YA02]'s section carries [apc] with [Hapc : Z.of_N apc = a_entry A], and [FULL0] reads it
+   through [entryw := Z_to_bv 64 (Z.of_N apc)] (YA02.v:83, :388).  It was a [forall] inside
+   [asan_startup_init] before; it has to be a section variable now because [asan_startup_gen]'s
+   OWN statement mentions [FULL0]. *)
+Variable apc : N.
+Variable sp : word.
+Variable rdraw : EntryDraw.
+Variable brk0 mbase : word.
+Variable argv envp : list (list byte).
+Variable fs : Fs.Fs.
+Variable stdin : InputStream.
+Variables uid gid hw : word.
+Variable groups : list word.
+Variable net : NetQueue.
+Variables nofile sigmask : word.
+Variable urnd : InputStream. Variable tmp : Fs.Fs.
+(* [kb] and [execfn] joined [YA02]'s section in the start-up port (YA02.v:51-52), so [YA02.inp]
+   discharges FIFTEEN arguments, not thirteen.  [kb] is the run's OWN kernel record and stays
+   FREE: [Run.valid_input]'s conjunct 17 (75d69e00:theories/LinuxProcessSem/Run.v:4596) fixes
+   only the nine fields [recorded_kernel] copies and leaves [kb_thp], [kb_aslr], [kb_guard],
+   [kb_rnd_bits] and [kb_rseq] free.  Nothing below pins any of them. *)
+Variable kb : KernelBuild.
+Variable execfn : list byte.
+(* the SIGPIPE disposition, free as in [YA02] *)
+Variable sdef : bool.
+Let INP : ProcInput := YA02.inp argv envp fs stdin uid gid hw groups net nofile sigmask urnd tmp kb execfn sdef.
+(* The CONFIG_RSEQ flag as the PLAN spells it, [YK09.rseq_z]'s 0 or 1.  It is READ off the free
+   [kb], never fixed: [RZ] is what instantiates [AUXSZ], [AUXV_NULL_IX], [e_str0], [e_str1],
+   [e_argv1w], [e_atrb] and [init_acs_of_g] below. *)
+Let RZ : Z := rseq_z (kb_rseq kb).
+Hypothesis Hsp : valid_sp sp.
+Hypothesis Hbrk : valid_brk segs brk0.
+Hypothesis Hmb : valid_mmap_base mbase.
+Hypothesis Hva : valid_argv argv.
+Hypothesis Hve : valid_envp envp.
+Hypothesis Hfit : entry_stack_fits sp argv envp.
+Hypothesis Huid : valid_id uid.
+Hypothesis Hhw : valid_hwcap hw.
+(* The rest of [YA02]'s premise set.  A section hypothesis that no lemma below uses is simply
+   not discharged, so listing YA02's whole set here costs nothing and keeps every [assumption]
+   in the proofs able to close its goal.  None of these is a pin on a free kernel field. *)
+Hypothesis Hapc : Z.of_N apc = a_entry A.
+Hypothesis Hzr : YK06.zero_random_draw (ed_random rdraw).
+Hypothesis Hnof : valid_nofile nofile.
+Hypothesis Hsig : valid_sigmask INP.
+Hypothesis Hlaunch : valid_launch INP.
+Hypothesis Hlau : entry_launch_ok_va Sv48 (mkEntry sp brk0 mbase rdraw) INP.
+Hypothesis Hvi : valid_input INP.
+(* Spellings after the start-up port, read off the landed [YA0b.v:88-89, :127] rather than invented:
+   [SINV0] discharges 21 (everything in YA02's section but [segs] and [A]), [argH0] 6,
+   [E0] 9. *)
+#[local] Notation SINV := (SINV0 ph apc sp rdraw brk0 mbase argv envp fs stdin uid gid hw groups net nofile sigmask urnd tmp kb execfn sdef).
+#[local] Notation argH := (argH0 sp rdraw argv envp kb execfn).
+#[local] Notation E0a := (E0 sp rdraw brk0 argv envp uid gid hw kb execfn).
+#[local] Notation LIM := YA02.LIMIT.
+#[local] Notation TOP := (YA02.TOP sp).
+#[local] Notation FSQ := (fs_seed_tmp fs tmp).
+(* [FULL0 = wrap_mem inp mbase ph entryw sp rdraw] (YA02.v:388) takes everything but [segs],
+   [A] and [brk0]; [model0] (YA02.v:389-391) gained [rdraw] when it gained [with_vdso]. *)
+#[local] Notation FULLa := (FULL0 ph apc sp rdraw mbase argv envp fs stdin uid gid hw groups net nofile sigmask urnd tmp kb execfn sdef).
+#[local] Notation MODELa := (model0 segs sp rdraw brk0 mbase argv envp fs stdin uid gid hw groups net nofile sigmask urnd tmp kb execfn sdef).
+Hypothesis SUM_imemset : fill_spec segs (x_imemset A) 256.
+Hypothesis SUM_memset : fill_spec segs (x_memset A) two64.
+Hypothesis SUM_imemcpy : copy_spec segs (x_imemcpy A).
+Hypothesis SUM_memcpy : copy_spec segs (x_memcpy A).
+Hypothesis SUM_miz : miz_spec segs (x_memiszero A).
+Hypothesis SUM_istrncpy : istrncpy_spec segs (x_istrncpy A) (x_sealed A).
+Hypothesis SUM_popfree : popfree_spec segs (x_popfree A).
+Variable XN1 : nat -> list expr -> acs -> option acs.
+Hypothesis XN1_sound : forall i args, node1_stmt segs A NX0G LIM TOP SINV argH FSQ always (XN1 i args).
+Variable IT0 : itab.
+Hypothesis IT0_ok : itab_sound segs IT0.
+Variable HS : nat -> option acs.
+Variable hole_le : nat -> nat -> bool.
+Variable startup_plan : plan.
+Variable startup_shape : shape.
+Variables KC0 BFUEL FUEL : nat.
+Hypothesis startup_cert :
+check segs IT0 A NX0G LIM RZ (XNG segs XN1) XE0 XB0 HS hole_le KC0 BFUEL FUEL None (init_acs_of_g RZ A) startup_plan = COk startup_shape.
+Variable HOLES : nat -> env -> Fs.Fs -> TSet.
+Hypothesis HOLES_agree : forall h E E' fs', env_agree NX0G E E' -> HOLES h E fs' = HOLES h E' fs'.
+Hypothesis HOLES_nil : forall h E fs', HOLES h E fs' [].
+Hypothesis HOLES_le : forall h' h E fs' tr, hole_le h' h = true -> HOLES h' E fs' tr -> HOLES h E fs' tr.
+Hypothesis HOLES_sound : holes_stmt segs A LIM TOP HS SINV argH HOLES FSQ.
+Let TOK : top_ok TOP := top_ok0 sp Hsp.
+(* Were [Let]s applying YA02's lemmas positionally.  They are tactic-driven now: the CONCLUSION
+   of each YA02 lemma determines every section VARIABLE by unification, and [assumption]
+   discharges whatever hypothesis subset Rocq actually kept -- which is the one thing a
+   hand-written positional list cannot be checked against without a compiler.  The idiom is
+   the landed [YA0b.v:169]'s. *)
+Lemma AH : forall E (a : word), argH E a = true -> TOP <= bv_unsigned a.
+Proof. intros E a H. eapply argH0_high; try eassumption. Unshelve. all: assumption. Qed.
+Lemma AA : forall E E' (a : word), env_agree NX0G E E' -> argH E a = argH E' a.
+Proof. reflexivity. Qed.
+Lemma SF : forall E M M', (forall a, argH E a = true -> M' a = M a) -> SINV E M -> SINV E M'.
+Proof. intros E M M' Hf HSv. eapply SINV0_frame; try eassumption. Unshelve. all: assumption. Qed.
+Lemma SA : forall E E' M, env_agree NX0G E E' -> SINV E M -> SINV E' M.
+Proof. intros E E' M Hag HSv. eapply SINV0_agree; try eassumption. Unshelve. all: assumption. Qed.
+Lemma SP0 : forall E M, SINV E M -> uE E e_sp0 = TOP + 8388608.
+Proof. intros E M HSv. eapply SINV0_sp0; try eassumption. Unshelve. all: assumption. Qed.
+Lemma SS1 : forall E M, SINV E M ->
+uE E e_sp0 = TOP + 8388608 /\ uE E (EVar V_S1) = (TOP + 8388608) / 32768 /\ (TOP + 8388608) mod 16 = 0.
+Proof. intros E M HSv. eapply SINV0_s1; try eassumption. Unshelve. all: assumption. Qed.
+(* These three Theorems live in YA0b.v's Section b, so closing the section gives them
+its Variables as explicit arguments, and that list has grown (apc : N, as for
+YA02.argH0_high). Each is applied by unification and the remaining arguments are closed
+from context; the SINV frame and agreement arguments are this section's lemmas SF and SA,
+which [assumption] does not see, so they are named. *)
+Lemma node_x_sound_all : forall x, x_stmt segs A NX0G LIM TOP SINV argH FSQ RZ x.
+Proof.
+assert (SS0 : forall E M, SINV E M -> SINV E M) by (intros E M H; exact H).
+intros x. destruct x.
+- exact (node_x_sound_XIMemset segs A NX0G LIM TOP SEGS_wx SEGS_in_hull HULL_ok TOK SINV argH AH AA SF SA SS1 SHADOW_ok FSQ RZ SUM_imemset).
+- exact (node_x_sound_XIMemcpy segs A NX0G LIM TOP SEGS_wx SEGS_in_hull HULL_ok TOK SINV argH AH AA SF SA FSQ SEGS_wr RZ SUM_imemcpy).
+- exact (node_x_sound_XMemset segs A NX0G LIM TOP SEGS_wx SEGS_in_hull HULL_ok TOK SINV argH AH AA SF SA SS1 SHADOW_ok FSQ RZ SUM_memset).
+- exact (node_x_sound_XMemcpy segs A NX0G LIM TOP SEGS_wx SEGS_in_hull HULL_ok TOK SINV argH AH AA SF SA FSQ SEGS_wr RZ SUM_memcpy).
+- exact (node_x_sound_XMemIsZero segs A NX0G LIM TOP SEGS_wx SEGS_in_hull HULL_ok TOK SINV argH AH AA SF SA FSQ RZ SUM_miz).
+- eapply init_x_sound_envscan; try eassumption. Unshelve. all: first [ assumption | exact SF | exact SA ].
+- eapply init_x_sound_pnscan; try eassumption. Unshelve. all: first [ assumption | exact SF | exact SA ].
+- eapply init_x_sound_layout; try eassumption. Unshelve. all: first [ assumption | exact SF | exact SA ].
+- exact (node_x_sound_XIStrncpy segs A NX0G LIM TOP SEGS_wx SEGS_in_hull HULL_ok TOK SINV argH AH AA SF SA FSQ RZ SUM_istrncpy).
+- exact (node_x_sound_XPopFree segs A NX0G LIM TOP SEGS_wx SEGS_in_hull HULL_ok TOK SINV argH AH AA SF SA FSQ RZ SUM_popfree).
+- apply x_stmt_XSniff_dead.
+Qed.
+Lemma XNG_sound : ext_stmt segs A NX0G LIM TOP (XNG segs XN1) SINV argH FSQ.
+Proof.
+(* AH, AA, SF, SA and SS1 are this section's Lemmas (they were Lets), so [eauto] is given
+   them by name. *)
+intros id args. unfold XNG. destruct (Nat.eqb id XN_SPLITVIS); [eapply xn_splitvis_sound; eauto using AH, AA, SF, SA, SS1|].
+destruct id as [|i].
+- eapply xn_havoccell_sound; eauto using AH, AA, SF, SA, SS1.
+- apply XN1_sound.
+Qed.
+Theorem asan_startup_gen :
+srealizes segs (cfg_of segs (R0 sp) (a_entry A) FULLa MODELa)
+(sd HOLES t_nil E0a FSQ startup_shape).
+Proof.
+assert (HC : cs_ok segs A YA02.LIMIT TOP SINV argH FSQ E0a (init_acs_of_g RZ A) (R0 sp) FULLa MODELa).
+{ eapply init_cs_ok_g; try eassumption. Unshelve. all: first [ assumption | exact SF | exact SA | exact AH | exact AA | exact SS1 | exact SP0 ]. }
+assert (NSYS : forall y, sys_stmt segs A NX0G LIM TOP SINV argH FSQ y) by (eapply node_sys_sound; eauto using AH, AA, SF, SA, SS1, SP0).
+assert (NBRK : brk2_stmt segs A NX0G LIM TOP SINV argH FSQ) by (eapply node_brk2_sound; eauto using AH, AA, SF, SA, SS1, SP0).
+assert (NMM2 : mm2_stmt segs A NX0G LIM TOP SINV argH FSQ (node_mmap2g A NX0G LIM)) by (eapply node_mmap2g_sound_OBL; eauto using AH, AA, SF, SA, SS1, SP0).
+assert (NMIN : forall hole, mm3_stmt segs A NX0G LIM TOP SINV argH FSQ (node_mmapin_g A LIM hole)) by (eapply node_mmapin_g_sound_OBL; eauto using AH, AA, SF, SA, SS1, SP0).
+assert (NMIN2 : mm2_stmt segs A NX0G LIM TOP SINV argH FSQ (node_mmapin2_g A LIM)) by (eapply node_mmapin2_g_sound_OBL; eauto using AH, AA, SF, SA, SS1, SP0).
+assert (NMPR : mm2_stmt segs A NX0G LIM TOP SINV argH FSQ (node_mprotect2g A LIM)) by (eapply node_mprotect2g_sound_OBL; eauto using AH, AA, SF, SA, SS1, SP0).
+assert (NEXIT : exit_stmt segs A LIM TOP SINV argH FSQ) by (eapply node_exit_sound; eauto using AH, AA, SF, SA, SS1, SP0).
+assert (NJOIN : join_stmt segs A NX0G LIM TOP SINV argH FSQ) by (eapply node_join_sound; eauto using AH, AA, SF, SA, SS1, SP0).
+pose proof (check_sound segs IT0 IT0_ok A NX0G LIM TOP HS (XNG segs XN1) XE0 XB0
+SEGS_wx SEGS_in_hull TOK HULL_ok SHADOW_ok SINV argH AH AA SF SA
+HOLES HOLES_agree HOLES_nil hole_le HOLES_le FSQ KC0 RZ
+NSYS NBRK NMM2 NMIN NMIN2 NMPR NEXIT node_x_sound_all NJOIN XNG_sound
+(XE0_sound _ _ _ _ _ _ _ _) (XB0_sound _ _ _ _ _ _ _ _) HOLES_sound
+FUEL BFUEL None startup_plan (init_acs_of_g RZ A) startup_shape startup_cert
+E0a (R0 sp) FULLa MODELa t_nil HC) as R.
+exact (R I eq_refl).
+Qed.
+Theorem asan_startup_init :
+srealizes segs (init_config segs apc ph sp brk0 mbase rdraw YA02.LIMIT INP)
+(sd HOLES t_nil E0a FSQ startup_shape).
+Proof.
+assert (HE : init_config segs apc ph sp brk0 mbase rdraw YA02.LIMIT INP
+= cfg_of segs (R0 sp) (a_entry A) FULLa MODELa).
+{ eapply init_cfg_eq; try eassumption. Unshelve. all: assumption. }
+rewrite HE. exact asan_startup_gen.
+Qed.
+End c.
+End b.

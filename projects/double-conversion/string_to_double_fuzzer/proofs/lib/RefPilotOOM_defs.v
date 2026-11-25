@@ -1,0 +1,143 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-10: ported to the binaries of release 2026.10.0 and LPS 2afba80c; the theorem statements are restated in the form this release states them. *)
+(* Modified by Theorem Labs, 2026-11: ported to LPS 727298f3 (the new initial stack layout; the start-up taken per CONFIG_RSEQ value). *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+From Stdlib Require Import ZArith NArith List Lia Bool.
+From LinuxProcessSemantics.LinuxProcessSem Require Import BvBase RiscvSemantics MemImageType State.
+From LinuxProcessSemantics.Riscv Require Import Prelude Instr.
+From OSSVerify.Proofs.double_conversion.string_to_double_fuzzer.lib Require Import ImgP.
+From OSSVerify.Proofs.double_conversion.string_to_double_fuzzer.lib Require Import
+  PropExec SymExec2 SymExec2Sound SymRun SymDrive SymDriveX RefMemcpyLib RefMainEntry LibStdioCall.
+Unset Lia Cache. Unset Nia Cache. Unset Nra Cache.
+
+Import ListNotations. Import SX2. Import SX2S.
+
+Abbreviation RSEGS := ImgP.M.loaded_segments.
+
+(* [comment removed for export] *)
+Definition kn_exec : list kentry := kn_main.
+
+(* [comment removed for export] *)
+(* [comment removed for export] *)
+Definition STOPS : list Z := [0xa6728; 0xa6ca8; 0xa7184; 0xa662c; 0x32a14; 0x998fc; 0x96094; 0x9ba34]%Z.
+
+Definition FUEL : nat := 5000.
+Definition scr0 : scripts := SCR [] [] [].
+
+Definition run (scr : scripts) (ss : sym_state) := sym_exec RSEGS FUEL true STOPS scr ss [].
+Definition kn_after (r : sym_state * list sidecond * scripts) (kn : list kentry) : list kentry :=
+  fst (fst (carry (s_log (fst (fst r))) kn [])).
+
+(* [comment removed for export] *)
+Definition ssA0 : sym_state := SS 0x32574 sr_main [] kn_exec 38.
+Definition rA := Eval vm_compute in run scr0 ssA0.
+Definition srA : list expr := Eval vm_compute in s_regs (fst (fst rA)).
+Definition knA : list kentry := Eval vm_compute in kn_after rA kn_exec.
+Definition logA : list sentry := Eval vm_compute in s_log (fst (fst rA)).
+
+(* [comment removed for export] *)
+Definition srB0 : list expr := sr_upd srA (ridx 10) (ELit 3).
+(* LPS 727298f3: block B runs musl's malloc-init auxv scan (walk libc.auxv for AT_RANDOM to
+   AT_NULL).  [kn_main] records the first 26 pairs (RefMainEntry.kn_auxv); pair 26 is
+   AT_RSEQ_FEATURE_SIZE iff the input's free CONFIG_RSEQ flag is set, else AT_NULL
+   ([StackLayout.auxv_entries]).  So the block is run once per flag value, each with that flag's
+   tail words; [rB_rseq_free] shows both runs reach 0xa6728 with the SAME registers and the SAME
+   knowledge plus the tail, so every block after B keeps its numbering and lists.  Coturn's
+   RefPilotOOM_defs block C. *)
+Definition kn_tail (r : bool) : list kentry :=
+  if r then [KWord (SA (EVar 3) 416) 8 (ELit 27); KWord (SA (EVar 3) 432) 8 (ELit 28);
+             KWord (SA (EVar 3) 448) 8 (ELit 0)]
+  else [KWord (SA (EVar 3) 416) 8 (ELit 0)].
+Definition ssB0r (r : bool) : sym_state := SS 0xa763c srB0 [] (knA ++ kn_tail r) 38.
+Definition rBt := Eval vm_compute in run scr0 (ssB0r true).
+Definition rBf := Eval vm_compute in run scr0 (ssB0r false).
+Definition srB : list expr := Eval vm_compute in s_regs (fst (fst rBf)).
+Definition knB : list kentry := Eval vm_compute in removelast (kn_after rBf (knA ++ kn_tail false)).
+Lemma rB_rseq_free : forall r : bool,
+  run scr0 (ssB0r r) = (if r then rBt else rBf)
+  /\ s_regs (fst (fst (if r then rBt else rBf))) = srB
+  /\ kn_after (if r then rBt else rBf) (knA ++ kn_tail r) = knB ++ kn_tail r.
+Proof. intros []; (split; [vm_compute; reflexivity | split; vm_compute; reflexivity]). Qed.
+
+(* [comment removed for export] *)
+Definition mc_store : sentry := SE (SA (EVar 0) (-384)) 8 (EVar 7).   (* [comment removed for export] *)
+Definition knB2 : list kentry := Eval vm_compute in fst (fst (carry [mc_store] knB [])).
+(* [comment removed for export] *)
+Definition srC0 : list expr := Eval vm_compute in sr_after_call_j srB (map ridx callee_kept) 38.
+
+(* [comment removed for export] *)
+(* LPS 727298f3: block C continues musl's auxv walk past pair 25 too, so it is run per CONFIG_RSEQ
+   value as block B is; [rC_rseq_free] gives the common end. *)
+Definition ssC0r (r : bool) : sym_state := SS 0x98a8c srC0 [] (knB2 ++ kn_tail r) 70.
+Definition rCt := Eval vm_compute in run scr0 (ssC0r true).
+Definition rCf := Eval vm_compute in run scr0 (ssC0r false).
+Definition srC : list expr := Eval vm_compute in s_regs (fst (fst rCf)).
+Definition knC : list kentry := Eval vm_compute in removelast (kn_after rCf (knB2 ++ kn_tail false)).
+Lemma rC_rseq_free : forall r : bool,
+  run scr0 (ssC0r r) = (if r then rCt else rCf)
+  /\ sr_upd (s_regs (fst (fst (if r then rCt else rCf)))) 12 (ELit 0) = sr_upd srC 12 (ELit 0)   (* a2 alone differs: the walk's pointer *)
+  /\ kn_after (if r then rCt else rCf) (knB2 ++ kn_tail r) = knC ++ kn_tail r.
+Proof. intros []; (split; [vm_compute; reflexivity | split; vm_compute; reflexivity]). Qed.
+
+(* [comment removed for export] *)
+Definition b_expr : expr := EVar 70.
+Definition knD0 : list kentry := KAlign b_expr 4096 :: KRange b_expr 0xe6000 0x800e6000 :: knC.
+Definition srD0 : list expr := sr_upd srC (ridx 10) b_expr.
+Definition ssD0 : sym_state := SS 0x98b58 srD0 [] knD0 71.
+Definition rD := Eval vm_compute in run scr0 ssD0.
+Definition srD : list expr := Eval vm_compute in s_regs (fst (fst rD)).
+Definition knD : list kentry := Eval vm_compute in kn_after rD knD0.
+(* [comment removed for export] *)
+Definition ugly_b : expr :=
+  EAlu ALU_ADD b_expr (EAlu ALU_AND (ELit 4095) (EMd M_MUL (ELit (-1)) b_expr)).
+Definition srD2 : list expr := Eval vm_compute in map (esub ugly_b b_expr) srD.
+Definition knD2 : list kentry := Eval vm_compute in map (ksub ugly_b b_expr) knD.
+
+(* [comment removed for export] *)
+Definition srE0 : list expr := sr_upd srD2 (ridx 10) b_expr.
+Definition ssE0 : sym_state := SS 0x98b7c srE0 [] knD2 71.
+Definition scrE : scripts := SCR [true] [] [].     (* [comment removed for export] *)
+Definition rE := Eval vm_compute in run scrE ssE0.
+Definition srE : list expr := Eval vm_compute in s_regs (fst (fst rE)).
+Definition knE : list kentry := Eval vm_compute in kn_after rE knD2.
+
+(* [comment removed for export] *)
+Definition srF0 : list expr := sr_upd srE (ridx 10) (ELit (2 ^ 64 - 12)).
+Definition ssF0 : sym_state := SS 0x9a1f0 srF0 [] knE 71.
+Definition rF := Eval vm_compute in run scr0 ssF0.
+Definition srF : list expr := Eval vm_compute in s_regs (fst (fst rF)).
+Definition knF : list kentry := Eval vm_compute in kn_after rF knE.
+
+(* [comment removed for export] *)
+Definition resG_opt : option stdio_res := Eval vm_compute in stdio_call 71 srF knF.
+Definition resG : stdio_res :=
+  Eval vm_compute in match resG_opt with Some r => r | None => SCR_ 0 0 0 (ELit 0) (ELit 0) (ELit 0) (ELit 0) (ELit 0) (ELit 0) (ELit 0) [] [] end.
+Lemma resG_eq : stdio_call 71 srF knF = Some resG.
+Proof. vm_compute. reflexivity. Qed.
+
+(* [comment removed for export] *)
+Definition srG0 : list expr := Eval vm_compute in sc_sr resG.
+Definition knG0 : list kentry := Eval vm_compute in sc_kn resG.
+Definition ssG0 : sym_state := SS 0x9b8d4 srG0 [] knG0 103.
+Definition rG := Eval vm_compute in run scr0 ssG0.
+Definition srG : list expr := Eval vm_compute in s_regs (fst (fst rG)).
+Definition knG : list kentry := Eval vm_compute in kn_after rG knG0.
+
+(* [comment removed for export] *)
+Lemma itinerary_ok :
+  (s_pc (fst (fst rA)), snd (fst rA)) = (0xa7638%Z, [])
+  /\ (s_pc (fst (fst rBt)), snd (fst rBt)) = (0xa6728%Z, [])
+  /\ (s_pc (fst (fst rBf)), snd (fst rBf)) = (0xa6728%Z, [])
+  /\ (s_pc (fst (fst rCt)), snd (fst rCt)) = (0x98b54%Z, [])
+  /\ (s_pc (fst (fst rCf)), snd (fst rCf)) = (0x98b54%Z, [])
+  /\ (s_pc (fst (fst rD)), snd (fst rD)) = (0x98b78%Z, [])
+  /\ (s_pc (fst (fst rE)), snd (fst rE)) = (0x9a1ec%Z, [SCBr true BC_NE b_expr (EAlu ALU_ADD b_expr (ELit 8192))])
+  /\ (s_pc (fst (fst rF)), snd (fst rF)) = (0x9ba34%Z, [])
+  /\ (sc_ret resG, sc_f resG, sc_fd resG) = (0x9b8d4%Z, 0xb2ca0%Z, 2%Z)
+  /\ (s_pc (fst (fst rG)), snd (fst rG)) = (0x96094%Z, []).
+Proof. vm_compute. repeat split; reflexivity. Qed.

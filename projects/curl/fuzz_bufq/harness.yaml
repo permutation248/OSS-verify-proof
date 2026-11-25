@@ -1,0 +1,358 @@
+schema: oss-fuzz-theorems/harness/1
+project: curl
+harness: fuzz_bufq
+rocq: OSSVerify.curl.fuzz_bufq
+origin: upstream
+summary: 'Runs a fuzzer-chosen sequence of operations on one curl byte queue (bufq) and checks it with 12 asserts
+  (listed below): the bytes read, peeked and passed follow the 0..255 pattern written, the queue''s length and
+  emptiness match the harness''s byte count before each operation, and the count stays within the capacity
+  after each write, slurp and sipn.'
+entry: LLVMFuzzerTestOneInput
+source:
+  files:
+  - source/fuzz_bufq.cc
+  - source/fuzz_bufq.h
+  from:
+    repository: https://github.com/curl/curl-fuzzer
+    commit: 4768d8de6f3209bb5dd761cd24ff7ccbfbb6b5b8
+    path: fuzz_bufq.cc
+  modified: true
+  licence: curl
+library:
+  repository: https://github.com/curl/curl
+  commit: f190aa8ecea728e6ce7fb7a6250e03df4d4eaca5
+  licence: NOASSERTION
+modifications:
+- Linked against curl at commit f190aa8e.
+- In every build, getenv() returns NULL, getpid() returns 1 and mkstemp() uses a fixed name, so the program
+  depends only on its input.
+- A small driver reads the input file, calls the harness one to four times and prints each return value.
+- The harness source is modified for these builds. source/fuzz_bufq.cc is curl-fuzzer 4768d8de's fuzz_bufq.cc with
+  projects/curl/fuzz_bufq/proofs/provenance/recipe/targets/curl-fuzz_bufq/fuzz_bufq-no-syscalls.patch applied;
+  source/fuzz_bufq.h is unmodified.
+- The patch makes the harness's template buffer a constant table in read-only data, built at compile time, in place
+  of the mmap(MAP_SHARED) and mprotect(PROT_READ) buffer its first call made, and removes its signal(SIGPIPE, SIG_IGN).
+builds:
+  plain:
+    file: fuzz_bufq.plain
+    bytes: 317888
+    sha256: 042d5bb0014e3f2f3460f1d640e599ece0d8d844681aaf537b8b7db2361385c4
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+    uninstrumented:
+    - name: clang_rt.crtbegin.o
+      kind: compiler-rt
+      sha256: 0ba7749fe1a9cfc61b7b4dbb8616ce4cffad430bdd04ec029cd291d030925e72
+    - name: libclang_rt.builtins.a
+      kind: compiler-rt
+      sha256: 7e376dbc917599242272aa6e70e66b249ed063d78bd707e88e607e6ed375fa29
+    - name: crt1.o
+      kind: libc
+      sha256: 111e0dda16a02983fee66cc70e332b41860dccad42d8fb0990776814ef70930a
+    - name: libc++.a
+      kind: cxx-runtime
+      sha256: 9f938a67536a35ed70027d736d48ee9033f9a02e8cde0f2064aad2b735c7ca97
+    - name: libc.a
+      kind: libc
+      sha256: f19509197da87e158d2111bde83f0943296a4ee5506b024004f1d68c63c496e9
+  ubsan:
+    file: fuzz_bufq.ubsan
+    bytes: 317928
+    sha256: ab8a9b5886e5e6221c414d5a7eb8fcb974f2acd6bc5f2df937a1fe75c3564899
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+    uninstrumented:
+    - name: clang_rt.crtbegin.o
+      kind: compiler-rt
+      sha256: 0ba7749fe1a9cfc61b7b4dbb8616ce4cffad430bdd04ec029cd291d030925e72
+    - name: libclang_rt.builtins.a
+      kind: compiler-rt
+      sha256: 7e376dbc917599242272aa6e70e66b249ed063d78bd707e88e607e6ed375fa29
+    - name: crt1.o
+      kind: libc
+      sha256: 111e0dda16a02983fee66cc70e332b41860dccad42d8fb0990776814ef70930a
+    - name: libc++.a
+      kind: cxx-runtime
+      sha256: 9f938a67536a35ed70027d736d48ee9033f9a02e8cde0f2064aad2b735c7ca97
+    - name: libc.a
+      kind: libc
+      sha256: f19509197da87e158d2111bde83f0943296a4ee5506b024004f1d68c63c496e9
+  asan:
+    file: fuzz_bufq.asan
+    bytes: 1093368
+    sha256: 787dbd38da8e23b964a94193cba299461a8eae36c30aa343b9aa7fe32908d625
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+    uninstrumented:
+    - name: clang_rt.crtbegin.o
+      kind: compiler-rt
+      sha256: 0ba7749fe1a9cfc61b7b4dbb8616ce4cffad430bdd04ec029cd291d030925e72
+    - name: libclang_rt.asan.a
+      kind: sanitizer-runtime
+      sha256: 078168dea88da7f13cccc6ca7305c6e2df0202f4f0364c7caa23a20a1faa5418
+    - name: libclang_rt.builtins.a
+      kind: compiler-rt
+      sha256: 7e376dbc917599242272aa6e70e66b249ed063d78bd707e88e607e6ed375fa29
+    - name: crt1.o
+      kind: libc
+      sha256: 111e0dda16a02983fee66cc70e332b41860dccad42d8fb0990776814ef70930a
+    - name: libc++.a
+      kind: cxx-runtime
+      sha256: 9f938a67536a35ed70027d736d48ee9033f9a02e8cde0f2064aad2b735c7ca97
+    - name: libc.a
+      kind: libc
+      sha256: f19509197da87e158d2111bde83f0943296a4ee5506b024004f1d68c63c496e9
+    - name: libunwind.a
+      kind: cxx-runtime
+      sha256: 80167e95a699a1a21d3933967631fe5484817812aeda2cb98a55b652d608f812
+  asan-ubsan:
+    file: fuzz_bufq.asan-ubsan
+    bytes: 1090584
+    sha256: 25ccbd40e13c021e6c9f2d9e343bf8f54ab26f84b9c9258a36b77973d946ff37
+    segments:
+    - 1
+    - 1
+    - 1
+    - 1
+    uninstrumented:
+    - name: clang_rt.crtbegin.o
+      kind: compiler-rt
+      sha256: 0ba7749fe1a9cfc61b7b4dbb8616ce4cffad430bdd04ec029cd291d030925e72
+    - name: libclang_rt.asan.a
+      kind: sanitizer-runtime
+      sha256: 078168dea88da7f13cccc6ca7305c6e2df0202f4f0364c7caa23a20a1faa5418
+    - name: libclang_rt.builtins.a
+      kind: compiler-rt
+      sha256: 7e376dbc917599242272aa6e70e66b249ed063d78bd707e88e607e6ed375fa29
+    - name: crt1.o
+      kind: libc
+      sha256: 111e0dda16a02983fee66cc70e332b41860dccad42d8fb0990776814ef70930a
+    - name: libc++.a
+      kind: cxx-runtime
+      sha256: 9f938a67536a35ed70027d736d48ee9033f9a02e8cde0f2064aad2b735c7ca97
+    - name: libc.a
+      kind: libc
+      sha256: f19509197da87e158d2111bde83f0943296a4ee5506b024004f1d68c63c496e9
+    - name: libunwind.a
+      kind: cxx-runtime
+      sha256: 80167e95a699a1a21d3933967631fe5484817812aeda2cb98a55b652d608f812
+licence: NOASSERTION
+checks:
+- kind: reference-oracle
+  strength: partial
+  stops_with: assert
+  live: true
+  where: source/fuzz_bufq.cc:100
+  what: Each piece Curl_bufq_pass hands its writer callback, up to the bytes the pass still asks for, follows the
+    0..255 pattern from the next byte to read (upstream line 94). The pattern repeats every 256 bytes.
+- kind: invariant
+  strength: full
+  stops_with: assert
+  live: true
+  where: source/fuzz_bufq.cc:175
+  what: Before each operation, Curl_bufq_is_empty is true exactly when the harness's count of queued bytes is 0
+    (upstream line 169).
+- kind: invariant
+  strength: full
+  stops_with: assert
+  live: true
+  where: source/fuzz_bufq.cc:176
+  what: Before each operation, Curl_bufq_len equals the harness's count of queued bytes (upstream line 170).
+- kind: reference-oracle
+  strength: partial
+  stops_with: assert
+  live: true
+  where: source/fuzz_bufq.cc:194
+  what: The bytes Curl_bufq_peek returns follow the pattern from the next byte to read (upstream line 188). The
+    pattern repeats every 256 bytes.
+- kind: reference-oracle
+  strength: partial
+  stops_with: assert
+  live: true
+  where: source/fuzz_bufq.cc:209
+  what: The bytes Curl_bufq_peek_at returns at an offset follow the pattern from that offset (upstream line 203).
+    The pattern repeats every 256 bytes.
+- kind: invariant
+  strength: weak
+  stops_with: assert
+  live: false
+  where: source/fuzz_bufq.cc:225
+  what: 'Always true: buffer_bytes >= 0 after a read, where buffer_bytes is a size_t (upstream line 219). The
+    compiler removes it: its text is in none of the four binaries. No change to curl can make it fail.'
+- kind: reference-oracle
+  strength: partial
+  stops_with: assert
+  live: true
+  where: source/fuzz_bufq.cc:228
+  what: The bytes Curl_bufq_read copies out follow the pattern from the next byte to read (upstream line 222). The
+    pattern repeats every 256 bytes.
+- kind: invariant
+  strength: full
+  stops_with: assert
+  live: true
+  where: source/fuzz_bufq.cc:250
+  what: After Curl_bufq_slurp, the harness's count of queued bytes is at most chunk_size * max_chunks (upstream line
+    244).
+- kind: invariant
+  strength: full
+  stops_with: assert
+  live: true
+  where: source/fuzz_bufq.cc:264
+  what: After a successful Curl_bufq_sipn, the count is at most chunk_size * max_chunks (upstream line 258).
+- kind: invariant
+  strength: weak
+  stops_with: assert
+  live: false
+  where: source/fuzz_bufq.cc:286
+  what: 'Always true: buffer_bytes >= 0 after a pass, where buffer_bytes is a size_t (upstream line 280). The
+    compiler removes it: its text is in none of the four binaries. No change to curl can make it fail.'
+- kind: invariant
+  strength: full
+  stops_with: assert
+  live: true
+  where: source/fuzz_bufq.cc:311
+  what: After a successful Curl_bufq_write, the count is at most chunk_size * max_chunks (upstream line 305).
+- kind: invariant
+  strength: weak
+  stops_with: assert
+  live: unknown
+  where: source/fuzz_bufq.cc:320
+  what: 'Never reached: assert(false) in the switch default (upstream line 314), but op_type is in 0..8 and each
+    value has a case. The plain and ASan builds drop it; the UBSan and ASan+UBSan builds keep it, so it is neither
+    live nor compiled out in all four. No change to curl can make it fail.'
+failure_handlers: none
+distribution:
+  file: Distribution.v
+  argv0: fuzz_bufq
+  input_file: input.bin
+  prefix_hex: '000000000000'
+  payload:
+    length: geometric
+    p: 1/257
+    mean_bytes: 256
+    alphabet: bytes
+  components:
+    payload: 9/10
+    wrong_argc: 1/50
+    missing_file: 1/50
+    full_support: 3/50
+  mass: '1'
+statements:
+  asan_agrees:
+    kind: agreement
+    builds:
+    - plain
+    - asan
+    reading: may-fail
+    budgets: asan
+    abort: signal
+    status: open
+  asan_disagrees_at_most:
+    kind: bound
+    builds:
+    - plain
+    - asan
+    reading: may-fail
+    status: open
+  asan_agreement_decidable:
+    kind: decidability
+    builds:
+    - plain
+    - asan
+    reading: may-fail
+    status: open
+  ubsan_agrees:
+    kind: agreement
+    builds:
+    - plain
+    - ubsan
+    reading: may-fail
+    budgets: standard
+    abort: signal
+    status: open
+  ubsan_disagrees_at_most:
+    kind: bound
+    builds:
+    - plain
+    - ubsan
+    reading: may-fail
+    status: open
+  ubsan_agreement_decidable:
+    kind: decidability
+    builds:
+    - plain
+    - ubsan
+    reading: may-fail
+    status: open
+  asan_ubsan_agrees:
+    kind: agreement
+    builds:
+    - plain
+    - asan-ubsan
+    reading: may-fail
+    budgets: asan
+    abort: signal
+    status: open
+  asan_ubsan_disagrees_at_most:
+    kind: bound
+    builds:
+    - plain
+    - asan-ubsan
+    reading: may-fail
+    status: open
+  asan_ubsan_agreement_decidable:
+    kind: decidability
+    builds:
+    - plain
+    - asan-ubsan
+    reading: may-fail
+    status: open
+  plain_halts:
+    kind: halts
+    builds:
+    - plain
+    reading: budget
+    exits:
+    - 0
+    - 2
+    binds_checks: true
+    status: open
+  asan_halts:
+    kind: halts
+    builds:
+    - asan
+    reading: budget
+    exits:
+    - 0
+    - 2
+    binds_checks: true
+    status: open
+  ubsan_halts:
+    kind: halts
+    builds:
+    - ubsan
+    reading: budget
+    exits:
+    - 0
+    - 2
+    binds_checks: true
+    status: open
+  asan_ubsan_halts:
+    kind: halts
+    builds:
+    - asan-ubsan
+    reading: budget
+    exits:
+    - 0
+    - 2
+    binds_checks: true
+    status: open
