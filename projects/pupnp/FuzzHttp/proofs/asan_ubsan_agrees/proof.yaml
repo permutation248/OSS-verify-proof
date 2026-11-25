@@ -1,0 +1,3 @@
+schema: oss-fuzz-theorems/proof/1
+proves: pupnp/FuzzHttp/asan_ubsan_agrees
+fingerprint: 8dc4466d462f55b0ae0305b06f94b2adeb2a8b84cf45cfd040d7d704d4dea2f1
