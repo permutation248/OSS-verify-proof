@@ -1,0 +1,3 @@
+schema: oss-fuzz-theorems/proof/1
+proves: libpcap/fuzz_pcap/asan_ubsan_agrees
+fingerprint: 948debf5b407a15b9382cc1c7b89506c6d1bf82eebc372b5c1abf3a40e1a5ff2

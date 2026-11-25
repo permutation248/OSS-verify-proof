@@ -1,0 +1,160 @@
+(* Copyright 2026 Anthropic PBC *)
+(* SPDX-License-Identifier: Apache-2.0 OR MIT *)
+(* Modified by Theorem Labs, 2026-10: copied from lib/Reusable/YL0y.v. *)
+(* Modified by Theorem Labs, 2026-11: made from proofs/libreac/fuzz_scene/lib/Reusable/YL0y_cfw.v, with its module paths, addresses and numbers changed; 2 of its 146 lines of code are new or changed and 2 lines of the source are left out. *)
+(* Modified by Theorem Labs, 2026-11: ported to LPS 727298f3 (changed src0_usage_cf, src0_usage_hyp_cf; added argv, envp, efn). *)
+From OSSVerify.Proofs.libreac.fuzz_ctrl.lib.Reusable Require YZ00.
+From Stdlib Require Import ZArith NArith List Lia Bool String.
+From LinuxProcessSemantics.LinuxProcessSem Require Import
+BvBase RiscvSemantics MemImageType StackLayout Fs State Monad Specs Run.
+From LinuxProcessSemantics.Riscv Require Import Prelude Instr Decode DecodeC Sem.
+From OSSVerify.Proofs.libreac.fuzz_ctrl.lib.Reusable Require Import
+YK11 YK0h YK0i YK14 YK1b YK1a YK15 YK0k YK0n YP0n.
+From OSSVerify.Proofs.libreac.fuzz_ctrl.lib.Reusable Require Import
+YP0m YP0e YP09 YP02 YP0l YP0k YP06 YP08 YP03 YP0f YP04.
+From OSSVerify.Proofs.libreac.fuzz_ctrl.lib.Reusable Require Import YO05 YO00.
+From OSSVerify.libreac.fuzz_ctrl.images Require Import Plain.
+From OSSVerify.Proofs.libreac.fuzz_ctrl.lib.Reusable Require Import YN3v YH00 YH01 YH03 YN3e YN35 YN3f YN3g YN34 YN3i YN3b YL0v YL0k YL0p.
+From OSSVerify.Proofs.libreac.fuzz_ctrl.lib.Reusable Require Import YM05.
+From OSSVerify.Proofs.libreac.fuzz_ctrl.lib.Reusable Require Import YO0d YH02 YL0y YK15_cfw YP03_cfw YN35_cfw SymTac_cfw YL0v_cfw YL0p_cfw.
+From OSSVerify.Proofs.libreac.fuzz_ctrl.lib Require Import SlotAgree AgreeLift.
+Import ListNotations.
+Unset Lia Cache. Unset Nia Cache.
+Open Scope bv_scope.
+Open Scope Z_scope.
+Section b. Context {fx : YK11.FPState} {rc : YM05.RunCeil}.
+Section c.
+Variable sp brk mbase : word.
+Variable inp : ProcInput.
+Variable tid : word.
+Variable rnd : EntryDraw.
+Hypothesis Hsp : valid_sp sp.
+Hypothesis Hva : valid_argv (in_argv inp).
+Hypothesis Hve : valid_envp (in_envp inp).
+Hypothesis Hvl : valid_launch inp.
+Hypothesis Hlau : entry_launch_ok_va Sv48 (mkEntry sp brk mbase rnd) inp.
+Hypothesis Hargc : (length (in_argv inp) <> 2)%nat.
+#[local] Notation argv := (in_argv inp).
+#[local] Notation envp := (in_envp inp).
+#[local] Notation efn := (in_execfn inp).
+Theorem src0_usage_cf : forall ms model,
+st_ok src0segs (E_main sp inp tid rnd) (add_cond ss_main_f (mkAC BC_NE (SOff 3 0) (SLit 2))) ms ->
+runs_at (bv_unsigned sp) (ms_mem ms) (runs_main false sp inp rnd) ->
+m_halted model = None -> m_vm_lazy model = [] -> fdchan (Z_to_bv 64 2) (Z_to_bv 64 2) model ->
+crealizes src0_msyms (mkCfg ms model) (diag (msg_usage (nth 0 argv [])) (m_fs model)).
+Proof using Hargc Hlau Hsp Hva Hve Hvl.
+intros ms model HS HR Hh Hlz Hfd2.
+unfold diag, wr, ex, ch_stderr. rewrite msg_usage_eq.
+pose proof (proj1 Hva) as HA.
+pose proof (LF inp mbase sp brk rnd Hsp Hva Hve Hvl Hlau) as L. unfold SP_LO, SP_HI in L.
+pose proof (YP08.auxv_bytes_range (kb_rseq (in_kernel inp))) as ARL.
+pose proof (STE inp mbase sp brk rnd Hsp Hva Hve Hvl Hlau) as Htail.
+pose proof (ZAB inp mbase sp brk rnd Hsp Hva Hve Hvl Hlau 0 ltac:(lia)) as B0.
+pose proof (ANN inp mbase sp brk rnd Hsp Hva Hve Hvl Hlau 0 ltac:(lia)) as Hnul.
+assert (Hlen0 : Z.of_nat (length (nth 0 argv [])) <= 131071)
+by (exact (YP08.argv_str_len src0segs Plain_phdrs inp mbase Plain_init_pc sp brk rnd Hsp Hva Hve Hvl Hlau 0 ltac:(lia))).
+pose proof (ewm1 inp mbase sp brk rnd Hsp Hva Hve Hvl Hlau tid) as H1.
+assert (H0 : bv_unsigned (ew (E_main sp inp tid rnd) 0) = bv_unsigned sp) by reflexivity.
+assert (H3 : bv_unsigned (ew (E_main sp inp tid rnd) 3) = Z.of_nat (length argv))
+by (exact (YP08.ew3 src0segs Plain_phdrs inp mbase Plain_init_pc sp brk rnd Hsp Hva Hve Hvl Hlau 1 ltac:(lia) (xw_main inp rnd tid) (xd_main rnd))).
+assert (F0 : z_argv (bv_unsigned (ed_top rnd)) argv envp efn 0
++ Z.of_nat (length (nth 0 argv [])) + 1 <= SP_HI - 9)
+by (exact (YP08.z_argv_fits src0segs Plain_phdrs inp mbase Plain_init_pc sp brk rnd Hsp Hva Hve Hvl Hlau 0 ltac:(lia))).
+unfold SP_HI in F0.
+sym_norm HS.
+csym_run_to_with src0tbl_ok HS 0x1d2dc.
+cfpf_memchr HS HR 1%nat 2%nat 1%nat 10%nat (nth 0 argv []).
+csym_run_with src0tbl_ok HS.
+cfpf_lbu_nul HS HR 1%nat 1%nat 10%nat (nth 0 argv []).
+csym_run3_with src0tbl_ok HS.
+destruct (Z_lt_le_dec 73 (Z.of_nat (length (nth 0 argv [])))) as [HL3|HL12].
+{
+eapply crz_conseq; [| apply (shape_3 (strB "usage: ") (nth 0 argv []) (strB " INPUT" ++ nl))].
+sym_add_fact HS 10%nat (mkAF 74 131071 0). { atom_fact_lit. }
+csym_run3_with src0tbl_ok HS.
+cwl_writev2 HS Hfd2 16%nat.
+{ rewrite iovcnt_val, !U_off by (evalE; unfold M64; lia). evalE.
+rewrite (proj2 (Z.eqb_neq _ _)) by lia. reflexivity. }
+{ rewrite U_SLit, !U_off by (evalE; unfold M64; lia). evalE. change (zcanon 7) with 7. lia. }
+{ rdn_lits HS 0%nat. }
+{ rdn_run HR 1%nat. }
+{ rewrite U_SLit, U_off by (evalE; unfold M64; lia). evalE. change (zcanon 7) with 7. lia. }
+{ rewrite U_SLit, U_off by (evalE; unfold M64; lia). evalE. change (zcanon 7) with 7. lia. }
+{ rewrite U_SLit, U_off by (evalE; unfold M64; lia). evalE. change (zcanon 7) with 7. lia. }
+{ rewrite !U_off by (evalE; unfold M64; lia). evalE. lia. }
+{ rewrite !U_off by (evalE; unfold M64; lia). evalE. lia. }
+csym_run3_with src0tbl_ok HS.
+cwl_writev2 HS Hfd2 27%nat.
+{ rewrite iovcnt_val, !U_off by (evalE; unfold M64; lia). evalE.
+rewrite (proj2 (Z.eqb_neq _ _)) by lia. reflexivity. }
+{ rewrite !U_SLit. reflexivity. }
+{ rdn_lits HS 0%nat. }
+{ reflexivity. }
+{ rewrite !U_SLit. change (zcanon 7) with 7. change (zcanon 0) with 0. lia. }
+{ rewrite U_SLit, U_off by (evalE; unfold M64; lia). evalE. change (zcanon 7) with 7. lia. }
+{ rewrite U_SLit, U_off by (evalE; unfold M64; lia). evalE. change (zcanon 7) with 7. lia. }
+{ rewrite !U_SLit. change (zcanon 0) with 0. lia. }
+{ rewrite !U_SLit. change (zcanon 0) with 0. evalE. lia. }
+csrc0_exit_tac HS. }
+sym_add_fact HS 10%nat (mkAF 0 73 0). { atom_fact_lit. }
+csym_run3_to_with src0tbl_ok HS 0x1d3d8.
+fpf_split_window HS (-553).
+cfpf_memcpy_str HS HR HW 1%nat 10%nat 16%nat (nth 0 argv []) (-553).
+csym_run3_with src0tbl_ok HS.
+csym_branch_with src0tbl_ok HS.
+{
+assert (HL1 : Z.of_nat (length (nth 0 argv [])) <= 66).
+{ revert Hc. rewrite branch_geu_U, U_neg_off, U_SLit by (evalE; unfold M64; lia). evalE.
+change (zcanon 7) with 7. destruct (Z.ltb_spec (- (Z.of_nat (length (nth 0 argv [])) + -73)) 7); [discriminate| intros _; lia]. }
+clear Hc.
+eapply crz_conseq; [| apply (shape_1 (strB "usage: ") (nth 0 argv []) (strB " INPUT" ++ nl))].
+csym_run3_to_with src0tbl_ok HS 0x1d3d8.
+cfpf_memcpy_lit HS HR HW HK 10%nat 27%nat (strB " INPUT" ++ nl) rodata_input_src1 (-553).
+csym_run3_with src0tbl_ok HS.
+sym_assume_with3 src0tbl_ok HS false.
+{ rewrite U_add_off_atom, !U_off by (evalE; unfold M64; lia). evalE. apply Z.eqb_neq. lia. }
+csym_run3_with src0tbl_ok HS.
+cwl_writev2 HS Hfd2 38%nat.
+{ rewrite iovcnt_val, U_add_off_atom, !U_off by (evalE; unfold M64; lia). evalE.
+rewrite (proj2 (Z.eqb_neq _ _)) by lia. reflexivity. }
+{ rewrite U_SLit. change (zcanon 0) with 0. lia. }
+{ rdn_buf HS HK. }
+{ reflexivity. }
+{ rewrite U_SLit, U_off by (evalE; unfold M64; lia). evalE. change (zcanon 0) with 0. lia. }
+{ rewrite !U_off by (evalE; unfold M64; lia). evalE. lia. }
+{ rewrite !U_off by (evalE; unfold M64; lia). evalE. lia. }
+{ rewrite !U_SLit. change (zcanon 0) with 0. lia. }
+{ rewrite !U_SLit. change (zcanon 0) with 0. evalE. lia. }
+csrc0_exit_tac HS. }
+{
+assert (HL2 : 67 <= Z.of_nat (length (nth 0 argv []))).
+{ revert Hc. rewrite branch_geu_U, U_neg_off, U_SLit by (evalE; unfold M64; lia). evalE.
+change (zcanon 7) with 7. destruct (Z.ltb_spec (- (Z.of_nat (length (nth 0 argv [])) + -73)) 7); [intros _; lia| discriminate]. }
+clear Hc.
+rewrite (app_assoc (strB "usage: ") (nth 0 argv []) (strB " INPUT" ++ nl)).
+csym_run3_with src0tbl_ok HS.
+sym_assume_with3 src0tbl_ok HS false.
+{ rewrite U_add_off_atom, !U_off by (evalE; unfold M64; lia). evalE. apply Z.eqb_neq. lia. }
+csym_run3_with src0tbl_ok HS.
+cwl_writev2 HS Hfd2 27%nat.
+{ rewrite iovcnt_val, U_add_off_atom, !U_off by (evalE; unfold M64; lia). evalE.
+rewrite (proj2 (Z.eqb_neq _ _)) by lia. reflexivity. }
+{ rewrite U_SLit, !U_off by (evalE; unfold M64; lia). change (zcanon 7) with 7. lia. }
+{ rdn_buf HS HK. }
+{ rdn_rodata HS rodata_input_src1. }
+{ rewrite U_SLit, U_off by (evalE; unfold M64; lia). evalE. change (zcanon 7) with 7. lia. }
+{ rewrite !U_off by (evalE; unfold M64; lia). evalE. lia. }
+{ rewrite !U_off by (evalE; unfold M64; lia). evalE. lia. }
+{ rewrite !U_SLit. change (zcanon 66449) with 66449. change (zcanon 7) with 7. lia. }
+{ rewrite !U_SLit. change (zcanon 66449) with 66449. change (zcanon 7) with 7. evalE. lia. }
+csym_run3_with src0tbl_ok HS.
+cwl_writev0 HS Hfd2.
+csrc0_exit_tac HS. }
+Qed.
+End c.
+Theorem src0_usage_hyp_cf : usage_hyp_cf.
+Proof using.
+unfold usage_hyp_cf. intros sp brk mbase tid rnd inp ms model Hsp Hva Hve Hvl Hlau Hargc HS HR Hh Hlz Hch.
+exact (src0_usage_cf sp brk mbase inp tid rnd Hsp Hva Hve Hvl Hlau Hargc ms model HS HR Hh Hlz Hch).
+Qed.
+End b.
